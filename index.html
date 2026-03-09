@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PerfoTec Manager</title>
     
-    <!-- Tailwind CSS voor de styling -->
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     
-    <!-- Babel om de React code in de browser te kunnen lezen -->
+    <!-- Babel compiler -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
 <body>
@@ -24,18 +24,14 @@
           ClipboardList, Image as ImageIcon, BarChart2, ChevronRight, Save, 
           Download, FolderOpen, LineChart, Tractor, Ship, Plane, 
           Warehouse, Store, Utensils, Factory, ArrowDown, ArrowUp, 
-          ChevronUp, ChevronDown 
+          ChevronUp, ChevronDown, FileArchive
         } from 'https://esm.sh/lucide-react@0.292.0';
 
         // --- CONFIGURATIE ---
         const BRAND = {
           colors: {
-            green: '#007C27', 
-            blue: '#054E9A',  
-            black: '#211A1A', 
-            gray: '#E9E9E9',
-            lightGray: '#F3F4F6',
-            white: '#FFFFFF'
+            green: '#007C27', blue: '#054E9A', black: '#211A1A', 
+            gray: '#E9E9E9', lightGray: '#F3F4F6', white: '#FFFFFF'
           },
           fonts: {
             heading: '"League Spartan", sans-serif',
@@ -54,16 +50,9 @@
         const PACKAGING_TYPES = ['Retail', 'Box/ Crate', 'Cube crate', 'Pallet'];
 
         const DEFAULT_CRITERIA = [
-          'General Quality',
-          'Taste',
-          'Visual Appearance',
-          'Color',
-          'Smell / Aroma',
-          'Texture / Firmness',
-          'Humidity / Condensation',
-          'Dehydration / Shriveling',
-          'Moulds / Decay',
-          'Internal Browning'
+          'General Quality', 'Taste', 'Visual Appearance', 'Color',
+          'Smell / Aroma', 'Texture / Firmness', 'Humidity / Condensation',
+          'Dehydration / Shriveling', 'Moulds / Decay', 'Internal Browning'
         ];
 
         // --- HULPFUNCTIES ---
@@ -77,30 +66,25 @@
 
         const getWeightLoss = (samples, day0Samples) => {
             if (!samples || samples.length === 0 || !day0Samples || day0Samples.length === 0) return 0;
-            
-            let totalLoss = 0;
-            let count = 0;
-
+            let totalLoss = 0, count = 0;
             samples.forEach((s, idx) => {
                 const startW = day0Samples[idx] ? parseFloat(day0Samples[idx].weight) : 0;
                 const currentW = parseFloat(s.weight);
-                
                 if (startW > 0 && !isNaN(currentW)) {
                     totalLoss += ((startW - currentW) / startW) * 100;
                     count++;
                 }
             });
-
             return count > 0 ? (totalLoss / count).toFixed(1) : 0;
         };
 
         const getStageIcon = (name) => {
           const n = name.toLowerCase();
-          if (n.includes('farm') || n.includes('harvest') || n.includes('oogst')) return <Tractor size={14} color={BRAND.colors.black} />;
+          if (n.includes('farm') || n.includes('harvest')) return <Tractor size={14} color={BRAND.colors.black} />;
           if (n.includes('sea')) return <Ship size={14} color={BRAND.colors.black} />;
           if (n.includes('air')) return <Plane size={14} color={BRAND.colors.black} />;
           if (n.includes('storage') || n.includes('dc')) return <Warehouse size={14} color={BRAND.colors.black} />;
-          if (n.includes('store') || n.includes('retail') || n.includes('shop')) return <Store size={14} color={BRAND.colors.black} />;
+          if (n.includes('store') || n.includes('retail')) return <Store size={14} color={BRAND.colors.black} />;
           if (n.includes('consumer') || n.includes('eat')) return <Utensils size={14} color={BRAND.colors.black} />;
           if (n.includes('pack') && !n.includes('transport')) return <Factory size={14} color={BRAND.colors.black} />;
           return <Truck size={14} color={BRAND.colors.black} />;
@@ -252,23 +236,26 @@
           );
         };
 
-        const SampleModal = ({ isOpen, onClose, data, onSave, day0Samples, projectCriteria, isEvaluationDay }) => {
+        const SampleModal = ({ isOpen, onClose, data, onSave, day0Samples, projectCriteria, isDayEditable }) => {
           if (!isOpen) return null;
           const [samples, setSamples] = useState(data.samples || []);
           const [day, setDay] = useState(data.day);
           const [notes, setNotes] = useState(data.notes);
+          const [evaluateQuality, setEvaluateQuality] = useState(data.evaluateQuality !== undefined ? data.evaluateQuality : false);
           const [qualityParams, setQualityParams] = useState(data.qualityParams || []);
 
           useEffect(() => {
-            if (isEvaluationDay && projectCriteria.length > 0) {
-              const currentParams = data.qualityParams || [];
+            if (evaluateQuality && projectCriteria.length > 0) {
+              const currentParams = qualityParams || [];
               const newParams = projectCriteria.map(c => {
                 const existing = currentParams.find(p => p.name === c);
                 return existing || { name: c, score: '', notes: '' };
               });
-              setQualityParams(newParams);
+              if(JSON.stringify(currentParams) !== JSON.stringify(newParams)) {
+                 setQualityParams(newParams);
+              }
             }
-          }, [isOpen, isEvaluationDay, projectCriteria, data.qualityParams]);
+          }, [evaluateQuality, projectCriteria, qualityParams]);
 
           const addSample = () => setSamples([...samples, { id: Date.now(), o2: '', co2: '', weight: '' }]);
           const updateSample = (index, field, value) => {
@@ -282,7 +269,7 @@
             setQualityParams(newParams);
           };
 
-          const handleSave = () => { onSave({ ...data, day, notes, samples, qualityParams }); onClose(); };
+          const handleSave = () => { onSave({ ...data, day, notes, samples, qualityParams, evaluateQuality }); onClose(); };
           
           const avgWeight = getAverage(samples, 'weight');
           const weightLoss = getWeightLoss(samples, day0Samples); 
@@ -299,7 +286,10 @@
                   <div>
                     <h4 className="font-bold text-sm text-slate-700 border-b pb-2 mb-4">Atmosphere & Weight</h4>
                     <div className="flex flex-wrap justify-between items-center mb-4 bg-[#E9E9E9] p-3 rounded-lg text-xs gap-4">
-                      <div className="flex items-center gap-2"><label className="font-bold">Day:</label><input type="number" value={day} onChange={e => setDay(e.target.value)} className="w-16 p-1.5 border rounded text-center font-bold" /></div>
+                      <div className="flex items-center gap-2">
+                         <label className="font-bold">Day:</label>
+                         <input type="number" value={day} onChange={e => setDay(e.target.value)} disabled={!isDayEditable} className={`w-16 p-1.5 border rounded text-center font-bold ${!isDayEditable ? 'bg-gray-200 cursor-not-allowed text-gray-500' : 'bg-white'}`} />
+                      </div>
                       <div className="text-right flex gap-4">
                          {day > 0 && <div style={{ color: weightLoss > 3 ? '#dc2626' : BRAND.colors.green, fontWeight: 'bold' }}>Avg Loss: {weightLoss}%</div>}
                          <div>Avg Weight: <strong>{avgWeight}g</strong></div>
@@ -326,12 +316,15 @@
                   </div>
 
                   <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 flex flex-col h-full overflow-hidden">
-                     <h4 className="font-bold text-sm text-slate-700 border-b pb-2 mb-4 flex justify-between items-center">
-                       Quality Evaluation 
-                       {isEvaluationDay ? <span className="bg-green-100 text-green-700 text-[10px] px-2 py-0.5 rounded">Active</span> : <span className="bg-gray-200 text-gray-500 text-[10px] px-2 py-0.5 rounded">Read-only</span>}
-                     </h4>
+                     <div className="flex justify-between items-center border-b pb-2 mb-4">
+                       <h4 className="font-bold text-sm text-slate-700">Quality Evaluation</h4>
+                       <label className="flex items-center gap-2 text-xs bg-white border border-gray-300 px-2 py-1 rounded cursor-pointer shadow-sm hover:bg-gray-50">
+                         <input type="checkbox" checked={evaluateQuality} onChange={e => setEvaluateQuality(e.target.checked)} className="accent-green-600" />
+                         <span className="font-bold text-slate-600">Beoordelen</span>
+                       </label>
+                     </div>
                      
-                     {isEvaluationDay ? (
+                     {evaluateQuality ? (
                        <div className="flex-1 flex flex-col overflow-hidden">
                          <div className="flex-1 overflow-y-auto pr-2">
                            <table className="w-full text-sm">
@@ -348,7 +341,6 @@
                            </table>
                          </div>
                          
-                         {/* Legend */}
                          <div className="mt-4 pt-4 border-t border-slate-200 shrink-0">
                            <p className="text-[10px] font-bold text-slate-500 mb-1 uppercase">Score Scale (1-10)</p>
                            <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[9px] text-slate-500">
@@ -363,7 +355,7 @@
                      ) : (
                        <div className="flex flex-col items-center justify-center flex-1 text-center text-gray-400">
                          <AlertTriangle size={32} className="mb-2 opacity-50"/>
-                         <p className="text-sm">Quality scoring is only enabled<br/>for Start (P+0) and End (P+X) days.</p>
+                         <p className="text-sm">Kwaliteitsbeoordeling staat uit voor dit moment.<br/>Vink 'Beoordelen' aan om in te vullen.</p>
                        </div>
                      )}
                   </div>
@@ -446,7 +438,7 @@
             rrO2: '', rrCO2: '', rrTemp: '', totalDuration: '', criteria: [], 
             date: new Date().toISOString().split('T')[0],
             logo: 'https://cdn.prod.website-files.com/68b594c756c22085ddc6c1ea/68b59ba2f027bfeecd25261b_PerfoTec%20logo.png',
-            startImage: null, coverImage: null
+            clientLogo: null, startImage: null, coverImage: null
           });
 
           const [supplyChain, setSupplyChain] = useState([
@@ -462,7 +454,7 @@
             {
               id: 1, name: 'Control',
               specs: { packaging: 'Retail', material: 'BOPP', length: '', width: '', height: '', holes: '2', holeSize: '6000', otr: '', cotr: '', startGas: { o2: '20.9', co2: '0.03' } },
-              measurements: [{ day: 0, samples: [{id:1,o2:'20.9',co2:'0.03',weight:''}, {id:2,o2:'20.9',co2:'0.03',weight:''}, {id:3,o2:'20.9',co2:'0.03',weight:''}], quality: 10, notes: 'Start', images: [], qualityParams: [] }],
+              measurements: [{ day: 0, samples: [{id:1,o2:'20.9',co2:'0.03',weight:''}, {id:2,o2:'20.9',co2:'0.03',weight:''}, {id:3,o2:'20.9',co2:'0.03',weight:''}], quality: 10, notes: 'Start', images: [], qualityParams: [], evaluateQuality: true }],
               predictedImage: null 
             }
           ]);
@@ -472,6 +464,7 @@
           const [newCriteria, setNewCriteria] = useState('');
 
           const handleLogoUpload = (e) => { const file = e.target.files[0]; if(file) { const reader = new FileReader(); reader.onloadend = () => setProject(p => ({...p, logo: reader.result})); reader.readAsDataURL(file); }};
+          const handleClientLogoUpload = (e) => { const file = e.target.files[0]; if(file) { const reader = new FileReader(); reader.onloadend = () => setProject(p => ({...p, clientLogo: reader.result})); reader.readAsDataURL(file); }};
           const handleStartImageUpload = (e) => { const file = e.target.files[0]; if(file) { const reader = new FileReader(); reader.onloadend = () => setProject(p => ({...p, startImage: reader.result})); reader.readAsDataURL(file); }};
           const handleCoverImageUpload = (e) => { const file = e.target.files[0]; if(file) { const reader = new FileReader(); reader.onloadend = () => setProject(p => ({...p, coverImage: reader.result})); reader.readAsDataURL(file); }};
           const handlePredictedImageUpload = (e, groupId) => { const file = e.target.files[0]; if(file) { const reader = new FileReader(); reader.onloadend = () => setGroups(prev => prev.map(g => g.id === groupId ? { ...g, predictedImage: reader.result } : g)); reader.readAsDataURL(file); }};
@@ -482,11 +475,13 @@
             if (val && parseInt(val) > 0) {
                const endDay = parseInt(val);
                setGroups(prev => prev.map(g => {
-                 if (!g.measurements.find(m => m.day === endDay)) {
-                    const endMeas = { day: endDay, samples: [{id:1,o2:'',co2:'',weight:''},{id:2,o2:'',co2:'',weight:''},{id:3,o2:'',co2:'',weight:''}], quality: 9, notes: 'End', images: [], qualityParams: [] };
-                    return { ...g, measurements: [...g.measurements, endMeas].sort((a,b) => a.day - b.day) };
+                 const newMeas = [...g.measurements];
+                 if (newMeas.length > 1) {
+                     newMeas[newMeas.length - 1].day = endDay;
+                 } else {
+                     newMeas.push({ day: endDay, samples: [{id:1,o2:'',co2:'',weight:''},{id:2,o2:'',co2:'',weight:''},{id:3,o2:'',co2:'',weight:''}], quality: 9, notes: 'End', images: [], qualityParams: [], evaluateQuality: true });
                  }
-                 return g;
+                 return { ...g, measurements: newMeas };
                }));
             }
           };
@@ -531,9 +526,9 @@
           const openSampleModal = (groupId, index) => { 
             const g = groups.find(x => x.id === groupId); 
             const meas = g.measurements[index];
-            const isEvaluationDay = meas.day === 0 || (project.totalDuration && meas.day === parseInt(project.totalDuration));
+            const isDayEditable = index !== 0 && index !== g.measurements.length - 1;
             const day0 = g.measurements.find(m => m.day === 0);
-            setEditingMeasurement({ groupId, index, data: meas, day0Samples: day0?.samples, isEvaluationDay }); 
+            setEditingMeasurement({ groupId, index, data: meas, day0Samples: day0?.samples, isDayEditable }); 
             setSampleModalOpen(true); 
           };
           
@@ -549,8 +544,15 @@
           const addMeasurementDay = (groupId) => {
             setGroups(prev => prev.map(g => {
               if (g.id !== groupId) return g;
-              const lastDay = parseFloat(g.measurements[g.measurements.length - 1]?.day || 0);
-              return { ...g, measurements: [...g.measurements, { day: lastDay + 1, samples: [{id:1,o2:'',co2:'',weight:''},{id:2,o2:'',co2:'',weight:''},{id:3,o2:'',co2:'',weight:''}], quality: 9, notes: '', images: [], qualityParams: [] }]};
+              // Day is calculated right before the end day
+              const lastMeas = g.measurements[g.measurements.length - 1];
+              const prevMeas = g.measurements[g.measurements.length - 2];
+              const newDay = prevMeas ? prevMeas.day + 1 : 1;
+              const newMeas = { day: newDay, samples: [{id:1,o2:'',co2:'',weight:''},{id:2,o2:'',co2:'',weight:''},{id:3,o2:'',co2:'',weight:''}], quality: 9, notes: '', images: [], qualityParams: [], evaluateQuality: false };
+              // Insert before the last day
+              const updatedMeasurements = [...g.measurements];
+              updatedMeasurements.splice(updatedMeasurements.length - 1, 0, newMeas);
+              return { ...g, measurements: updatedMeasurements };
             }));
           };
           
@@ -568,10 +570,10 @@
           const addNewVariant = () => {
             const newId = Math.max(...groups.map(g => g.id)) + 1;
             const duration = parseInt(project.totalDuration) || 0;
-            const day0 = { day: 0, samples: [{id:1,o2:'20.9',co2:'0.03',weight:''},{id:2,o2:'20.9',co2:'0.03',weight:''},{id:3,o2:'20.9',co2:'0.03',weight:''}], quality: 10, notes: 'Start', images: [], qualityParams: [] };
+            const day0 = { day: 0, samples: [{id:1,o2:'20.9',co2:'0.03',weight:''},{id:2,o2:'20.9',co2:'0.03',weight:''},{id:3,o2:'20.9',co2:'0.03',weight:''}], quality: 10, notes: 'Start', images: [], qualityParams: [], evaluateQuality: true };
             const meas = [day0];
             if (duration > 0) {
-               meas.push({ day: duration, samples: [{id:1,o2:'',co2:'',weight:''},{id:2,o2:'',co2:'',weight:''},{id:3,o2:'',co2:'',weight:''}], quality: 9, notes: 'End', images: [], qualityParams: [] });
+               meas.push({ day: duration, samples: [{id:1,o2:'',co2:'',weight:''},{id:2,o2:'',co2:'',weight:''},{id:3,o2:'',co2:'',weight:''}], quality: 9, notes: 'End', images: [], qualityParams: [], evaluateQuality: true });
             }
             setGroups([...groups, { id: newId, name: `Variant ${groups.length + 1}`, specs: { ...groups[0].specs }, measurements: meas, predictedImage: null }]);
             setActiveGroupId(newId);
@@ -585,17 +587,49 @@
 
           const handlePrint = () => { window.print(); };
 
+          const handleWordExport = () => {
+              const content = document.getElementById('print-content').innerHTML;
+              const preHtml = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+              <head><meta charset='utf-8'><title>Export HTML To Doc</title>
+              <style>
+                body { font-family: 'Arial', sans-serif; }
+                .page-break { page-break-before: always; }
+                table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+                th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+                th { background-color: #007C27; color: white; }
+                img { max-width: 100%; height: auto; }
+              </style>
+              </head><body>`;
+              const postHtml = "</body></html>";
+              const html = preHtml + content + postHtml;
+              const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
+              const url = 'data:application/vnd.ms-word;charset=utf-8,' + encodeURIComponent(html);
+              const downloadLink = document.createElement("a");
+              document.body.appendChild(downloadLink);
+              downloadLink.href = URL.createObjectURL(blob);
+              downloadLink.download = (project.reportTitle || 'Report') + '.doc';
+              downloadLink.click();
+              document.body.removeChild(downloadLink);
+          };
+
           if (isPreview) {
             return (
-              <div className="min-h-screen bg-gray-500 p-8 overflow-y-auto font-sans">
-                <div id="print-content" className="max-w-[21cm] mx-auto bg-white shadow-2xl min-h-[29.7cm] p-12 relative">
+              <div className="min-h-screen bg-gray-500 p-0 sm:p-8 overflow-y-auto font-sans print:p-0 print:bg-white">
+                <div id="print-content" className="max-w-[21cm] mx-auto bg-white shadow-2xl min-h-[29.7cm] p-12 relative print:shadow-none print:max-w-full print:w-full print:p-0">
                   {/* COVER */}
                   <div className="h-[27cm] flex flex-col justify-between">
                      <div>
-                        <div className="flex flex-col mb-16">
-                          <img src={project.logo} alt="PerfoTec" className="h-20 object-contain self-start mb-2" />
-                          <div className="text-sm font-bold tracking-[0.25em] uppercase" style={{ color: BRAND.colors.blue, fontFamily: BRAND.fonts.heading, marginLeft: '4px' }}>Best for Freshness</div>
+                        {/* Header Logos */}
+                        <div className="flex justify-between items-start mb-16 w-full">
+                          <div className="flex flex-col">
+                            <img src={project.logo} alt="PerfoTec" className="h-20 object-contain self-start mb-2" />
+                            <div className="text-sm font-bold tracking-[0.25em] uppercase" style={{ color: BRAND.colors.blue, fontFamily: BRAND.fonts.heading, marginLeft: '4px' }}>Best for Freshness</div>
+                          </div>
+                          {project.clientLogo && (
+                             <img src={project.clientLogo} alt="Client Logo" className="h-20 object-contain self-end" />
+                          )}
                         </div>
+
                         <h1 className="text-5xl font-bold uppercase mb-4 brand-heading" style={{ color: BRAND.colors.green }}>{project.reportTitle}</h1>
                         <h2 className="text-4xl font-light brand-heading text-slate-600 mb-12">{project.productName || '<Product Name>'}</h2>
                         <div className="w-full h-[450px] bg-slate-50 border rounded-lg overflow-hidden flex items-center justify-center relative shadow-sm">
@@ -744,7 +778,7 @@
                       </tbody>
                     </table>
 
-                    <h3 className="font-bold text-lg mb-2 mt-8 brand-heading text-slate-700">4.4 Detailed Quality Parameters (End of Trial)</h3>
+                    <h3 className="font-bold text-lg mb-2 mt-8 brand-heading text-slate-700">4.4 Detailed Quality Parameters</h3>
                     {project.criteria.length > 0 ? (
                       <table className="report-table w-full mb-6 text-sm">
                         <thead>
@@ -758,8 +792,9 @@
                             <tr key={i}>
                               <td className="font-semibold">{crit}</td>
                               {groups.map(g => {
+                                 // Look at the last measurement if it has evaluateQuality enabled
                                  const lastMeas = g.measurements[g.measurements.length - 1];
-                                 const param = lastMeas.qualityParams?.find(p => p.name === crit);
+                                 const param = lastMeas.evaluateQuality ? lastMeas.qualityParams?.find(p => p.name === crit) : null;
                                  return (
                                    <td key={g.id} className="text-center align-top">
                                      {param && param.score ? (
@@ -793,6 +828,7 @@
                          </div>
                        )}
                        {(() => {
+                         // Verzamel alle foto's van alle groepen en metingen
                          const allPhotos = groups.flatMap(g => 
                             g.measurements.flatMap(m => 
                               (m.images || []).map(img => ({
@@ -802,7 +838,7 @@
                                  caption: typeof img === 'string' ? '' : img.caption
                               }))
                             )
-                         );
+                         ).sort((a,b) => a.day - b.day); // Sorteer op dag
                          
                          let startIndex = project.startImage ? 2 : 1;
                          
@@ -821,14 +857,17 @@
                        })()}
                     </div>
                   </div>
+                </div>
 
-                  {/* PRINT BUTTON */}
-                  <div className="fixed bottom-8 right-8 flex gap-4 no-print z-50">
-                    <button onClick={() => setIsPreview(false)} className="bg-slate-600 text-white px-6 py-3 rounded-full shadow-lg font-bold transition hover:bg-slate-700">Edit</button>
-                    <button onClick={handlePrint} className="text-white px-6 py-3 rounded-full shadow-lg font-bold flex gap-2 hover:opacity-90 transition" style={{backgroundColor: BRAND.colors.green}}>
-                      <Printer /> Download PDF
-                    </button>
-                  </div>
+                {/* PRINT BUTTONS - Fixed with proper no-print classes */}
+                <div className="fixed bottom-8 right-8 flex gap-4 no-print z-50">
+                  <button onClick={() => setIsPreview(false)} className="bg-slate-600 text-white px-6 py-3 rounded-full shadow-lg font-bold transition hover:bg-slate-700">Edit</button>
+                  <button onClick={handleWordExport} className="bg-blue-600 text-white px-6 py-3 rounded-full shadow-lg font-bold flex gap-2 hover:bg-blue-700 transition">
+                    <FileArchive /> Download Word
+                  </button>
+                  <button onClick={handlePrint} className="text-white px-6 py-3 rounded-full shadow-lg font-bold flex gap-2 hover:opacity-90 transition" style={{backgroundColor: BRAND.colors.green}}>
+                    <Printer /> Download PDF
+                  </button>
                 </div>
               </div>
             );
@@ -836,13 +875,13 @@
 
           return (
             <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-20">
-              <SampleModal isOpen={sampleModalOpen} onClose={() => setSampleModalOpen(false)} data={editingMeasurement ? editingMeasurement.data : {}} onSave={saveSampleData} day0Samples={editingMeasurement ? editingMeasurement.day0Samples : null} projectCriteria={project.criteria} isEvaluationDay={editingMeasurement ? editingMeasurement.isEvaluationDay : false} />
+              <SampleModal isOpen={sampleModalOpen} onClose={() => setSampleModalOpen(false)} data={editingMeasurement ? editingMeasurement.data : {}} onSave={saveSampleData} day0Samples={editingMeasurement ? editingMeasurement.day0Samples : null} projectCriteria={project.criteria} isDayEditable={editingMeasurement ? editingMeasurement.isDayEditable : false} />
               <DetailsModal isOpen={detailsModalOpen} onClose={() => setDetailsModalOpen(false)} data={editingMeasurement ? editingMeasurement.data : {}} onSave={saveDetailsData} />
 
               <nav className="bg-white border-b sticky top-0 z-20 px-6 py-3 flex justify-between items-center shadow-sm">
                 <div className="flex items-center gap-3">
                   <div className="text-white p-2 rounded" style={{background: BRAND.colors.green}}><Layout size={24} /></div>
-                  <div><h1 className="font-bold text-lg" style={{fontFamily: 'League Spartan'}}>PERF<span style={{color:BRAND.colors.blue}}>O</span>TEC MANAGER</h1><p className="text-xs text-slate-400 font-medium tracking-wider">OFFICIAL TEMPLATE EDITION v21.0</p></div>
+                  <div><h1 className="font-bold text-lg" style={{fontFamily: 'League Spartan'}}>PERF<span style={{color:BRAND.colors.blue}}>O</span>TEC MANAGER</h1><p className="text-xs text-slate-400 font-medium tracking-wider">OFFICIAL TEMPLATE EDITION v22.0</p></div>
                 </div>
                 <div className="flex gap-3">
                   <label className="text-slate-600 bg-white border px-4 py-2 rounded font-medium flex items-center gap-2 hover:bg-slate-50 transition cursor-pointer shadow-sm"><FolderOpen size={18} /> Load<input type="file" className="hidden" accept=".json" onChange={importData} ref={fileInputRef} /></label>
@@ -879,9 +918,16 @@
                            <div className="sm:col-span-2 bg-slate-50 p-4 rounded border border-slate-200"><label className="label text-blue-800 mb-2 border-b border-blue-200 pb-1 w-full block">Respiration Data</label><div className="grid grid-cols-1 sm:grid-cols-3 gap-4"><div><label className="label">RR O₂</label><input type="text" className="input" value={project.rrO2} onChange={e => setProject({...project, rrO2: e.target.value})} /></div><div><label className="label">RR CO₂</label><input type="text" className="input" value={project.rrCO2} onChange={e => setProject({...project, rrCO2: e.target.value})} /></div><div><label className="label">Measured at (°C)</label><input type="text" className="input" value={project.rrTemp} onChange={e => setProject({...project, rrTemp: e.target.value})} /></div></div></div>
                          </div>
                          <div className="space-y-4">
-                            <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center bg-slate-50 relative group min-h-[100px]"><input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleLogoUpload} />{project.logo ? <img src={project.logo} className="h-full object-contain" /> : <><Upload size={24} color={BRAND.colors.blue} className="mb-2"/><span className="font-bold text-xs text-slate-600">Upload Logo (PNG)</span></>}</div>
+                            <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center bg-slate-50 relative group min-h-[100px]">
+                              <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleLogoUpload} />
+                              {project.logo ? <img src={project.logo} className="h-full object-contain" /> : <><Upload size={24} color={BRAND.colors.blue} className="mb-2"/><span className="font-bold text-xs text-slate-600">Upload PerfoTec Logo (PNG)</span></>}
+                            </div>
+                            <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center bg-slate-50 relative group min-h-[100px]">
+                              <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleClientLogoUpload} />
+                              {project.clientLogo ? <img src={project.clientLogo} className="h-full object-contain" /> : <><Upload size={24} color={BRAND.colors.green} className="mb-2"/><span className="font-bold text-xs text-slate-600">Upload Client Logo</span></>}
+                            </div>
                             <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center bg-slate-50 relative group min-h-[150px]"><input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleCoverImageUpload} />{project.coverImage ? <img src={project.coverImage} className="w-full h-full object-cover rounded" /> : <><ImageIcon size={24} color={BRAND.colors.green} className="mb-2"/><span className="font-bold text-xs text-slate-600">Cover Photo</span></>}</div>
-                            <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center bg-slate-50 relative group min-h-[150px]"><input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleStartImageUpload} />{project.startImage ? <img src={project.startImage} className="w-full h-full object-cover rounded" /> : <><ImageIcon size={24} color={BRAND.colors.green} className="mb-2"/><span className="font-bold text-xs text-slate-600">Ref Photo</span></>}</div>
+                            <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center bg-slate-50 relative group min-h-[150px]"><input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleStartImageUpload} />{project.startImage ? <img src={project.startImage} className="w-full h-full object-cover rounded" /> : <><ImageIcon size={24} color={BRAND.colors.green} className="mb-2"/><span className="font-bold text-xs text-slate-600">Ref Photo (P+0)</span></>}</div>
                          </div>
                        </div>
                     </div>
