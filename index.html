@@ -1,1058 +1,1003 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { 
-  Printer, 
-  FileText, 
-  Activity, 
-  Settings, 
-  Layout, 
-  MessageSquare, 
-  CheckCircle, 
-  AlertTriangle,
-  ArrowRight,
-  Copy,
-  Trash2,
-  Plus,
-  Edit3,
-  Scale,
-  X,
-  Upload,
-  Truck,
-  Thermometer,
-  Clock,
-  Camera,
-  ClipboardList,
-  Image as ImageIcon,
-  BarChart2,
-  ChevronRight,
-  Save,
-  Download,
-  FolderOpen,
-  LineChart,
-  Tractor,
-  Ship,
-  Plane,
-  Warehouse,
-  Store,
-  Utensils,
-  Factory,
-  ArrowDown,
-  ArrowUp,
-  ChevronUp,
-  ChevronDown
-} from 'lucide-react';
-
-// --- CONFIGURATIE ---
-const BRAND = {
-  colors: {
-    green: '#007C27', 
-    blue: '#054E9A',  
-    black: '#211A1A', 
-    gray: '#E9E9E9',
-    lightGray: '#F3F4F6',
-    white: '#FFFFFF'
-  },
-  fonts: {
-    heading: '"League Spartan", sans-serif',
-    body: '"Inter", sans-serif'
-  }
-};
-
-const CHART_COLORS = [
-  { stroke: '#054E9A', fill: '#dbeafe', name: 'Electric Blue' },    
-  { stroke: '#007C27', fill: '#dcfce7', name: 'La Salle Green' },     
-  { stroke: '#211A1A', fill: '#f3f4f6', name: 'Eerie Black' },   
-  { stroke: '#ea580c', fill: '#ffedd5', name: 'Orange' },  
-  { stroke: '#9333ea', fill: '#f3e8ff', name: 'Purple' }   
-];
-
-const PACKAGING_TYPES = ['Retail', 'Box/ Crate', 'Cube crate', 'Pallet'];
-
-const DEFAULT_CRITERIA = [
-  'General Quality',
-  'Taste',
-  'Visual Appearance',
-  'Color',
-  'Smell / Aroma',
-  'Texture / Firmness',
-  'Humidity / Condensation',
-  'Dehydration / Shriveling',
-  'Moulds / Decay',
-  'Internal Browning'
-];
-
-// --- HULPFUNCTIES ---
-const getAverage = (samples, key) => {
-  if (!samples || samples.length === 0) return 0;
-  const validSamples = samples.filter(s => s[key] !== '' && !isNaN(s[key]));
-  if (validSamples.length === 0) return 0;
-  const sum = validSamples.reduce((acc, curr) => acc + parseFloat(curr[key]), 0);
-  return (sum / validSamples.length).toFixed(1);
-};
-
-const getWeightLoss = (samples, day0Samples) => {
-    if (!samples || samples.length === 0 || !day0Samples || day0Samples.length === 0) return 0;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PerfoTec Manager</title>
     
-    let totalLoss = 0;
-    let count = 0;
+    <!-- Tailwind CSS voor de styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Babel om de React code in de browser te kunnen lezen -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body>
+    <div id="root"></div>
 
-    samples.forEach((s, idx) => {
-        const startW = day0Samples[idx] ? parseFloat(day0Samples[idx].weight) : 0;
-        const currentW = parseFloat(s.weight);
-        
-        if (startW > 0 && !isNaN(currentW)) {
-            totalLoss += ((startW - currentW) / startW) * 100;
-            count++;
-        }
-    });
+    <script type="text/babel" data-type="module">
+        import React, { useState, useRef, useEffect } from 'https://esm.sh/react@18.2.0';
+        import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
+        import { 
+          Printer, FileText, Activity, Settings, Layout, MessageSquare, 
+          CheckCircle, AlertTriangle, ArrowRight, Copy, Trash2, Plus, 
+          Edit3, Scale, X, Upload, Truck, Thermometer, Clock, Camera, 
+          ClipboardList, Image as ImageIcon, BarChart2, ChevronRight, Save, 
+          Download, FolderOpen, LineChart, Tractor, Ship, Plane, 
+          Warehouse, Store, Utensils, Factory, ArrowDown, ArrowUp, 
+          ChevronUp, ChevronDown 
+        } from 'https://esm.sh/lucide-react@0.292.0';
 
-    return count > 0 ? (totalLoss / count).toFixed(1) : 0;
-};
+        // --- CONFIGURATIE ---
+        const BRAND = {
+          colors: {
+            green: '#007C27', 
+            blue: '#054E9A',  
+            black: '#211A1A', 
+            gray: '#E9E9E9',
+            lightGray: '#F3F4F6',
+            white: '#FFFFFF'
+          },
+          fonts: {
+            heading: '"League Spartan", sans-serif',
+            body: '"Inter", sans-serif'
+          }
+        };
 
-const getStageIcon = (name) => {
-  const n = name.toLowerCase();
-  if (n.includes('farm') || n.includes('harvest') || n.includes('oogst')) return <Tractor size={14} color={BRAND.colors.black} />;
-  if (n.includes('sea')) return <Ship size={14} color={BRAND.colors.black} />;
-  if (n.includes('air')) return <Plane size={14} color={BRAND.colors.black} />;
-  if (n.includes('storage') || n.includes('dc')) return <Warehouse size={14} color={BRAND.colors.black} />;
-  if (n.includes('store') || n.includes('retail') || n.includes('shop')) return <Store size={14} color={BRAND.colors.black} />;
-  if (n.includes('consumer') || n.includes('eat')) return <Utensils size={14} color={BRAND.colors.black} />;
-  if (n.includes('pack') && !n.includes('transport')) return <Factory size={14} color={BRAND.colors.black} />;
-  return <Truck size={14} color={BRAND.colors.black} />;
-};
+        const CHART_COLORS = [
+          { stroke: '#054E9A', fill: '#dbeafe', name: 'Electric Blue' },    
+          { stroke: '#007C27', fill: '#dcfce7', name: 'La Salle Green' },     
+          { stroke: '#211A1A', fill: '#f3f4f6', name: 'Eerie Black' },   
+          { stroke: '#ea580c', fill: '#ffedd5', name: 'Orange' },  
+          { stroke: '#9333ea', fill: '#f3e8ff', name: 'Purple' }   
+        ];
 
-const formatRange = (start, end, unit) => {
-  if (start && end && start !== end) return `${start}-${end}${unit}`;
-  if (start) return `${start}${unit}`;
-  return `-`;
-};
+        const PACKAGING_TYPES = ['Retail', 'Box/ Crate', 'Cube crate', 'Pallet'];
 
-const formatDay = (day) => `P+${day}`;
+        const DEFAULT_CRITERIA = [
+          'General Quality',
+          'Taste',
+          'Visual Appearance',
+          'Color',
+          'Smell / Aroma',
+          'Texture / Firmness',
+          'Humidity / Condensation',
+          'Dehydration / Shriveling',
+          'Moulds / Decay',
+          'Internal Browning'
+        ];
 
-// --- COMPONENTEN ---
-const SupplyChainFlow = ({ chain }) => {
-  if (!chain || chain.length === 0) return null;
-  return (
-    <div className="flex w-full gap-1 items-start justify-between mt-4 mb-2 font-sans overflow-hidden">
-      {chain.map((step, idx) => (
-        <React.Fragment key={idx}>
-          {idx > 0 && <div className="h-20 flex items-center justify-center"><ChevronRight size={16} className="text-gray-300 flex-shrink-0" /></div>}
-          <div className="flex flex-col items-center flex-1 min-w-0">
-            <div className="w-full flex flex-col items-center bg-white border border-gray-200 rounded-lg shadow-sm p-1.5 relative min-h-[5rem]">
-               <div className="absolute top-0 left-0 w-full h-1" style={{backgroundColor: idx % 2 === 0 ? BRAND.colors.green : BRAND.colors.blue}}></div>
-               <div className="bg-gray-50 p-1.5 rounded-full mb-1 flex-shrink-0 mt-1">{getStageIcon(step.stage)}</div>
-               <div className="text-[8px] font-bold text-center uppercase mb-1 flex-grow flex items-center justify-center leading-tight w-full break-words px-1">{step.stage}</div>
-               <div className="w-full border-t border-dotted border-gray-200 my-0.5"></div>
-               <div className="flex flex-col justify-center w-full text-[8px] gap-0.5">
-                  <span className="flex items-center justify-center gap-0.5 font-bold text-gray-700 whitespace-nowrap"><Thermometer size={8} className="text-red-500"/>{formatRange(step.tempStart, step.tempEnd, '°C')}</span>
-                  <span className="flex items-center justify-center gap-0.5 text-gray-500 whitespace-nowrap"><Clock size={8}/>{formatRange(step.daysStart, step.daysEnd, 'd')}</span>
-               </div>
-            </div>
-            <div className="h-8 w-full flex justify-center items-start mt-1 relative">
-                {step.action === 'pack' && <div className="flex flex-col items-center"><div className="bg-green-100 text-green-700 rounded-full p-0.5 border border-green-200"><ArrowDown size={12} /></div><span className="text-[7px] font-bold text-green-700 uppercase mt-0.5">Packed</span></div>}
-                {step.action === 'unpack' && <div className="flex flex-col items-center"><div className="bg-red-100 text-red-700 rounded-full p-0.5 border border-red-200"><ArrowUp size={12} /></div><span className="text-[7px] font-bold text-red-700 uppercase mt-0.5">Opened</span></div>}
-            </div>
-          </div>
-        </React.Fragment>
-      ))}
-    </div>
-  );
-};
+        // --- HULPFUNCTIES ---
+        const getAverage = (samples, key) => {
+          if (!samples || samples.length === 0) return 0;
+          const validSamples = samples.filter(s => s[key] !== '' && !isNaN(s[key]));
+          if (validSamples.length === 0) return 0;
+          const sum = validSamples.reduce((acc, curr) => acc + parseFloat(curr[key]), 0);
+          return (sum / validSamples.length).toFixed(1);
+        };
 
-const VariantGasChart = ({ group }) => {
-  if (!group || !group.measurements) return null;
-  const width = 350;
-  const height = 200;
-  const padding = 30;
-  const data = group.measurements.sort((a,b) => a.day - b.day);
-  const maxDay = Math.max(...data.map(d => parseFloat(d.day) || 0), 5);
-  const maxY = 25; 
-  const getX = (day) => padding + (parseFloat(day) / maxDay) * (width - 2 * padding);
-  const getY = (val) => height - padding - (parseFloat(val) / maxY) * (height - 2 * padding);
-  const pointsO2 = data.map(d => `${getX(d.day)},${getY(getAverage(d.samples, 'o2'))}`).join(' ');
-  const pointsCO2 = data.map(d => `${getX(d.day)},${getY(getAverage(d.samples, 'co2'))}`).join(' ');
-
-  return (
-    <div className="border rounded bg-white p-3 font-sans w-full h-full flex flex-col justify-between">
-      <h5 className="text-center font-bold text-sm mb-2 text-slate-800 border-b pb-1">Actual Results: {group.name}</h5>
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
-        {[0, 5, 10, 15, 20, 25].map(val => (
-          <g key={val}>
-            <line x1={padding} y1={getY(val)} x2={width-padding} y2={getY(val)} stroke="#f0f0f0" />
-            <text x={padding - 5} y={getY(val) + 3} textAnchor="end" fontSize="9" fill="#ccc">{val}%</text>
-          </g>
-        ))}
-        {data.map(d => <text key={d.day} x={getX(d.day)} y={height - 10} textAnchor="middle" fontSize="9" fill="#999">{formatDay(d.day)}</text>)}
-        <polyline points={pointsO2} fill="none" stroke={BRAND.colors.blue} strokeWidth="2" />
-        <polyline points={pointsCO2} fill="none" stroke={BRAND.colors.green} strokeWidth="2" />
-        {data.map((d, i) => (
-          <g key={i}>
-            <circle cx={getX(d.day)} cy={getY(getAverage(d.samples, 'o2'))} r="3" fill={BRAND.colors.blue} />
-            <circle cx={getX(d.day)} cy={getY(getAverage(d.samples, 'co2'))} r="3" fill={BRAND.colors.green} />
-          </g>
-        ))}
-      </svg>
-      <div className="flex justify-center gap-4 mt-2 text-xs">
-        <span className="flex items-center gap-1 font-bold" style={{color: BRAND.colors.blue}}>● O₂</span>
-        <span className="flex items-center gap-1 font-bold" style={{color: BRAND.colors.green}}>● CO₂</span>
-      </div>
-    </div>
-  );
-};
-
-const WeightLossChart = ({ groups }) => {
-  if (!groups || groups.length === 0) return null;
-  const width = 600;
-  const height = 250;
-  const padding = 40;
-  const allDays = Array.from(new Set(groups.flatMap(g => g.measurements.map(m => m.day)))).sort((a,b) => a-b);
-  const days = allDays.filter(d => d > 0);
-  if (days.length === 0) return <div className="text-center text-gray-400 italic p-4">No weight loss data available yet.</div>;
-
-  const maxLoss = Math.max(...groups.flatMap(g => g.measurements.map(m => {
-     const day0 = g.measurements.find(meas => meas.day === 0);
-     return getWeightLoss(m.samples, day0?.samples);
-  })), 1); 
-  
-  const yAxisMax = Math.ceil(maxLoss * 1.2); 
-  const slotWidth = (width - 2 * padding) / days.length;
-  const barGroupWidth = slotWidth * 0.6;
-  const barWidth = barGroupWidth / groups.length;
-  const getX = (dayIndex) => padding + (dayIndex * slotWidth);
-  const getY = (val) => height - padding - (val / yAxisMax) * (height - 2 * padding);
-
-  return (
-    <div className="w-full border rounded bg-white p-4 font-sans">
-      <h4 className="text-center font-bold mb-4 uppercase text-xs tracking-wider" style={{ color: BRAND.colors.black, fontFamily: BRAND.fonts.heading }}>Weight Loss Comparison (%)</h4>
-      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
-        {[0, yAxisMax/2, yAxisMax].map(val => (
-           <g key={val}>
-             <line x1={padding} y1={getY(val)} x2={width-padding} y2={getY(val)} stroke="#E9E9E9" strokeDasharray="4"/>
-             <text x={padding - 5} y={getY(val) + 4} textAnchor="end" fontSize="10" fill="#999">{val.toFixed(1)}%</text>
-           </g>
-        ))}
-        {days.map((day, dayIdx) => (
-          <g key={day}>
-            <text x={getX(dayIdx) + (slotWidth / 2)} y={height - 15} textAnchor="middle" fontSize="10" fill="#666" fontWeight="bold">{formatDay(day)}</text>
-            {groups.map((g, grpIdx) => {
-               const meas = g.measurements.find(m => m.day === day);
-               const day0 = g.measurements.find(m => m.day === 0);
-               const loss = getWeightLoss(meas?.samples, day0?.samples);
-               
-               const groupStartX = getX(dayIdx) + (slotWidth - barGroupWidth) / 2;
-               return (
-                 <rect 
-                    key={grpIdx}
-                    x={groupStartX + (grpIdx * barWidth)}
-                    y={getY(loss)}
-                    width={barWidth - 2}
-                    height={height - padding - getY(loss)}
-                    fill={CHART_COLORS[grpIdx % CHART_COLORS.length].stroke}
-                    rx="2"
-                 />
-               );
-            })}
-          </g>
-        ))}
-      </svg>
-      <div className="flex flex-wrap justify-center gap-4 mt-4">
-        {groups.map((g, idx) => (
-          <div key={g.id} className="flex items-center gap-2 text-xs font-bold" style={{fontFamily: BRAND.fonts.heading, color: BRAND.colors.black}}>
-            <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: CHART_COLORS[idx % CHART_COLORS.length].stroke }}></div>
-            {g.name}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-const SampleModal = ({ isOpen, onClose, data, onSave, day0Samples, projectCriteria, isEvaluationDay }) => {
-  if (!isOpen) return null;
-  const [samples, setSamples] = useState(data.samples || []);
-  const [day, setDay] = useState(data.day);
-  const [notes, setNotes] = useState(data.notes);
-  const [qualityParams, setQualityParams] = useState(data.qualityParams || []);
-
-  useEffect(() => {
-    if (isEvaluationDay && projectCriteria.length > 0) {
-      const currentParams = data.qualityParams || [];
-      const newParams = projectCriteria.map(c => {
-        const existing = currentParams.find(p => p.name === c);
-        return existing || { name: c, score: '', notes: '' };
-      });
-      setQualityParams(newParams);
-    }
-  }, [isOpen, isEvaluationDay, projectCriteria, data.qualityParams]);
-
-  const addSample = () => setSamples([...samples, { id: Date.now(), o2: '', co2: '', weight: '' }]);
-  const updateSample = (index, field, value) => {
-    const newSamples = [...samples]; newSamples[index][field] = value; setSamples(newSamples);
-  };
-  const removeSample = (index) => setSamples(samples.filter((_, i) => i !== index));
-  
-  const updateParam = (index, field, value) => {
-    const newParams = [...qualityParams];
-    newParams[index][field] = value;
-    setQualityParams(newParams);
-  };
-
-  const handleSave = () => { onSave({ ...data, day, notes, samples, qualityParams }); onClose(); };
-  
-  const avgWeight = getAverage(samples, 'weight');
-  const weightLoss = getWeightLoss(samples, day0Samples); 
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 font-sans backdrop-blur-sm print:hidden">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl overflow-hidden border border-gray-100 flex flex-col max-h-[90vh]">
-        <div className="p-4 flex justify-between items-center text-white" style={{ background: `linear-gradient(90deg, ${BRAND.colors.black} 0%, #423B3B 50%, ${BRAND.colors.black} 100%)` }}>
-          <h3 className="font-bold flex items-center gap-2" style={{ fontFamily: BRAND.fonts.heading }}><Edit3 size={18}/> Data Input ({formatDay(day)})</h3>
-          <button onClick={onClose}><X size={20}/></button>
-        </div>
-        
-        <div className="p-6 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-8">
-          {/* Left Column: Samples */}
-          <div>
-            <h4 className="font-bold text-sm text-slate-700 border-b pb-2 mb-4">Atmosphere & Weight</h4>
-            <div className="flex justify-between items-center mb-4 bg-[#E9E9E9] p-3 rounded-lg text-xs">
-              <div className="flex items-center gap-2"><label className="font-bold">Day:</label><input type="number" value={day} onChange={e => setDay(e.target.value)} className="w-12 p-1 border rounded text-center font-bold" /></div>
-              <div className="text-right">
-                 {day > 0 && <div style={{ color: weightLoss > 3 ? '#dc2626' : BRAND.colors.green, fontWeight: 'bold' }}>Avg Loss: {weightLoss}%</div>}
-                 <div>Avg Weight: <strong>{avgWeight}g</strong></div>
-              </div>
-            </div>
-            <table className="w-full text-sm mb-4">
-              <thead><tr className="text-left text-[#211A1A] border-b border-gray-200"><th className="pb-2 font-bold">#</th><th className="pb-2" style={{color: BRAND.colors.blue}}>O₂</th><th className="pb-2" style={{color: BRAND.colors.green}}>CO₂</th><th className="pb-2">Weight {day===0 && '(Start)'}</th><th className="pb-2"></th></tr></thead>
-              <tbody>
-                {samples.map((s, i) => (
-                  <tr key={i} className="border-b border-gray-100 last:border-0">
-                    <td className="py-2 font-medium text-gray-500">{i + 1}</td>
-                    <td className="py-2"><input type="number" className="w-16 p-1 border rounded" value={s.o2} onChange={e => updateSample(i, 'o2', e.target.value)} /></td>
-                    <td className="py-2"><input type="number" className="w-16 p-1 border rounded" value={s.co2} onChange={e => updateSample(i, 'co2', e.target.value)} /></td>
-                    <td className="py-2"><input type="number" className="w-16 p-1 border rounded" value={s.weight} onChange={e => updateSample(i, 'weight', e.target.value)} placeholder="g" /></td>
-                    <td className="py-2 text-right"><button onClick={() => removeSample(i)} className="text-red-400 hover:text-red-600"><Trash2 size={14}/></button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <button onClick={addSample} className="text-xs flex items-center gap-1 font-bold hover:underline mb-4" style={{ color: BRAND.colors.green }}><Plus size={14}/> Add Sample</button>
-            <textarea className="w-full p-2 border rounded text-sm h-20" value={notes} onChange={e => setNotes(e.target.value)} placeholder="General observations..." />
-          </div>
-
-          {/* Right Column: Quality Criteria */}
-          <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 flex flex-col h-full">
-             <h4 className="font-bold text-sm text-slate-700 border-b pb-2 mb-4 flex justify-between items-center">
-               Quality Evaluation 
-               {isEvaluationDay ? <span className="bg-green-100 text-green-700 text-[10px] px-2 py-0.5 rounded">Active</span> : <span className="bg-gray-200 text-gray-500 text-[10px] px-2 py-0.5 rounded">Read-only</span>}
-             </h4>
-             
-             {isEvaluationDay ? (
-               <div className="flex-1 flex flex-col">
-                 <div className="flex-1 overflow-y-auto pr-1">
-                   <table className="w-full text-sm">
-                     <thead className="text-left text-slate-500"><tr><th className="pb-2">Criterion</th><th className="pb-2 w-16">Score</th></tr></thead>
-                     <tbody>
-                       {qualityParams.length === 0 && <tr><td colSpan="2" className="text-center italic text-gray-400 py-4">No criteria selected in Groups tab.</td></tr>}
-                       {qualityParams.map((param, i) => (
-                         <tr key={i} className="border-b border-slate-200 last:border-0">
-                           <td className="py-2 text-slate-700 font-medium">{param.name}</td>
-                           <td className="py-2"><input type="number" min="1" max="10" className="w-full p-1 border rounded text-center font-bold" value={param.score} onChange={e => updateParam(i, 'score', e.target.value)} placeholder="-" /></td>
-                         </tr>
-                       ))}
-                     </tbody>
-                   </table>
-                 </div>
-                 
-                 {/* Legend */}
-                 <div className="mt-4 pt-4 border-t border-slate-200 shrink-0">
-                   <p className="text-[10px] font-bold text-slate-500 mb-1 uppercase">Score Scale (1-10)</p>
-                   <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[9px] text-slate-500">
-                     <div><strong className="text-green-700">10:</strong> Excellent</div>
-                     <div><strong className="text-green-600">8:</strong> Good</div>
-                     <div><strong className="text-yellow-600">6:</strong> Satisfactory</div>
-                     <div><strong className="text-red-600">4:</strong> Unacceptable</div>
-                     <div><strong className="text-red-800">1:</strong> Very Bad</div>
-                   </div>
-                 </div>
-               </div>
-             ) : (
-               <div className="flex flex-col items-center justify-center flex-1 text-center text-gray-400">
-                 <AlertTriangle size={32} className="mb-2 opacity-50"/>
-                 <p className="text-sm">Quality scoring is only enabled<br/>for Start (P+0) and End (P+X) days.</p>
-               </div>
-             )}
-          </div>
-        </div>
-
-        <div className="bg-gray-50 p-4 border-t flex justify-end gap-3"><button onClick={onClose} className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded font-medium">Cancel</button><button onClick={handleSave} className="px-6 py-2 text-white font-bold rounded hover:opacity-90 shadow-lg" style={{ backgroundColor: BRAND.colors.green }}>Save</button></div>
-      </div>
-    </div>
-  );
-};
-
-const DetailsModal = ({ isOpen, onClose, data, onSave }) => {
-  if (!isOpen) return null;
-  // Zet simpele string images om naar objecten voor backwards compatibiliteit
-  const initialImages = (data.images || []).map(img => typeof img === 'string' ? {url: img, caption: ''} : img);
-  const [images, setImages] = useState(initialImages);
-
-  const handleImageUpload = (e) => {
-    const files = Array.from(e.target.files);
-    files.forEach(file => {
-      const reader = new FileReader();
-      reader.onloadend = () => setImages(prev => [...prev, { url: reader.result, caption: '' }]);
-      reader.readAsDataURL(file);
-    });
-  };
-
-  const removeImage = (idx) => setImages(images.filter((_, i) => i !== idx));
-  
-  const updateImageCaption = (idx, value) => {
-    const newImgs = [...images];
-    newImgs[idx].caption = value;
-    setImages(newImgs);
-  };
-
-  const handleSave = () => { onSave({ ...data, images }); onClose(); };
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 font-sans backdrop-blur-sm print:hidden">
-      <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl overflow-hidden border border-gray-100 flex flex-col max-h-[90vh]">
-        <div className="p-4 flex justify-between items-center text-white" style={{ background: `linear-gradient(90deg, ${BRAND.colors.black} 0%, #423B3B 50%, ${BRAND.colors.black} 100%)` }}>
-          <h3 className="font-bold flex items-center gap-2" style={{ fontFamily: BRAND.fonts.heading }}><Camera size={18}/> Manage Photos</h3>
-          <button onClick={onClose}><X size={20}/></button>
-        </div>
-        <div className="p-6 overflow-y-auto">
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-3">
-            {images.map((img, idx) => (
-              <div key={idx} className="relative group border border-gray-200 rounded-lg overflow-hidden bg-gray-50 flex flex-col">
-                <div className="aspect-square relative">
-                   <img src={img.url} className="w-full h-full object-cover" />
-                   <button onClick={() => removeImage(idx)} className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition shadow-lg"><X size={12}/></button>
-                </div>
-                <input type="text" className="w-full p-2 text-xs border-t outline-none focus:bg-blue-50" placeholder="Caption / Beschrijving..." value={img.caption} onChange={e => updateImageCaption(idx, e.target.value)} />
-              </div>
-            ))}
-            <label className="border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 aspect-square">
-               <Upload size={24} className="text-gray-400"/>
-               <span className="text-xs text-gray-500 mt-1 font-bold">Upload Photos</span>
-               <input type="file" multiple accept="image/*" className="hidden" onChange={handleImageUpload} />
-            </label>
-          </div>
-        </div>
-        <div className="bg-gray-50 p-4 border-t flex justify-end gap-3"><button onClick={onClose} className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded font-medium">Done</button><button onClick={handleSave} className="px-6 py-2 text-white font-bold rounded hover:opacity-90 shadow-lg" style={{ backgroundColor: BRAND.colors.green }}>Save</button></div>
-      </div>
-    </div>
-  );
-};
-
-// --- HOOFD APPLICATIE ---
-const App = () => {
-  const [activeTab, setActiveTab] = useState('setup');
-  const [activeGroupId, setActiveGroupId] = useState(1);
-  const [isPreview, setIsPreview] = useState(false);
-  const fileInputRef = useRef(null);
-  
-  // Modals
-  const [sampleModalOpen, setSampleModalOpen] = useState(false);
-  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
-  const [editingMeasurement, setEditingMeasurement] = useState(null);
-
-  // Data State
-  const [project, setProject] = useState({
-    reportTitle: 'Kwaliteitsrapportage MAP Test', 
-    productName: '',
-    type: '', origin: '', company: '', contactName: '', contactEmail: '', employee: '', trialTarget: '',
-    rrO2: '', rrCO2: '', rrTemp: '', totalDuration: '', 
-    criteria: [], 
-    date: new Date().toISOString().split('T')[0],
-    logo: 'https://cdn.prod.website-files.com/68b594c756c22085ddc6c1ea/68b59ba2f027bfeecd25261b_PerfoTec%20logo.png',
-    startImage: null, coverImage: null
-  });
-
-  const [supplyChain, setSupplyChain] = useState([
-    { stage: 'Farm', tempStart: '15', tempEnd: '', daysStart: '0', daysEnd: '', action: 'none' },
-    { stage: 'Packing House (Bulk/Retail)', tempStart: '12', tempEnd: '', daysStart: '1', daysEnd: '', action: 'pack' },
-    { stage: 'Transport by road', tempStart: '6', tempEnd: '', daysStart: '2', daysEnd: '', action: 'none' },
-    { stage: 'Importer / Processor (Repack)', tempStart: '8', tempEnd: '', daysStart: '1', daysEnd: '', action: 'none' },
-    { stage: 'Retail Store', tempStart: '18', tempEnd: '', daysStart: '4', daysEnd: '', action: 'none' },
-    { stage: 'Consumer (Open Pack)', tempStart: '20', tempEnd: '', daysStart: '2', daysEnd: '', action: 'unpack' }
-  ]);
-
-  const [groups, setGroups] = useState([
-    {
-      id: 1, name: 'Control',
-      specs: { packaging: 'Retail', material: 'BOPP', length: '', width: '', height: '', holes: '2', holeSize: '6000', otr: '', cotr: '', startGas: { o2: '20.9', co2: '0.03' } },
-      measurements: [{ day: 0, samples: [{id:1,o2:'20.9',co2:'0.03',weight:''}, {id:2,o2:'20.9',co2:'0.03',weight:''}, {id:3,o2:'20.9',co2:'0.03',weight:''}], quality: 10, notes: 'Start', images: [], qualityParams: [] }],
-      predictedImage: null 
-    }
-  ]);
-
-  const [analysis, setAnalysis] = useState({ graphNotes: '', conclusion: '', recommendation: 'retest', nextSteps: [] });
-  const [newStep, setNewStep] = useState('');
-  const [newCriteria, setNewCriteria] = useState('');
-
-  // Handlers
-  const handleLogoUpload = (e) => { const file = e.target.files[0]; if(file) { const reader = new FileReader(); reader.onloadend = () => setProject(p => ({...p, logo: reader.result})); reader.readAsDataURL(file); }};
-  const handleStartImageUpload = (e) => { const file = e.target.files[0]; if(file) { const reader = new FileReader(); reader.onloadend = () => setProject(p => ({...p, startImage: reader.result})); reader.readAsDataURL(file); }};
-  const handleCoverImageUpload = (e) => { const file = e.target.files[0]; if(file) { const reader = new FileReader(); reader.onloadend = () => setProject(p => ({...p, coverImage: reader.result})); reader.readAsDataURL(file); }};
-  const handlePredictedImageUpload = (e, groupId) => { const file = e.target.files[0]; if(file) { const reader = new FileReader(); reader.onloadend = () => setGroups(prev => prev.map(g => g.id === groupId ? { ...g, predictedImage: reader.result } : g)); reader.readAsDataURL(file); }};
-
-  const handleDurationChange = (e) => {
-    const val = e.target.value;
-    setProject(p => ({...p, totalDuration: val}));
-    if (val && parseInt(val) > 0) {
-       const endDay = parseInt(val);
-       setGroups(prev => prev.map(g => {
-         if (!g.measurements.find(m => m.day === endDay)) {
-            const endMeas = { day: endDay, samples: [{id:1,o2:'',co2:'',weight:''},{id:2,o2:'',co2:'',weight:''},{id:3,o2:'',co2:'',weight:''}], quality: 9, notes: 'End', images: [], qualityParams: [] };
-            return { ...g, measurements: [...g.measurements, endMeas].sort((a,b) => a.day - b.day) };
-         }
-         return g;
-       }));
-    }
-  };
-
-  const exportData = () => {
-    const data = { project, supplyChain, groups, analysis };
-    const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a'); a.href = url; a.download = `perfotec-report.json`; a.click();
-  };
-  const importData = (e) => { const file = e.target.files[0]; if(!file) return; const reader = new FileReader(); reader.onload = (ev) => { try { const d = JSON.parse(ev.target.result); if(d.project) setProject(d.project); if(d.supplyChain) setSupplyChain(d.supplyChain); if(d.groups) setGroups(d.groups); if(d.analysis) setAnalysis(d.analysis); } catch(err){alert("Error loading file");} }; reader.readAsText(file); };
-
-  const handleGroupChange = (id, section, field, value) => {
-    setGroups(prev => prev.map(g => {
-      if (g.id !== id) return g;
-      if (section === 'name') return { ...g, name: value };
-      if (section === 'specs') return { ...g, specs: { ...g.specs, [field]: value } };
-      if (section === 'startGas') return { ...g, specs: { ...g.specs, startGas: { ...g.specs.startGas, [field]: value } } };
-      return g;
-    }));
-  };
-
-  const toggleCriteria = (crit) => {
-    setProject(prev => {
-      const exists = prev.criteria.includes(crit);
-      return { ...prev, criteria: exists ? prev.criteria.filter(c => c !== crit) : [...prev.criteria, crit] };
-    });
-  };
-
-  const addNewCriteria = () => {
-    if(newCriteria && !project.criteria.includes(newCriteria)) {
-      toggleCriteria(newCriteria);
-      setNewCriteria('');
-    }
-  };
-
-  const addChainStep = () => setSupplyChain([...supplyChain, { stage: '', tempStart: '', tempEnd: '', daysStart: '', daysEnd: '', action: 'none' }]);
-  const updateChainStep = (i, f, v) => { const n = [...supplyChain]; n[i][f] = v; setSupplyChain(n); };
-  const removeChainStep = (i) => setSupplyChain(supplyChain.filter((_, idx) => idx !== i));
-  const moveChainStep = (i, dir) => { const n = [...supplyChain]; if(dir==='up' && i>0){ [n[i], n[i-1]] = [n[i-1], n[i]]; } else if(dir==='down' && i<n.length-1){ [n[i], n[i+1]] = [n[i+1], n[i]]; } setSupplyChain(n); };
-
-  const openSampleModal = (groupId, index) => { 
-    const g = groups.find(x => x.id === groupId); 
-    const meas = g.measurements[index];
-    const isEvaluationDay = meas.day === 0 || (project.totalDuration && meas.day === parseInt(project.totalDuration));
-    const day0 = g.measurements.find(m => m.day === 0);
-    setEditingMeasurement({ groupId, index, data: meas, day0Samples: day0?.samples, isEvaluationDay }); 
-    setSampleModalOpen(true); 
-  };
-  
-  const openDetailsModal = (groupId, index) => { 
-    const g = groups.find(x => x.id === groupId); 
-    setEditingMeasurement({ groupId, index, data: g.measurements[index] }); 
-    setDetailsModalOpen(true); 
-  };
-
-  const saveSampleData = (u) => { setGroups(p => p.map(g => g.id !== editingMeasurement.groupId ? g : { ...g, measurements: g.measurements.map((m, i) => i === editingMeasurement.index ? { ...u, qualityParams: u.qualityParams } : m) })); };
-  const saveDetailsData = (u) => { setGroups(p => p.map(g => g.id !== editingMeasurement.groupId ? g : { ...g, measurements: g.measurements.map((m, i) => i === editingMeasurement.index ? { ...m, images: u.images } : m) })); };
-
-  const addMeasurementDay = (groupId) => {
-    setGroups(prev => prev.map(g => {
-      if (g.id !== groupId) return g;
-      const lastDay = parseFloat(g.measurements[g.measurements.length - 1]?.day || 0);
-      return { ...g, measurements: [...g.measurements, { day: lastDay + 1, samples: [{id:1,o2:'',co2:'',weight:''},{id:2,o2:'',co2:'',weight:''},{id:3,o2:'',co2:'',weight:''}], quality: 9, notes: '', images: [], qualityParams: [] }]};
-    }));
-  };
-  
-  const removeMeasurementDay = (groupId, index) => {
-    setGroups(prev => prev.map(g => {
-      if (g.id !== groupId) return g;
-      const newMeas = [...g.measurements];
-      newMeas.splice(index, 1);
-      return { ...g, measurements: newMeas };
-    }));
-  };
-
-  const updateQuality = (groupId, index, val) => { setGroups(p => p.map(g => g.id !== groupId ? g : { ...g, measurements: g.measurements.map((m, i) => i === index ? { ...m, quality: val } : m) })); };
-
-  const addNewVariant = () => {
-    const newId = Math.max(...groups.map(g => g.id)) + 1;
-    const duration = parseInt(project.totalDuration) || 0;
-    const day0 = { day: 0, samples: [{id:1,o2:'20.9',co2:'0.03',weight:''},{id:2,o2:'20.9',co2:'0.03',weight:''},{id:3,o2:'20.9',co2:'0.03',weight:''}], quality: 10, notes: 'Start', images: [], qualityParams: [] };
-    const meas = [day0];
-    if (duration > 0) {
-       meas.push({ day: duration, samples: [{id:1,o2:'',co2:'',weight:''},{id:2,o2:'',co2:'',weight:''},{id:3,o2:'',co2:'',weight:''}], quality: 9, notes: 'End', images: [], qualityParams: [] });
-    }
-    setGroups([...groups, { id: newId, name: `Variant ${groups.length + 1}`, specs: { ...groups[0].specs }, measurements: meas, predictedImage: null }]);
-    setActiveGroupId(newId);
-  };
-
-  const duplicateGroup = (id) => { const org = groups.find(g => g.id === id); const newId = Math.max(...groups.map(g => g.id)) + 1; setGroups(p => [...p, { ...org, id: newId, name: `${org.name} (Copy)` }]); setActiveGroupId(newId); };
-  const removeGroup = (id) => { if(groups.length > 1) { setGroups(p => p.filter(g => g.id !== id)); setActiveGroupId(groups[0].id); }};
-
-  const addNextStep = () => { if (newStep.trim()) { setAnalysis(prev => ({ ...prev, nextSteps: [...prev.nextSteps, newStep] })); setNewStep(''); }};
-  const removeNextStep = (i) => setAnalysis(prev => ({ ...prev, nextSteps: prev.nextSteps.filter((_, idx) => idx !== i) }));
-
-  const handlePrint = () => {
-    window.print();
-  };
-
-  if (isPreview) {
-    return (
-      <div className="min-h-screen bg-gray-500 p-8 overflow-y-auto font-sans">
-        <style>{`
-            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=League+Spartan:wght@700&display=swap');
-            .brand-heading { font-family: 'League Spartan', sans-serif; }
-            .brand-body { font-family: 'Inter', sans-serif; }
-            .report-section-title { color: ${BRAND.colors.green}; font-family: 'League Spartan', sans-serif; font-size: 1.5rem; font-weight: bold; border-bottom: 2px solid ${BRAND.colors.gray}; padding-bottom: 0.5rem; margin-bottom: 1rem; margin-top: 2rem; }
-            .report-table th { background-color: ${BRAND.colors.green}; color: white; padding: 8px; text-align: left; font-family: 'League Spartan', sans-serif; }
-            .report-table td { border-bottom: 1px solid ${BRAND.colors.gray}; padding: 8px; font-family: 'Inter', sans-serif; font-size: 0.9rem; }
+        const getWeightLoss = (samples, day0Samples) => {
+            if (!samples || samples.length === 0 || !day0Samples || day0Samples.length === 0) return 0;
             
-            /* ROBUST PRINT STYLES */
-            @media print {
-              body { background: white; margin: 0; padding: 0; }
-              body * { visibility: hidden; }
-              #print-content, #print-content * { visibility: visible !important; }
-              #print-content { 
-                position: absolute; 
-                left: 0; 
-                top: 0; 
-                width: 100%; 
-                margin: 0; 
-                padding: 0; 
-                background: white; 
-                box-shadow: none;
-              }
-              .no-print { display: none !important; }
-              .page-break { page-break-before: always; }
-              svg { break-inside: avoid; }
+            let totalLoss = 0;
+            let count = 0;
+
+            samples.forEach((s, idx) => {
+                const startW = day0Samples[idx] ? parseFloat(day0Samples[idx].weight) : 0;
+                const currentW = parseFloat(s.weight);
+                
+                if (startW > 0 && !isNaN(currentW)) {
+                    totalLoss += ((startW - currentW) / startW) * 100;
+                    count++;
+                }
+            });
+
+            return count > 0 ? (totalLoss / count).toFixed(1) : 0;
+        };
+
+        const getStageIcon = (name) => {
+          const n = name.toLowerCase();
+          if (n.includes('farm') || n.includes('harvest') || n.includes('oogst')) return <Tractor size={14} color={BRAND.colors.black} />;
+          if (n.includes('sea')) return <Ship size={14} color={BRAND.colors.black} />;
+          if (n.includes('air')) return <Plane size={14} color={BRAND.colors.black} />;
+          if (n.includes('storage') || n.includes('dc')) return <Warehouse size={14} color={BRAND.colors.black} />;
+          if (n.includes('store') || n.includes('retail') || n.includes('shop')) return <Store size={14} color={BRAND.colors.black} />;
+          if (n.includes('consumer') || n.includes('eat')) return <Utensils size={14} color={BRAND.colors.black} />;
+          if (n.includes('pack') && !n.includes('transport')) return <Factory size={14} color={BRAND.colors.black} />;
+          return <Truck size={14} color={BRAND.colors.black} />;
+        };
+
+        const formatRange = (start, end, unit) => {
+          if (start && end && start !== end) return `${start}-${end}${unit}`;
+          if (start) return `${start}${unit}`;
+          return `-`;
+        };
+
+        const formatDay = (day) => `P+${day}`;
+
+        // --- COMPONENTEN ---
+        const SupplyChainFlow = ({ chain }) => {
+          if (!chain || chain.length === 0) return null;
+          return (
+            <div className="flex w-full gap-1 items-start justify-between mt-4 mb-2 font-sans overflow-hidden">
+              {chain.map((step, idx) => (
+                <React.Fragment key={idx}>
+                  {idx > 0 && <div className="h-20 flex items-center justify-center"><ChevronRight size={16} className="text-gray-300 flex-shrink-0" /></div>}
+                  <div className="flex flex-col items-center flex-1 min-w-0">
+                    <div className="w-full flex flex-col items-center bg-white border border-gray-200 rounded-lg shadow-sm p-1.5 relative min-h-[5rem]">
+                       <div className="absolute top-0 left-0 w-full h-1" style={{backgroundColor: idx % 2 === 0 ? BRAND.colors.green : BRAND.colors.blue}}></div>
+                       <div className="bg-gray-50 p-1.5 rounded-full mb-1 flex-shrink-0 mt-1">{getStageIcon(step.stage)}</div>
+                       <div className="text-[8px] font-bold text-center uppercase mb-1 flex-grow flex items-center justify-center leading-tight w-full break-words px-1">{step.stage}</div>
+                       <div className="w-full border-t border-dotted border-gray-200 my-0.5"></div>
+                       <div className="flex flex-col justify-center w-full text-[8px] gap-0.5">
+                          <span className="flex items-center justify-center gap-0.5 font-bold text-gray-700 whitespace-nowrap"><Thermometer size={8} className="text-red-500"/>{formatRange(step.tempStart, step.tempEnd, '°C')}</span>
+                          <span className="flex items-center justify-center gap-0.5 text-gray-500 whitespace-nowrap"><Clock size={8}/>{formatRange(step.daysStart, step.daysEnd, 'd')}</span>
+                       </div>
+                    </div>
+                    <div className="h-8 w-full flex justify-center items-start mt-1 relative">
+                        {step.action === 'pack' && <div className="flex flex-col items-center"><div className="bg-green-100 text-green-700 rounded-full p-0.5 border border-green-200"><ArrowDown size={12} /></div><span className="text-[7px] font-bold text-green-700 uppercase mt-0.5">Packed</span></div>}
+                        {step.action === 'unpack' && <div className="flex flex-col items-center"><div className="bg-red-100 text-red-700 rounded-full p-0.5 border border-red-200"><ArrowUp size={12} /></div><span className="text-[7px] font-bold text-red-700 uppercase mt-0.5">Opened</span></div>}
+                    </div>
+                  </div>
+                </React.Fragment>
+              ))}
+            </div>
+          );
+        };
+
+        const VariantGasChart = ({ group }) => {
+          if (!group || !group.measurements) return null;
+          const width = 350;
+          const height = 200;
+          const padding = 30;
+          const data = group.measurements.sort((a,b) => a.day - b.day);
+          const maxDay = Math.max(...data.map(d => parseFloat(d.day) || 0), 5);
+          const maxY = 25; 
+          const getX = (day) => padding + (parseFloat(day) / maxDay) * (width - 2 * padding);
+          const getY = (val) => height - padding - (parseFloat(val) / maxY) * (height - 2 * padding);
+          const pointsO2 = data.map(d => `${getX(d.day)},${getY(getAverage(d.samples, 'o2'))}`).join(' ');
+          const pointsCO2 = data.map(d => `${getX(d.day)},${getY(getAverage(d.samples, 'co2'))}`).join(' ');
+
+          return (
+            <div className="border rounded bg-white p-3 font-sans w-full h-full flex flex-col justify-between">
+              <h5 className="text-center font-bold text-sm mb-2 text-slate-800 border-b pb-1">Actual Results: {group.name}</h5>
+              <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
+                {[0, 5, 10, 15, 20, 25].map(val => (
+                  <g key={val}>
+                    <line x1={padding} y1={getY(val)} x2={width-padding} y2={getY(val)} stroke="#f0f0f0" />
+                    <text x={padding - 5} y={getY(val) + 3} textAnchor="end" fontSize="9" fill="#ccc">{val}%</text>
+                  </g>
+                ))}
+                {data.map(d => <text key={d.day} x={getX(d.day)} y={height - 10} textAnchor="middle" fontSize="9" fill="#999">{formatDay(d.day)}</text>)}
+                <polyline points={pointsO2} fill="none" stroke={BRAND.colors.blue} strokeWidth="2" />
+                <polyline points={pointsCO2} fill="none" stroke={BRAND.colors.green} strokeWidth="2" />
+                {data.map((d, i) => (
+                  <g key={i}>
+                    <circle cx={getX(d.day)} cy={getY(getAverage(d.samples, 'o2'))} r="3" fill={BRAND.colors.blue} />
+                    <circle cx={getX(d.day)} cy={getY(getAverage(d.samples, 'co2'))} r="3" fill={BRAND.colors.green} />
+                  </g>
+                ))}
+              </svg>
+              <div className="flex justify-center gap-4 mt-2 text-xs">
+                <span className="flex items-center gap-1 font-bold" style={{color: BRAND.colors.blue}}>● O₂</span>
+                <span className="flex items-center gap-1 font-bold" style={{color: BRAND.colors.green}}>● CO₂</span>
+              </div>
+            </div>
+          );
+        };
+
+        const WeightLossChart = ({ groups }) => {
+          if (!groups || groups.length === 0) return null;
+          const width = 600;
+          const height = 250;
+          const padding = 40;
+          const allDays = Array.from(new Set(groups.flatMap(g => g.measurements.map(m => m.day)))).sort((a,b) => a-b);
+          const days = allDays.filter(d => d > 0);
+          if (days.length === 0) return <div className="text-center text-gray-400 italic p-4">No weight loss data available yet.</div>;
+
+          const maxLoss = Math.max(...groups.flatMap(g => g.measurements.map(m => {
+             const day0 = g.measurements.find(meas => meas.day === 0);
+             return getWeightLoss(m.samples, day0?.samples);
+          })), 1); 
+          
+          const yAxisMax = Math.ceil(maxLoss * 1.2); 
+          const slotWidth = (width - 2 * padding) / days.length;
+          const barGroupWidth = slotWidth * 0.6;
+          const barWidth = barGroupWidth / groups.length;
+          const getX = (dayIndex) => padding + (dayIndex * slotWidth);
+          const getY = (val) => height - padding - (val / yAxisMax) * (height - 2 * padding);
+
+          return (
+            <div className="w-full border rounded bg-white p-4 font-sans">
+              <h4 className="text-center font-bold mb-4 uppercase text-xs tracking-wider" style={{ color: BRAND.colors.black, fontFamily: BRAND.fonts.heading }}>Weight Loss Comparison (%)</h4>
+              <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
+                {[0, yAxisMax/2, yAxisMax].map(val => (
+                   <g key={val}>
+                     <line x1={padding} y1={getY(val)} x2={width-padding} y2={getY(val)} stroke="#E9E9E9" strokeDasharray="4"/>
+                     <text x={padding - 5} y={getY(val) + 4} textAnchor="end" fontSize="10" fill="#999">{val.toFixed(1)}%</text>
+                   </g>
+                ))}
+                {days.map((day, dayIdx) => (
+                  <g key={day}>
+                    <text x={getX(dayIdx) + (slotWidth / 2)} y={height - 15} textAnchor="middle" fontSize="10" fill="#666" fontWeight="bold">{formatDay(day)}</text>
+                    {groups.map((g, grpIdx) => {
+                       const meas = g.measurements.find(m => m.day === day);
+                       const day0 = g.measurements.find(m => m.day === 0);
+                       const loss = getWeightLoss(meas?.samples, day0?.samples);
+                       
+                       const groupStartX = getX(dayIdx) + (slotWidth - barGroupWidth) / 2;
+                       return (
+                         <rect 
+                            key={grpIdx}
+                            x={groupStartX + (grpIdx * barWidth)}
+                            y={getY(loss)}
+                            width={barWidth - 2}
+                            height={height - padding - getY(loss)}
+                            fill={CHART_COLORS[grpIdx % CHART_COLORS.length].stroke}
+                            rx="2"
+                         />
+                       );
+                    })}
+                  </g>
+                ))}
+              </svg>
+              <div className="flex flex-wrap justify-center gap-4 mt-4">
+                {groups.map((g, idx) => (
+                  <div key={g.id} className="flex items-center gap-2 text-xs font-bold" style={{fontFamily: BRAND.fonts.heading, color: BRAND.colors.black}}>
+                    <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: CHART_COLORS[idx % CHART_COLORS.length].stroke }}></div>
+                    {g.name}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        };
+
+        const SampleModal = ({ isOpen, onClose, data, onSave, day0Samples, projectCriteria, isEvaluationDay }) => {
+          if (!isOpen) return null;
+          const [samples, setSamples] = useState(data.samples || []);
+          const [day, setDay] = useState(data.day);
+          const [notes, setNotes] = useState(data.notes);
+          const [qualityParams, setQualityParams] = useState(data.qualityParams || []);
+
+          useEffect(() => {
+            if (isEvaluationDay && projectCriteria.length > 0) {
+              const currentParams = data.qualityParams || [];
+              const newParams = projectCriteria.map(c => {
+                const existing = currentParams.find(p => p.name === c);
+                return existing || { name: c, score: '', notes: '' };
+              });
+              setQualityParams(newParams);
             }
-        `}</style>
+          }, [isOpen, isEvaluationDay, projectCriteria, data.qualityParams]);
 
-        <div id="print-content" className="max-w-[21cm] mx-auto bg-white shadow-2xl min-h-[29.7cm] p-12 relative">
-          {/* COVER */}
-          <div className="h-[27cm] flex flex-col justify-between">
-             <div>
-                <div className="flex flex-col mb-16">
-                  <img src={project.logo} alt="PerfoTec" className="h-20 object-contain self-start mb-2" />
-                  <div className="text-sm font-bold tracking-[0.25em] uppercase" style={{ color: BRAND.colors.blue, fontFamily: BRAND.fonts.heading, marginLeft: '4px' }}>Best for Freshness</div>
+          const addSample = () => setSamples([...samples, { id: Date.now(), o2: '', co2: '', weight: '' }]);
+          const updateSample = (index, field, value) => {
+            const newSamples = [...samples]; newSamples[index][field] = value; setSamples(newSamples);
+          };
+          const removeSample = (index) => setSamples(samples.filter((_, i) => i !== index));
+          
+          const updateParam = (index, field, value) => {
+            const newParams = [...qualityParams];
+            newParams[index][field] = value;
+            setQualityParams(newParams);
+          };
+
+          const handleSave = () => { onSave({ ...data, day, notes, samples, qualityParams }); onClose(); };
+          
+          const avgWeight = getAverage(samples, 'weight');
+          const weightLoss = getWeightLoss(samples, day0Samples); 
+
+          return (
+            <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 font-sans backdrop-blur-sm print:hidden">
+              <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl overflow-hidden border border-gray-100 flex flex-col max-h-[90vh]">
+                <div className="p-4 flex justify-between items-center text-white" style={{ background: `linear-gradient(90deg, ${BRAND.colors.black} 0%, #423B3B 50%, ${BRAND.colors.black} 100%)` }}>
+                  <h3 className="font-bold flex items-center gap-2" style={{ fontFamily: BRAND.fonts.heading }}><Edit3 size={18}/> Data Input ({formatDay(day)})</h3>
+                  <button onClick={onClose}><X size={20}/></button>
                 </div>
-                <h1 className="text-5xl font-bold uppercase mb-4 brand-heading" style={{ color: BRAND.colors.green }}>{project.reportTitle}</h1>
-                <h2 className="text-4xl font-light brand-heading text-slate-600 mb-12">{project.productName || '<Product Name>'}</h2>
-                <div className="w-full h-[450px] bg-slate-50 border rounded-lg overflow-hidden flex items-center justify-center relative shadow-sm">
-                   {project.coverImage || project.startImage ? <img src={project.coverImage || project.startImage} className="w-full h-full object-contain bg-white" /> : <span className="text-slate-300 italic">No Cover Photo</span>}
-                   <div className="absolute bottom-6 left-0 right-0 text-center"><span className="bg-white/90 px-6 py-2 rounded-full text-lg font-bold shadow-sm" style={{color: BRAND.colors.green, fontFamily: BRAND.fonts.heading}}>Super fresh quality</span></div>
+                
+                <div className="p-6 overflow-y-auto grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div>
+                    <h4 className="font-bold text-sm text-slate-700 border-b pb-2 mb-4">Atmosphere & Weight</h4>
+                    <div className="flex justify-between items-center mb-4 bg-[#E9E9E9] p-3 rounded-lg text-xs">
+                      <div className="flex items-center gap-2"><label className="font-bold">Day:</label><input type="number" value={day} onChange={e => setDay(e.target.value)} className="w-12 p-1 border rounded text-center font-bold" /></div>
+                      <div className="text-right">
+                         {day > 0 && <div style={{ color: weightLoss > 3 ? '#dc2626' : BRAND.colors.green, fontWeight: 'bold' }}>Avg Loss: {weightLoss}%</div>}
+                         <div>Avg Weight: <strong>{avgWeight}g</strong></div>
+                      </div>
+                    </div>
+                    <table className="w-full text-sm mb-4">
+                      <thead><tr className="text-left text-[#211A1A] border-b border-gray-200"><th className="pb-2 font-bold">#</th><th className="pb-2" style={{color: BRAND.colors.blue}}>O₂</th><th className="pb-2" style={{color: BRAND.colors.green}}>CO₂</th><th className="pb-2">Weight {day===0 && '(Start)'}</th><th className="pb-2"></th></tr></thead>
+                      <tbody>
+                        {samples.map((s, i) => (
+                          <tr key={i} className="border-b border-gray-100 last:border-0">
+                            <td className="py-2 font-medium text-gray-500">{i + 1}</td>
+                            <td className="py-2"><input type="number" className="w-16 p-1 border rounded" value={s.o2} onChange={e => updateSample(i, 'o2', e.target.value)} /></td>
+                            <td className="py-2"><input type="number" className="w-16 p-1 border rounded" value={s.co2} onChange={e => updateSample(i, 'co2', e.target.value)} /></td>
+                            <td className="py-2"><input type="number" className="w-16 p-1 border rounded" value={s.weight} onChange={e => updateSample(i, 'weight', e.target.value)} placeholder="g" /></td>
+                            <td className="py-2 text-right"><button onClick={() => removeSample(i)} className="text-red-400 hover:text-red-600"><Trash2 size={14}/></button></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <button onClick={addSample} className="text-xs flex items-center gap-1 font-bold hover:underline mb-4" style={{ color: BRAND.colors.green }}><Plus size={14}/> Add Sample</button>
+                    <textarea className="w-full p-2 border rounded text-sm h-20" value={notes} onChange={e => setNotes(e.target.value)} placeholder="General observations..." />
+                  </div>
+
+                  <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 flex flex-col h-full">
+                     <h4 className="font-bold text-sm text-slate-700 border-b pb-2 mb-4 flex justify-between items-center">
+                       Quality Evaluation 
+                       {isEvaluationDay ? <span className="bg-green-100 text-green-700 text-[10px] px-2 py-0.5 rounded">Active</span> : <span className="bg-gray-200 text-gray-500 text-[10px] px-2 py-0.5 rounded">Read-only</span>}
+                     </h4>
+                     
+                     {isEvaluationDay ? (
+                       <div className="flex-1 flex flex-col">
+                         <div className="flex-1 overflow-y-auto pr-1">
+                           <table className="w-full text-sm">
+                             <thead className="text-left text-slate-500"><tr><th className="pb-2">Criterion</th><th className="pb-2 w-16">Score</th></tr></thead>
+                             <tbody>
+                               {qualityParams.length === 0 && <tr><td colSpan="2" className="text-center italic text-gray-400 py-4">No criteria selected in Groups tab.</td></tr>}
+                               {qualityParams.map((param, i) => (
+                                 <tr key={i} className="border-b border-slate-200 last:border-0">
+                                   <td className="py-2 text-slate-700 font-medium">{param.name}</td>
+                                   <td className="py-2"><input type="number" min="1" max="10" className="w-full p-1 border rounded text-center font-bold" value={param.score} onChange={e => updateParam(i, 'score', e.target.value)} placeholder="-" /></td>
+                                 </tr>
+                               ))}
+                             </tbody>
+                           </table>
+                         </div>
+                         
+                         <div className="mt-4 pt-4 border-t border-slate-200 shrink-0">
+                           <p className="text-[10px] font-bold text-slate-500 mb-1 uppercase">Score Scale (1-10)</p>
+                           <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[9px] text-slate-500">
+                             <div><strong className="text-green-700">10:</strong> Excellent</div>
+                             <div><strong className="text-green-600">8:</strong> Good</div>
+                             <div><strong className="text-yellow-600">6:</strong> Satisfactory</div>
+                             <div><strong className="text-red-600">4:</strong> Unacceptable</div>
+                             <div><strong className="text-red-800">1:</strong> Very Bad</div>
+                           </div>
+                         </div>
+                       </div>
+                     ) : (
+                       <div className="flex flex-col items-center justify-center flex-1 text-center text-gray-400">
+                         <AlertTriangle size={32} className="mb-2 opacity-50"/>
+                         <p className="text-sm">Quality scoring is only enabled<br/>for Start (P+0) and End (P+X) days.</p>
+                       </div>
+                     )}
+                  </div>
                 </div>
-             </div>
-             <div className="text-center text-sm text-slate-400 brand-body">{new Date().getFullYear()} © PerfoTec B.V.</div>
-          </div>
 
-          <div className="page-break"></div>
-
-          {/* SETTING & SUMMARY */}
-          <div>
-            <h3 className="text-xl font-bold mb-6 brand-heading">Contents</h3>
-            <ul className="space-y-2 brand-body text-sm mb-12 text-slate-700">
-              <li className="flex justify-between border-b border-dotted border-slate-300 pb-1"><span>1 Setting</span> <span>3</span></li>
-              <li className="flex justify-between border-b border-dotted border-slate-300 pb-1"><span>2 Summary and Conclusions</span> <span>3</span></li>
-              <li className="flex justify-between border-b border-dotted border-slate-300 pb-1"><span>3 Trial set up</span> <span>4</span></li>
-              <li className="flex justify-between border-b border-dotted border-slate-300 pb-1"><span>4 Trial results</span> <span>5</span></li>
-              <li className="flex justify-between border-b border-dotted border-slate-300 pb-1"><span className="pl-4">4.1 Gas Levels</span> <span>5</span></li>
-              <li className="flex justify-between border-b border-dotted border-slate-300 pb-1"><span className="pl-4">4.2 Weight Loss</span> <span>6</span></li>
-              <li className="flex justify-between border-b border-dotted border-slate-300 pb-1"><span className="pl-4">4.3 Visual quality</span> <span>6</span></li>
-              <li className="flex justify-between border-b border-dotted border-slate-300 pb-1"><span className="pl-4">4.4 Detailed Quality Parameters</span> <span>6</span></li>
-              <li className="flex justify-between border-b border-dotted border-slate-300 pb-1"><span>5 Photos</span> <span>7</span></li>
-            </ul>
-
-            <h2 className="report-section-title">1 Setting</h2>
-            <div className="grid grid-cols-[180px_1fr] gap-y-3 text-sm brand-body text-slate-800">
-               <div className="font-bold">Product :</div> <div>{project.productName}</div>
-               <div className="font-bold">Type :</div> <div>{project.type || '-'}</div>
-               <div className="font-bold">Product Origin :</div> <div>{project.origin || '-'}</div>
-               <div className="font-bold">Company Name :</div> <div>{project.company || '-'}</div>
-               <div className="font-bold">Contact Person :</div> <div>{project.contactName || '-'} {project.contactEmail && `(${project.contactEmail})`}</div>
-               <div className="font-bold">PerfoTec Employee :</div> <div>{project.employee || '-'}</div>
-               <div className="font-bold">Technology :</div> <div>PerfoTec Laser Perforation</div>
-               <div className="font-bold">Trial Target :</div> <div>{project.trialTarget || 'Shelf life extension'}</div>
-               <div className="font-bold col-span-2 mt-4 border-t border-slate-300 pt-2 text-lg" style={{color: BRAND.colors.green}}>Product Supply Chain :</div> 
-               <div className="col-span-2 w-full mt-1"><SupplyChainFlow chain={supplyChain} /></div>
-            </div>
-
-            <h2 className="report-section-title">2 Summary and Conclusions</h2>
-            <div className="brand-body text-sm leading-relaxed text-justify text-slate-800">
-               <p className="font-bold mb-2">Main Conclusion:</p>
-               <div className="mb-4 whitespace-pre-wrap">{analysis.conclusion || 'No conclusion entered.'}</div>
-               {analysis.nextSteps.length > 0 && <ul className="list-disc pl-5 space-y-1">{analysis.nextSteps.map((s,i) => <li key={i}>{s}</li>)}</ul>}
-            </div>
-          </div>
-
-          <div className="page-break"></div>
-
-          {/* TRIAL SET UP */}
-          <div>
-            <h2 className="report-section-title">3 Trial set up</h2>
-            <div className="brand-body text-sm space-y-4 text-slate-800">
-               <div>
-                 <h4 className="font-bold mb-1">Trial samples:</h4>
-                 <ul className="list-disc pl-5">
-                   {groups.map((g,i) => {
-                     // We grab the first sample weight from Day 0 as indication
-                     const day0 = g.measurements.find(m => m.day === 0);
-                     const startWeight = day0?.samples[0]?.weight || '-';
-                     return (
-                       <li key={i}><span className="font-bold">{g.name}</span> – {g.specs.packaging}, {g.specs.material} ({g.specs.holes} holes, {startWeight}g)</li>
-                     )
-                   })}
-                 </ul>
-               </div>
-               <p>The Fast Respiration Meter System 2.0 was used to measure the product respiration rate (RR O₂: {project.rrO2 || '-'}, RR CO₂: {project.rrCO2 || '-'}) at {project.rrTemp || '-'}°C.</p>
-               <p>Stored at different temperatures (see supply chain) for {supplyChain.reduce((acc,s) => acc + parseFloat(s.daysStart || 0), 0)} days total.</p>
-               <p>The product was packed on <strong>{project.date}</strong>.</p>
-               <p>Unpacking moments were planned for {formatDay(groups[0].measurements[groups[0].measurements.length-1].day)}. Per packing moment, samples per treatment were unpacked.</p>
-               
-               <p>Product quality was evaluated at the start and at the unpacking moment. The following attributes are evaluated according to the score scale listed below. Scores of 7 and higher are considered to be within specification and of acceptable quality.</p>
-               <ul className="list-disc pl-5">
-                 {project.criteria.length > 0 ? project.criteria.map((c, i) => <li key={i}>{c}</li>) : <li>General Quality</li>}
-               </ul>
-
-               <div className="my-6">
-                 <h4 className="font-bold mb-3 border-b pb-1 text-slate-700">Predicted Gas Levels (PerfoTec Hub)</h4>
-                 <div className="grid grid-cols-2 gap-4">
-                   {groups.map(g => g.predictedImage && (
-                       <div key={g.id} className="border rounded p-2"><div className="text-xs font-bold mb-1 text-center">{g.name}</div><img src={g.predictedImage} className="w-full h-32 object-contain" /></div>
-                   ))}
-                 </div>
-               </div>
-
-               <div>
-                 <h4 className="font-bold mb-2">Score scale:</h4>
-                 <div className="grid grid-cols-1 gap-1 text-xs text-slate-600 bg-slate-50 p-4 rounded border">
-                    <div><strong className="text-slate-900">10:</strong> excellent – exceptionally appealing quality, exceptional good</div>
-                    <div><strong className="text-slate-900">9:</strong> very good – natural quality of the product, full strong characteristic quality attributes</div>
-                    <div><strong className="text-slate-900">8:</strong> good – natural quality, with few specimens with slightly light impairment</div>
-                    <div><strong className="text-slate-900">7:</strong> commendable – natural quality, with several specimens with light impairment</div>
-                    <div><strong className="text-slate-900">6:</strong> satisfactory – slightly reduced quality attributes</div>
-                    <div><strong className="text-slate-900">5:</strong> unacceptable – impairment of natural quality attributes</div>
-                    <div><strong className="text-slate-900">4:</strong> beyond unacceptable – clear impairment of quality attributes</div>
-                    <div><strong className="text-slate-900">3:</strong> poor – generally severe loss of quality, no longer appealing</div>
-                    <div><strong className="text-slate-900">2:</strong> bad – strong and severe quality loss, strongly unpleasant</div>
-                    <div><strong className="text-slate-900">1:</strong> very bad – complete quality decay, spoiled and repulsive</div>
-                 </div>
-               </div>
-            </div>
-          </div>
-
-          <div className="page-break"></div>
-
-          {/* RESULTS */}
-          <div>
-            <h2 className="report-section-title">4 Trial results</h2>
-            <h3 className="font-bold text-lg mb-2 brand-heading text-slate-700">4.1 Gas Levels</h3>
-            <p className="text-sm mb-4 italic brand-body text-slate-600">{analysis.graphNotes || 'Gas levels were monitored throughout the shelf life period.'}</p>
-            
-            {groups.map((g, idx) => (
-              <div key={idx} className="flex gap-4 mb-8 break-inside-avoid items-center">
-                 {g.predictedImage ? (
-                   <div className="w-1/2 border rounded p-2">
-                      <div className="text-xs font-bold mb-1 text-center text-gray-500">Prediction (Hub)</div>
-                      <img src={g.predictedImage} className="w-full h-auto object-contain" />
-                   </div>
-                 ) : (
-                   <div className="w-1/2 border rounded p-8 text-center text-gray-300 italic">No Prediction Uploaded</div>
-                 )}
-                 <div className="w-1/2">
-                    <div className="text-xs font-bold mb-1 text-center text-gray-500">Actual Results</div>
-                    <VariantGasChart group={g} />
-                 </div>
-              </div>
-            ))}
-
-            <h3 className="font-bold text-lg mb-2 mt-8 brand-heading text-slate-700">4.2 Weight Loss Comparison</h3>
-            <WeightLossChart groups={groups} />
-
-            <h3 className="font-bold text-lg mb-2 mt-8 brand-heading text-slate-700">4.3 Visual quality Overview</h3>
-            <p className="text-sm mb-4 brand-body text-slate-800">
-               On {formatDay(groups[0].measurements[groups[0].measurements.length-1].day)}, the visual quality was assessed.
-            </p>
-            <table className="report-table w-full mb-6">
-              <thead><tr><th>Variant</th><th>Final Day</th><th>Visual Score</th><th>Weight Loss</th><th>Key Observation</th></tr></thead>
-              <tbody>
-                {groups.map((g,i) => {
-                  const last = g.measurements[g.measurements.length - 1];
-                  const day0 = g.measurements.find(m => m.day === 0);
-                  const loss = getWeightLoss(last.samples, day0?.samples);
-                  return (<tr key={i}><td>{g.name}</td><td>{formatDay(last.day)}</td><td className="font-bold">{last.quality}</td><td>{loss}%</td><td>{last.notes || '-'}</td></tr>)
-                })}
-              </tbody>
-            </table>
-
-            <h3 className="font-bold text-lg mb-2 mt-8 brand-heading text-slate-700">4.4 Detailed Quality Parameters (End of Trial)</h3>
-            {project.criteria.length > 0 ? (
-              <table className="report-table w-full mb-6 text-sm">
-                <thead>
-                  <tr>
-                    <th>Criterion</th>
-                    {groups.map(g => <th key={g.id} className="text-center">{g.name}</th>)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {project.criteria.map((crit, i) => (
-                    <tr key={i}>
-                      <td className="font-semibold">{crit}</td>
-                      {groups.map(g => {
-                         const lastMeas = g.measurements[g.measurements.length - 1];
-                         const param = lastMeas.qualityParams?.find(p => p.name === crit);
-                         return (
-                           <td key={g.id} className="text-center align-top">
-                             {param && param.score ? (
-                               <div className="flex flex-col items-center">
-                                 <span className="font-bold text-lg leading-none mb-1" style={{color: BRAND.colors.green}}>{param.score}</span>
-                                 {param.notes && <span className="text-xs italic text-gray-500 leading-tight">{param.notes}</span>}
-                               </div>
-                             ) : '-'}
-                           </td>
-                         )
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ) : (
-              <p className="text-sm italic text-gray-500">No specific criteria were defined for this test.</p>
-            )}
-          </div>
-
-          <div className="page-break"></div>
-
-          {/* PHOTOS */}
-          <div>
-            <h2 className="report-section-title">5. Photos</h2>
-            <div className="grid grid-cols-2 gap-8">
-               {project.startImage && (
-                 <div className="col-span-2 mb-4">
-                    <div className="h-64 border rounded overflow-hidden flex items-center justify-center bg-slate-50"><img src={project.startImage} className="h-full object-contain"/></div>
-                    <p className="text-sm font-bold mt-2 text-center brand-heading">Picture 1. P+0 - Initial product quality</p>
-                 </div>
-               )}
-               {(() => {
-                 const allPhotos = groups.flatMap(g => 
-                    g.measurements.flatMap(m => 
-                      (m.images || []).map(img => ({
-                         groupName: g.name,
-                         day: m.day,
-                         url: typeof img === 'string' ? img : img.url,
-                         caption: typeof img === 'string' ? '' : img.caption
-                      }))
-                    )
-                 );
-                 
-                 let startIndex = project.startImage ? 2 : 1;
-                 
-                 return allPhotos.map((photo, idx) => (
-                   <div key={idx} className="break-inside-avoid">
-                      <div className="h-48 border rounded overflow-hidden flex items-center justify-center bg-slate-50 relative">
-                         <img src={photo.url} className="w-full h-full object-contain bg-white"/>
-                         <div className="absolute top-0 left-0 bg-white/90 px-2 py-1 text-xs font-bold border-b border-r" style={{fontFamily: BRAND.fonts.heading, color: BRAND.colors.green}}>{photo.groupName}</div>
-                      </div>
-                      <div className="text-sm mt-2 text-center brand-body px-2">
-                        <span className="font-bold">Picture {startIndex + idx}.</span> {photo.groupName} at {formatDay(photo.day)}.
-                        {photo.caption && <span className="block italic font-normal text-xs text-slate-500 mt-0.5">{photo.caption}</span>}
-                      </div>
-                   </div>
-                 ));
-               })()}
-            </div>
-          </div>
-
-          {/* PRINT BUTTON */}
-          <div className="fixed bottom-8 right-8 flex gap-4 no-print z-50">
-            <button onClick={() => setIsPreview(false)} className="bg-slate-600 text-white px-6 py-3 rounded-full shadow-lg font-bold">Edit</button>
-            <button onClick={handlePrint} className="text-white px-6 py-3 rounded-full shadow-lg font-bold flex gap-2 hover:opacity-90" style={{backgroundColor: BRAND.colors.green}}>
-              <Printer /> Download PDF
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // --- EDITOR VIEW ---
-  return (
-    <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-20">
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=League+Spartan:wght@700&display=swap');`}</style>
-      <SampleModal isOpen={sampleModalOpen} onClose={() => setSampleModalOpen(false)} data={editingMeasurement ? editingMeasurement.data : {}} onSave={saveSampleData} day0Samples={editingMeasurement ? editingMeasurement.day0Samples : null} projectCriteria={project.criteria} isEvaluationDay={editingMeasurement ? editingMeasurement.isEvaluationDay : false} />
-      <DetailsModal isOpen={detailsModalOpen} onClose={() => setDetailsModalOpen(false)} data={editingMeasurement ? editingMeasurement.data : {}} onSave={saveDetailsData} />
-
-      <nav className="bg-white border-b sticky top-0 z-20 px-6 py-3 flex justify-between items-center shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="text-white p-2 rounded" style={{background: BRAND.colors.green}}><Layout size={24} /></div>
-          <div><h1 className="font-bold text-lg" style={{fontFamily: 'League Spartan'}}>PERF<span style={{color:BRAND.colors.blue}}>O</span>TEC MANAGER</h1><p className="text-xs text-slate-400 font-medium tracking-wider">OFFICIAL TEMPLATE EDITION v21.0</p></div>
-        </div>
-        <div className="flex gap-3">
-          <label className="text-slate-600 bg-white border px-4 py-2 rounded font-medium flex items-center gap-2 hover:bg-slate-50 transition cursor-pointer shadow-sm"><FolderOpen size={18} /> Load<input type="file" className="hidden" accept=".json" onChange={importData} ref={fileInputRef} /></label>
-          <button onClick={exportData} className="text-slate-600 bg-white border px-4 py-2 rounded font-medium flex items-center gap-2 hover:bg-slate-50 transition shadow-sm"><Save size={18} /> Save</button>
-          <button onClick={() => setIsPreview(true)} className="text-white px-4 py-2 rounded font-medium flex items-center gap-2 hover:opacity-90 transition shadow-lg shadow-green-100" style={{backgroundColor: BRAND.colors.blue}}><FileText size={18} /> Preview</button>
-        </div>
-      </nav>
-
-      <main className="max-w-7xl mx-auto p-6 grid grid-cols-12 gap-6">
-        <div className="col-span-12 flex gap-2 border-b border-slate-200 pb-1 mb-2">
-          {['setup', 'groups', 'analysis'].map(tab => (
-            <button key={tab} onClick={() => setActiveTab(tab)} className={`px-6 py-3 font-bold rounded-t-lg transition flex items-center gap-2 ${activeTab === tab ? 'text-white shadow-sm' : 'bg-white text-slate-500 hover:bg-slate-100'}`} style={{ backgroundColor: activeTab === tab ? BRAND.colors.green : undefined }}>
-              {tab === 'setup' && <Settings size={16}/>}{tab === 'groups' && <Scale size={16}/>}{tab === 'analysis' && <Activity size={16}/>}{tab.charAt(0).toUpperCase() + tab.slice(1)}
-            </button>
-          ))}
-        </div>
-
-        {activeTab === 'setup' && (
-          <div className="col-span-12 space-y-6">
-            <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-100">
-               <h2 className="font-bold text-lg mb-6 text-[#211A1A] border-b pb-2">1. Setting</h2>
-               <div className="grid grid-cols-3 gap-8">
-                 <div className="col-span-2 grid grid-cols-2 gap-6">
-                   <div className="col-span-2"><label className="label">Report Title</label><input type="text" className="input text-lg font-bold" value={project.reportTitle} onChange={e => setProject({...project, reportTitle: e.target.value})} /></div>
-                   <div className="col-span-2"><label className="label">Product</label><input type="text" className="input text-lg font-bold" value={project.productName} onChange={e => setProject({...project, productName: e.target.value})} /></div>
-                   <div><label className="label">Total Duration (Days)</label><input type="number" className="input bg-yellow-50" value={project.totalDuration} onChange={handleDurationChange} placeholder="e.g. 10" /></div>
-                   <div><label className="label">Type</label><input type="text" className="input" value={project.type} onChange={e => setProject({...project, type: e.target.value})} /></div>
-                   <div><label className="label">Product Origin</label><input type="text" className="input" value={project.origin} onChange={e => setProject({...project, origin: e.target.value})} /></div>
-                   <div><label className="label">Company Name</label><input type="text" className="input" value={project.company} onChange={e => setProject({...project, company: e.target.value})} /></div>
-                   <div><label className="label">Contact Person</label><input type="text" className="input" value={project.contactName} onChange={e => setProject({...project, contactName: e.target.value})} /></div>
-                   <div><label className="label">Email Address</label><input type="email" className="input" value={project.contactEmail} onChange={e => setProject({...project, contactEmail: e.target.value})} /></div>
-                   <div><label className="label">PerfoTec Employee</label><input type="text" className="input" value={project.employee} onChange={e => setProject({...project, employee: e.target.value})} /></div>
-                   <div><label className="label">Trial Target</label><input type="text" className="input" value={project.trialTarget} onChange={e => setProject({...project, trialTarget: e.target.value})} /></div>
-                   <div className="col-span-2 bg-slate-50 p-4 rounded border border-slate-200"><label className="label text-blue-800 mb-2 border-b border-blue-200 pb-1 w-full block">Respiration Data</label><div className="grid grid-cols-3 gap-4"><div><label className="label">RR O₂</label><input type="text" className="input" value={project.rrO2} onChange={e => setProject({...project, rrO2: e.target.value})} /></div><div><label className="label">RR CO₂</label><input type="text" className="input" value={project.rrCO2} onChange={e => setProject({...project, rrCO2: e.target.value})} /></div><div><label className="label">Measured at (°C)</label><input type="text" className="input" value={project.rrTemp} onChange={e => setProject({...project, rrTemp: e.target.value})} /></div></div></div>
-                 </div>
-                 <div className="space-y-4">
-                    <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center bg-slate-50 relative group h-24"><input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleLogoUpload} />{project.logo ? <img src={project.logo} className="h-full object-contain" /> : <><Upload size={24} color={BRAND.colors.blue} className="mb-2"/><span className="font-bold text-xs text-slate-600">Upload Logo (PNG)</span></>}</div>
-                    <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center bg-slate-50 relative group h-32"><input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleCoverImageUpload} />{project.coverImage ? <img src={project.coverImage} className="w-full h-full object-cover rounded" /> : <><ImageIcon size={24} color={BRAND.colors.green} className="mb-2"/><span className="font-bold text-xs text-slate-600">Cover Photo</span></>}</div>
-                    <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center bg-slate-50 relative group h-32"><input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleStartImageUpload} />{project.startImage ? <img src={project.startImage} className="w-full h-full object-cover rounded" /> : <><ImageIcon size={24} color={BRAND.colors.green} className="mb-2"/><span className="font-bold text-xs text-slate-600">Ref Photo</span></>}</div>
-                 </div>
-               </div>
-            </div>
-            <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-100">
-              <h2 className="font-bold text-lg mb-6 text-[#211A1A] border-b pb-2 flex items-center gap-2"><Truck size={20}/> Product Supply Chain</h2>
-              <div className="space-y-4">
-                {supplyChain.map((step, idx) => (
-                   <div key={idx} className="flex gap-2 items-end bg-slate-50 p-4 rounded-lg border border-slate-200 relative group">
-                      <div className="flex flex-col gap-1 mr-2"><button onClick={() => moveChainStep(idx, 'up')} disabled={idx === 0} className="p-1 hover:bg-slate-200 rounded disabled:opacity-30"><ChevronUp size={16}/></button><button onClick={() => moveChainStep(idx, 'down')} disabled={idx === supplyChain.length - 1} className="p-1 hover:bg-slate-200 rounded disabled:opacity-30"><ChevronDown size={16}/></button></div>
-                      <div className="flex-1"><label className="label">Step {idx+1}</label>{idx === 2 ? (<select className="input" value={step.stage} onChange={e => updateChainStep(idx, 'stage', e.target.value)}><option>Transport by road</option><option>Seafreight</option><option>Airfreight</option><option>Storage</option></select>) : (<input type="text" className="input" value={step.stage} onChange={e => updateChainStep(idx, 'stage', e.target.value)} />)}</div>
-                      <div className="w-40 flex gap-2"><div><label className="label">Temp (°C)</label><input type="number" className="input font-bold" value={step.tempStart} onChange={e => updateChainStep(idx, 'tempStart', e.target.value)} /></div><div><label className="label">To</label><input type="number" className="input" value={step.tempEnd} onChange={e => updateChainStep(idx, 'tempEnd', e.target.value)} placeholder="-" /></div></div>
-                      <div className="w-32 flex gap-2"><div><label className="label">Days</label><input type="number" className="input" value={step.daysStart} onChange={e => updateChainStep(idx, 'daysStart', e.target.value)} /></div><div><label className="label">To</label><input type="number" className="input" value={step.daysEnd} onChange={e => updateChainStep(idx, 'daysEnd', e.target.value)} placeholder="-" /></div></div>
-                      <div className="w-32"><label className="label">Action</label><select className="input" value={step.action} onChange={e => updateChainStep(idx, 'action', e.target.value)}><option value="none">-</option><option value="pack">Pack</option><option value="unpack">Unpack</option></select></div>
-                      <button onClick={() => removeChainStep(idx)} className="p-2.5 bg-red-50 text-red-500 rounded border border-red-100 hover:bg-red-100"><Trash2 size={18}/></button>
-                   </div>
-                ))}
-                <button onClick={addChainStep} className="flex items-center gap-2 text-sm font-bold text-green-700 hover:text-green-800"><Plus size={16}/> Add Step</button>
+                <div className="bg-gray-50 p-4 border-t flex justify-end gap-3"><button onClick={onClose} className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded font-medium">Cancel</button><button onClick={handleSave} className="px-6 py-2 text-white font-bold rounded hover:opacity-90 shadow-lg" style={{ backgroundColor: BRAND.colors.green }}>Save</button></div>
               </div>
             </div>
-          </div>
-        )}
+          );
+        };
 
-        {activeTab === 'groups' && (
-          <>
-            <div className="col-span-3 space-y-4">
-               {/* Global Criteria Config */}
-               <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm mb-4">
-                  <label className="label mb-2 text-slate-700">Global Assessment Criteria</label>
-                  <div className="flex flex-wrap gap-2 mb-3">
-                    {project.criteria.length === 0 && <span className="text-xs text-gray-400 italic">No criteria selected.</span>}
-                    {project.criteria.map(c => (
-                      <span key={c} className="bg-slate-50 border border-slate-300 text-slate-700 text-xs px-2 py-1 rounded flex items-center gap-1">{c} <button onClick={() => toggleCriteria(c)} className="text-red-400 hover:text-red-600 font-bold">×</button></span>
+        const DetailsModal = ({ isOpen, onClose, data, onSave }) => {
+          if (!isOpen) return null;
+          const initialImages = (data.images || []).map(img => typeof img === 'string' ? {url: img, caption: ''} : img);
+          const [images, setImages] = useState(initialImages);
+
+          const handleImageUpload = (e) => {
+            const files = Array.from(e.target.files);
+            files.forEach(file => {
+              const reader = new FileReader();
+              reader.onloadend = () => setImages(prev => [...prev, { url: reader.result, caption: '' }]);
+              reader.readAsDataURL(file);
+            });
+          };
+
+          const removeImage = (idx) => setImages(images.filter((_, i) => i !== idx));
+          const updateImageCaption = (idx, value) => {
+            const newImgs = [...images];
+            newImgs[idx].caption = value;
+            setImages(newImgs);
+          };
+
+          const handleSave = () => { onSave({ ...data, images }); onClose(); };
+
+          return (
+            <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 font-sans backdrop-blur-sm print:hidden">
+              <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl overflow-hidden border border-gray-100 flex flex-col max-h-[90vh]">
+                <div className="p-4 flex justify-between items-center text-white" style={{ background: `linear-gradient(90deg, ${BRAND.colors.black} 0%, #423B3B 50%, ${BRAND.colors.black} 100%)` }}>
+                  <h3 className="font-bold flex items-center gap-2" style={{ fontFamily: BRAND.fonts.heading }}><Camera size={18}/> Manage Photos</h3>
+                  <button onClick={onClose}><X size={20}/></button>
+                </div>
+                <div className="p-6 overflow-y-auto">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-3">
+                    {images.map((img, idx) => (
+                      <div key={idx} className="relative group border border-gray-200 rounded-lg overflow-hidden bg-gray-50 flex flex-col">
+                        <div className="aspect-square relative">
+                           <img src={img.url} className="w-full h-full object-cover" />
+                           <button onClick={() => removeImage(idx)} className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition shadow-lg"><X size={12}/></button>
+                        </div>
+                        <input type="text" className="w-full p-2 text-xs border-t outline-none focus:bg-blue-50" placeholder="Caption / Beschrijving..." value={img.caption} onChange={e => updateImageCaption(idx, e.target.value)} />
+                      </div>
                     ))}
+                    <label className="border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 aspect-square">
+                       <Upload size={24} className="text-gray-400"/>
+                       <span className="text-xs text-gray-500 mt-1 font-bold">Upload Photos</span>
+                       <input type="file" multiple accept="image/*" className="hidden" onChange={handleImageUpload} />
+                    </label>
                   </div>
-                  <div className="flex gap-2">
-                    <select className="input w-full" value={newCriteria} onChange={e => setNewCriteria(e.target.value)}>
-                       <option value="">Select standard criterion...</option>
-                       {DEFAULT_CRITERIA.filter(c => !project.criteria.includes(c)).map(c => <option key={c}>{c}</option>)}
-                    </select>
-                    <button onClick={addNewCriteria} className="bg-slate-800 text-white px-3 rounded hover:bg-black"><Plus size={16}/></button>
-                  </div>
-               </div>
-
-               <button onClick={addNewVariant} className="w-full py-3 rounded font-bold border-2 border-dashed hover:bg-green-50 text-green-700 transition" style={{borderColor: BRAND.colors.green}}>+ New Variant</button>
-               {groups.map((g, idx) => (
-                 <div key={g.id} onClick={() => setActiveGroupId(g.id)} className={`p-4 rounded-lg border cursor-pointer transition relative group ${activeGroupId === g.id ? 'bg-white shadow-md border-green-500 border-l-4' : 'bg-slate-50 hover:bg-white'}`}>
-                   <div className="flex items-center gap-3 font-bold text-sm text-slate-700"><div className="w-3 h-3 rounded-full" style={{ backgroundColor: CHART_COLORS[idx % CHART_COLORS.length].stroke }}></div>{g.name}</div>
-                   <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition">
-                      <button onClick={(e) => { e.stopPropagation(); duplicateGroup(g.id); }} className="p-1.5 bg-blue-50 text-blue-600 rounded"><Copy size={14} /></button>
-                      <button onClick={(e) => { e.stopPropagation(); removeGroup(g.id); }} className="p-1.5 bg-red-50 text-red-600 rounded"><Trash2 size={14} /></button>
-                   </div>
-                 </div>
-               ))}
+                </div>
+                <div className="bg-gray-50 p-4 border-t flex justify-end gap-3"><button onClick={onClose} className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded font-medium">Done</button><button onClick={handleSave} className="px-6 py-2 text-white font-bold rounded hover:opacity-90 shadow-lg" style={{ backgroundColor: BRAND.colors.green }}>Save</button></div>
+              </div>
             </div>
-            <div className="col-span-9 bg-white p-8 rounded-xl shadow-sm border border-slate-100 space-y-8">
-               {groups.find(g => g.id === activeGroupId) && (
-                 <>
-                   <div>
-                     <h3 className="font-bold text-lg mb-4 text-[#211A1A]">Trial Samples Config</h3>
-                     <div className="grid grid-cols-2 gap-6 mb-4"><div><label className="label">Name</label><input type="text" className="input font-bold" value={groups.find(g => g.id === activeGroupId).name} onChange={(e) => handleGroupChange(activeGroupId, 'name', null, e.target.value)} /></div><div><label className="label">Packaging Type</label><select className="input" value={groups.find(g => g.id === activeGroupId).specs.packaging} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'packaging', e.target.value)}>{PACKAGING_TYPES.map(t => <option key={t}>{t}</option>)}</select></div></div>
-                     
-                     <label className="label text-blue-800 mb-2 border-b border-blue-200 pb-1 w-full block mt-4">Packaging Dimensions</label>
-                     <div className="grid grid-cols-3 gap-4 bg-slate-50 p-4 rounded-t-lg border-x border-t border-slate-100">
-                        <div><label className="label">Length (mm)</label><input type="number" className="input" value={groups.find(g => g.id === activeGroupId).specs.length} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'length', e.target.value)} /></div>
-                        <div><label className="label">Width (mm)</label><input type="number" className="input" value={groups.find(g => g.id === activeGroupId).specs.width} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'width', e.target.value)} /></div>
-                        <div><label className="label">Height (mm)</label><input type="number" className="input" value={groups.find(g => g.id === activeGroupId).specs.height} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'height', e.target.value)} /></div>
+          );
+        };
+
+        // --- HOOFD APPLICATIE ---
+        const App = () => {
+          const [activeTab, setActiveTab] = useState('setup');
+          const [activeGroupId, setActiveGroupId] = useState(1);
+          const [isPreview, setIsPreview] = useState(false);
+          const fileInputRef = useRef(null);
+          
+          const [sampleModalOpen, setSampleModalOpen] = useState(false);
+          const [detailsModalOpen, setDetailsModalOpen] = useState(false);
+          const [editingMeasurement, setEditingMeasurement] = useState(null);
+
+          const [project, setProject] = useState({
+            reportTitle: 'Kwaliteitsrapportage MAP Test', 
+            productName: '', type: '', origin: '', company: '', contactName: '', contactEmail: '', employee: '', trialTarget: '',
+            rrO2: '', rrCO2: '', rrTemp: '', totalDuration: '', criteria: [], 
+            date: new Date().toISOString().split('T')[0],
+            logo: 'https://cdn.prod.website-files.com/68b594c756c22085ddc6c1ea/68b59ba2f027bfeecd25261b_PerfoTec%20logo.png',
+            startImage: null, coverImage: null
+          });
+
+          const [supplyChain, setSupplyChain] = useState([
+            { stage: 'Farm', tempStart: '15', tempEnd: '', daysStart: '0', daysEnd: '', action: 'none' },
+            { stage: 'Packing House (Bulk/Retail)', tempStart: '12', tempEnd: '', daysStart: '1', daysEnd: '', action: 'pack' },
+            { stage: 'Transport by road', tempStart: '6', tempEnd: '', daysStart: '2', daysEnd: '', action: 'none' },
+            { stage: 'Importer / Processor (Repack)', tempStart: '8', tempEnd: '', daysStart: '1', daysEnd: '', action: 'none' },
+            { stage: 'Retail Store', tempStart: '18', tempEnd: '', daysStart: '4', daysEnd: '', action: 'none' },
+            { stage: 'Consumer (Open Pack)', tempStart: '20', tempEnd: '', daysStart: '2', daysEnd: '', action: 'unpack' }
+          ]);
+
+          const [groups, setGroups] = useState([
+            {
+              id: 1, name: 'Control',
+              specs: { packaging: 'Retail', material: 'BOPP', length: '', width: '', height: '', holes: '2', holeSize: '6000', otr: '', cotr: '', startGas: { o2: '20.9', co2: '0.03' } },
+              measurements: [{ day: 0, samples: [{id:1,o2:'20.9',co2:'0.03',weight:''}, {id:2,o2:'20.9',co2:'0.03',weight:''}, {id:3,o2:'20.9',co2:'0.03',weight:''}], quality: 10, notes: 'Start', images: [], qualityParams: [] }],
+              predictedImage: null 
+            }
+          ]);
+
+          const [analysis, setAnalysis] = useState({ graphNotes: '', conclusion: '', recommendation: 'retest', nextSteps: [] });
+          const [newStep, setNewStep] = useState('');
+          const [newCriteria, setNewCriteria] = useState('');
+
+          const handleLogoUpload = (e) => { const file = e.target.files[0]; if(file) { const reader = new FileReader(); reader.onloadend = () => setProject(p => ({...p, logo: reader.result})); reader.readAsDataURL(file); }};
+          const handleStartImageUpload = (e) => { const file = e.target.files[0]; if(file) { const reader = new FileReader(); reader.onloadend = () => setProject(p => ({...p, startImage: reader.result})); reader.readAsDataURL(file); }};
+          const handleCoverImageUpload = (e) => { const file = e.target.files[0]; if(file) { const reader = new FileReader(); reader.onloadend = () => setProject(p => ({...p, coverImage: reader.result})); reader.readAsDataURL(file); }};
+          const handlePredictedImageUpload = (e, groupId) => { const file = e.target.files[0]; if(file) { const reader = new FileReader(); reader.onloadend = () => setGroups(prev => prev.map(g => g.id === groupId ? { ...g, predictedImage: reader.result } : g)); reader.readAsDataURL(file); }};
+
+          const handleDurationChange = (e) => {
+            const val = e.target.value;
+            setProject(p => ({...p, totalDuration: val}));
+            if (val && parseInt(val) > 0) {
+               const endDay = parseInt(val);
+               setGroups(prev => prev.map(g => {
+                 if (!g.measurements.find(m => m.day === endDay)) {
+                    const endMeas = { day: endDay, samples: [{id:1,o2:'',co2:'',weight:''},{id:2,o2:'',co2:'',weight:''},{id:3,o2:'',co2:'',weight:''}], quality: 9, notes: 'End', images: [], qualityParams: [] };
+                    return { ...g, measurements: [...g.measurements, endMeas].sort((a,b) => a.day - b.day) };
+                 }
+                 return g;
+               }));
+            }
+          };
+
+          const exportData = () => {
+            const data = { project, supplyChain, groups, analysis };
+            const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a'); a.href = url; a.download = `perfotec-report.json`; a.click();
+          };
+          const importData = (e) => { const file = e.target.files[0]; if(!file) return; const reader = new FileReader(); reader.onload = (ev) => { try { const d = JSON.parse(ev.target.result); if(d.project) setProject(d.project); if(d.supplyChain) setSupplyChain(d.supplyChain); if(d.groups) setGroups(d.groups); if(d.analysis) setAnalysis(d.analysis); } catch(err){alert("Error loading file");} }; reader.readAsText(file); };
+
+          const handleGroupChange = (id, section, field, value) => {
+            setGroups(prev => prev.map(g => {
+              if (g.id !== id) return g;
+              if (section === 'name') return { ...g, name: value };
+              if (section === 'specs') return { ...g, specs: { ...g.specs, [field]: value } };
+              if (section === 'startGas') return { ...g, specs: { ...g.specs, startGas: { ...g.specs.startGas, [field]: value } } };
+              return g;
+            }));
+          };
+
+          const toggleCriteria = (crit) => {
+            setProject(prev => {
+              const exists = prev.criteria.includes(crit);
+              return { ...prev, criteria: exists ? prev.criteria.filter(c => c !== crit) : [...prev.criteria, crit] };
+            });
+          };
+
+          const addNewCriteria = () => {
+            if(newCriteria && !project.criteria.includes(newCriteria)) {
+              toggleCriteria(newCriteria);
+              setNewCriteria('');
+            }
+          };
+
+          const addChainStep = () => setSupplyChain([...supplyChain, { stage: '', tempStart: '', tempEnd: '', daysStart: '', daysEnd: '', action: 'none' }]);
+          const updateChainStep = (i, f, v) => { const n = [...supplyChain]; n[i][f] = v; setSupplyChain(n); };
+          const removeChainStep = (i) => setSupplyChain(supplyChain.filter((_, idx) => idx !== i));
+          const moveChainStep = (i, dir) => { const n = [...supplyChain]; if(dir==='up' && i>0){ [n[i], n[i-1]] = [n[i-1], n[i]]; } else if(dir==='down' && i<n.length-1){ [n[i], n[i+1]] = [n[i+1], n[i]]; } setSupplyChain(n); };
+
+          const openSampleModal = (groupId, index) => { 
+            const g = groups.find(x => x.id === groupId); 
+            const meas = g.measurements[index];
+            const isEvaluationDay = meas.day === 0 || (project.totalDuration && meas.day === parseInt(project.totalDuration));
+            const day0 = g.measurements.find(m => m.day === 0);
+            setEditingMeasurement({ groupId, index, data: meas, day0Samples: day0?.samples, isEvaluationDay }); 
+            setSampleModalOpen(true); 
+          };
+          
+          const openDetailsModal = (groupId, index) => { 
+            const g = groups.find(x => x.id === groupId); 
+            setEditingMeasurement({ groupId, index, data: g.measurements[index] }); 
+            setDetailsModalOpen(true); 
+          };
+
+          const saveSampleData = (u) => { setGroups(p => p.map(g => g.id !== editingMeasurement.groupId ? g : { ...g, measurements: g.measurements.map((m, i) => i === editingMeasurement.index ? { ...u, qualityParams: u.qualityParams } : m) })); };
+          const saveDetailsData = (u) => { setGroups(p => p.map(g => g.id !== editingMeasurement.groupId ? g : { ...g, measurements: g.measurements.map((m, i) => i === editingMeasurement.index ? { ...m, images: u.images } : m) })); };
+
+          const addMeasurementDay = (groupId) => {
+            setGroups(prev => prev.map(g => {
+              if (g.id !== groupId) return g;
+              const lastDay = parseFloat(g.measurements[g.measurements.length - 1]?.day || 0);
+              return { ...g, measurements: [...g.measurements, { day: lastDay + 1, samples: [{id:1,o2:'',co2:'',weight:''},{id:2,o2:'',co2:'',weight:''},{id:3,o2:'',co2:'',weight:''}], quality: 9, notes: '', images: [], qualityParams: [] }]};
+            }));
+          };
+          
+          const removeMeasurementDay = (groupId, index) => {
+            setGroups(prev => prev.map(g => {
+              if (g.id !== groupId) return g;
+              const newMeas = [...g.measurements];
+              newMeas.splice(index, 1);
+              return { ...g, measurements: newMeas };
+            }));
+          };
+
+          const updateQuality = (groupId, index, val) => { setGroups(p => p.map(g => g.id !== groupId ? g : { ...g, measurements: g.measurements.map((m, i) => i === index ? { ...m, quality: val } : m) })); };
+
+          const addNewVariant = () => {
+            const newId = Math.max(...groups.map(g => g.id)) + 1;
+            const duration = parseInt(project.totalDuration) || 0;
+            const day0 = { day: 0, samples: [{id:1,o2:'20.9',co2:'0.03',weight:''},{id:2,o2:'20.9',co2:'0.03',weight:''},{id:3,o2:'20.9',co2:'0.03',weight:''}], quality: 10, notes: 'Start', images: [], qualityParams: [] };
+            const meas = [day0];
+            if (duration > 0) {
+               meas.push({ day: duration, samples: [{id:1,o2:'',co2:'',weight:''},{id:2,o2:'',co2:'',weight:''},{id:3,o2:'',co2:'',weight:''}], quality: 9, notes: 'End', images: [], qualityParams: [] });
+            }
+            setGroups([...groups, { id: newId, name: `Variant ${groups.length + 1}`, specs: { ...groups[0].specs }, measurements: meas, predictedImage: null }]);
+            setActiveGroupId(newId);
+          };
+
+          const duplicateGroup = (id) => { const org = groups.find(g => g.id === id); const newId = Math.max(...groups.map(g => g.id)) + 1; setGroups(p => [...p, { ...org, id: newId, name: `${org.name} (Copy)` }]); setActiveGroupId(newId); };
+          const removeGroup = (id) => { if(groups.length > 1) { setGroups(p => p.filter(g => g.id !== id)); setActiveGroupId(groups[0].id); }};
+
+          const addNextStep = () => { if (newStep.trim()) { setAnalysis(prev => ({ ...prev, nextSteps: [...prev.nextSteps, newStep] })); setNewStep(''); }};
+          const removeNextStep = (i) => setAnalysis(prev => ({ ...prev, nextSteps: prev.nextSteps.filter((_, idx) => idx !== i) }));
+
+          const handlePrint = () => { window.print(); };
+
+          if (isPreview) {
+            return (
+              <div className="min-h-screen bg-gray-500 p-8 overflow-y-auto font-sans">
+                <div id="print-content" className="max-w-[21cm] mx-auto bg-white shadow-2xl min-h-[29.7cm] p-12 relative">
+                  {/* COVER */}
+                  <div className="h-[27cm] flex flex-col justify-between">
+                     <div>
+                        <div className="flex flex-col mb-16">
+                          <img src={project.logo} alt="PerfoTec" className="h-20 object-contain self-start mb-2" />
+                          <div className="text-sm font-bold tracking-[0.25em] uppercase" style={{ color: BRAND.colors.blue, fontFamily: BRAND.fonts.heading, marginLeft: '4px' }}>Best for Freshness</div>
+                        </div>
+                        <h1 className="text-5xl font-bold uppercase mb-4 brand-heading" style={{ color: BRAND.colors.green }}>{project.reportTitle}</h1>
+                        <h2 className="text-4xl font-light brand-heading text-slate-600 mb-12">{project.productName || '<Product Name>'}</h2>
+                        <div className="w-full h-[450px] bg-slate-50 border rounded-lg overflow-hidden flex items-center justify-center relative shadow-sm">
+                           {project.coverImage || project.startImage ? <img src={project.coverImage || project.startImage} className="w-full h-full object-contain bg-white" /> : <span className="text-slate-300 italic">No Cover Photo</span>}
+                           <div className="absolute bottom-6 left-0 right-0 text-center"><span className="bg-white/90 px-6 py-2 rounded-full text-lg font-bold shadow-sm" style={{color: BRAND.colors.green, fontFamily: BRAND.fonts.heading}}>Super fresh quality</span></div>
+                        </div>
                      </div>
-                     <div className="grid grid-cols-4 gap-4 bg-slate-50 p-4 rounded-b-lg border border-slate-100 mb-6"><div><label className="label">Material</label><input className="input" value={groups.find(g => g.id === activeGroupId).specs.material} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'material', e.target.value)} /></div><div><label className="label">Transmission Value</label><input type="number" className="input" value={groups.find(g => g.id === activeGroupId).specs.holes} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'holes', e.target.value)} /></div></div>
-                     
-                     <div className="border-2 border-dashed border-blue-200 bg-blue-50 rounded-lg p-4 flex items-center justify-between"><div className="flex items-center gap-4"><LineChart size={24} className="text-blue-500" /><div><div className="font-bold text-sm text-blue-900">Predicted Gas Graph</div></div></div><label className="cursor-pointer bg-white border border-blue-200 text-blue-700 px-4 py-2 rounded font-bold text-xs hover:bg-blue-50 transition">Upload Image<input type="file" accept="image/*" className="hidden" onChange={(e) => handlePredictedImageUpload(e, activeGroupId)} /></label></div>
-                     {groups.find(g => g.id === activeGroupId).predictedImage && <div className="mt-2 border rounded p-2 bg-white inline-block"><img src={groups.find(g => g.id === activeGroupId).predictedImage} className="h-32 object-contain" /></div>}
-                   </div>
-                   
-                   <div>
-                     <div className="flex justify-between items-center mb-4 border-b pb-2"><h3 className="font-bold text-lg text-[#211A1A]">Measurements</h3><button onClick={() => addMeasurementDay(activeGroupId)} className="text-xs text-white px-3 py-1.5 rounded font-bold shadow-md hover:opacity-90" style={{background: BRAND.colors.green}}>+ Add Day</button></div>
-                     <table className="w-full text-sm">
-                       <thead><tr className="bg-slate-50 text-left text-slate-500"><th className="p-3">Day</th><th className="p-3">Samples</th><th className="p-3 font-bold" style={{color:BRAND.colors.blue}}>O₂</th><th className="p-3 font-bold" style={{color:BRAND.colors.green}}>CO₂</th><th className="p-3">Wt.</th><th className="p-3">Qual.</th><th className="p-3">Actions</th></tr></thead>
-                       <tbody>
-                         {groups.find(g => g.id === activeGroupId).measurements.map((m, idx) => (
-                             <tr key={idx} className="hover:bg-blue-50 transition border-b border-slate-50">
-                               <td className="p-3 font-bold">{formatDay(m.day)}</td>
-                               <td className="p-3 text-xs text-slate-400">{m.samples.length}x</td>
-                               <td className="p-3 font-bold text-blue-700">{getAverage(m.samples, 'o2')}%</td>
-                               <td className="p-3 font-bold text-green-700">{getAverage(m.samples, 'co2')}%</td>
-                               <td className="p-3 text-slate-600">{getAverage(m.samples, 'weight')}g</td>
-                               <td className="p-3"><input type="number" className="w-12 p-1 border rounded" value={m.quality} onChange={e => updateQuality(activeGroupId, idx, e.target.value)} /></td>
-                               <td className="p-3 flex gap-2">
-                                  <button onClick={() => openSampleModal(activeGroupId, idx)} className="text-slate-500 hover:text-green-600 bg-white border shadow-sm p-1.5 rounded" title="Edit Data & Quality"><Edit3 size={14}/></button>
-                                  <button onClick={() => openDetailsModal(activeGroupId, idx)} className={`text-slate-500 hover:text-blue-600 bg-white border shadow-sm p-1.5 rounded ${m.images && m.images.length > 0 ? 'text-blue-600 border-blue-200 bg-blue-50' : ''}`} title="Photos"><Camera size={14}/></button>
-                                  <button onClick={() => removeMeasurementDay(activeGroupId, idx)} disabled={m.day === 0} className={`p-1.5 rounded border shadow-sm ${m.day === 0 ? 'bg-gray-100 text-gray-300' : 'bg-white text-red-500 hover:bg-red-50'}`}><Trash2 size={14}/></button>
-                               </td>
-                             </tr>
-                         ))}
-                       </tbody>
-                     </table>
-                   </div>
-                 </>
-               )}
-            </div>
-          </>
-        )}
+                     <div className="text-center text-sm text-slate-400 brand-body">{new Date().getFullYear()} © PerfoTec B.V.</div>
+                  </div>
 
-        {activeTab === 'analysis' && (
-          <div className="col-span-12 space-y-6">
-            <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-100 grid grid-cols-2 gap-8">
-               <div className="col-span-2"><h2 className="font-bold text-lg border-b pb-2 mb-2 text-[#211A1A]">2 Summary and Conclusions</h2></div>
-               <div><label className="label mb-2">Main Conclusion</label><textarea rows="6" className="input w-full" placeholder="The product quality in the PerfoTec Liner..." value={analysis.conclusion} onChange={(e) => setAnalysis(prev => ({ ...prev, conclusion: e.target.value }))} /></div>
-               <div><label className="label mb-2">Detailed Conclusions</label><div className="flex gap-2 mb-2"><input type="text" className="input" placeholder="Add point..." value={newStep} onChange={e => setNewStep(e.target.value)} onKeyPress={e => e.key === 'Enter' && addNextStep()} /><button onClick={addNextStep} className="bg-slate-800 text-white px-4 rounded hover:bg-black"><Plus size={18}/></button></div><div className="space-y-1">{analysis.nextSteps.map((s, i) => (<div key={i} className="text-sm bg-slate-50 p-2 rounded flex justify-between"><span>• {s}</span><button onClick={() => removeNextStep(i)} className="text-red-500">×</button></div>))}</div></div>
-               <div className="col-span-2"><label className="label mb-2">Gas Levels Analysis</label><textarea rows="4" className="input w-full" value={analysis.graphNotes} onChange={(e) => setAnalysis(prev => ({ ...prev, graphNotes: e.target.value }))} /></div>
-            </div>
-          </div>
-        )}
-      </main>
-      <style>{`.label { display: block; font-size: 0.75rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.35rem; font-family: 'Inter', sans-serif; } .input { width: 100%; padding: 0.6rem; border: 1px solid #e2e8f0; border-radius: 0.5rem; outline: none; transition: 0.2s; font-size: 0.9rem; font-family: 'Inter', sans-serif; } .input:focus { border-color: ${BRAND.colors.green}; box-shadow: 0 0 0 3px rgba(0, 124, 39, 0.1); }`}</style>
-    </div>
-  );
-};
+                  <div className="page-break"></div>
 
-export default App;
+                  {/* SETTING & SUMMARY */}
+                  <div>
+                    <h3 className="text-xl font-bold mb-6 brand-heading">Contents</h3>
+                    <ul className="space-y-2 brand-body text-sm mb-12 text-slate-700">
+                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-1"><span>1 Setting</span> <span>3</span></li>
+                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-1"><span>2 Summary and Conclusions</span> <span>3</span></li>
+                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-1"><span>3 Trial set up</span> <span>4</span></li>
+                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-1"><span>4 Trial results</span> <span>5</span></li>
+                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-1"><span className="pl-4">4.1 Gas Levels</span> <span>5</span></li>
+                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-1"><span className="pl-4">4.2 Weight Loss</span> <span>6</span></li>
+                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-1"><span className="pl-4">4.3 Visual quality</span> <span>6</span></li>
+                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-1"><span className="pl-4">4.4 Detailed Quality Parameters</span> <span>6</span></li>
+                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-1"><span>5 Photos</span> <span>7</span></li>
+                    </ul>
+
+                    <h2 className="report-section-title">1 Setting</h2>
+                    <div className="grid grid-cols-[180px_1fr] gap-y-3 text-sm brand-body text-slate-800">
+                       <div className="font-bold">Product :</div> <div>{project.productName}</div>
+                       <div className="font-bold">Type :</div> <div>{project.type || '-'}</div>
+                       <div className="font-bold">Product Origin :</div> <div>{project.origin || '-'}</div>
+                       <div className="font-bold">Company Name :</div> <div>{project.company || '-'}</div>
+                       <div className="font-bold">Contact Person :</div> <div>{project.contactName || '-'} {project.contactEmail && `(${project.contactEmail})`}</div>
+                       <div className="font-bold">PerfoTec Employee :</div> <div>{project.employee || '-'}</div>
+                       <div className="font-bold">Technology :</div> <div>PerfoTec Laser Perforation</div>
+                       <div className="font-bold">Trial Target :</div> <div>{project.trialTarget || 'Shelf life extension'}</div>
+                       <div className="font-bold col-span-2 mt-4 border-t border-slate-300 pt-2 text-lg" style={{color: BRAND.colors.green}}>Product Supply Chain :</div> 
+                       <div className="col-span-2 w-full mt-1"><SupplyChainFlow chain={supplyChain} /></div>
+                    </div>
+
+                    <h2 className="report-section-title">2 Summary and Conclusions</h2>
+                    <div className="brand-body text-sm leading-relaxed text-justify text-slate-800">
+                       <p className="font-bold mb-2">Main Conclusion:</p>
+                       <div className="mb-4 whitespace-pre-wrap">{analysis.conclusion || 'No conclusion entered.'}</div>
+                       {analysis.nextSteps.length > 0 && <ul className="list-disc pl-5 space-y-1">{analysis.nextSteps.map((s,i) => <li key={i}>{s}</li>)}</ul>}
+                    </div>
+                  </div>
+
+                  <div className="page-break"></div>
+
+                  {/* TRIAL SET UP */}
+                  <div>
+                    <h2 className="report-section-title">3 Trial set up</h2>
+                    <div className="brand-body text-sm space-y-4 text-slate-800">
+                       <div>
+                         <h4 className="font-bold mb-1">Trial samples:</h4>
+                         <ul className="list-disc pl-5">
+                           {groups.map((g,i) => {
+                             const day0 = g.measurements.find(m => m.day === 0);
+                             const startWeight = day0?.samples[0]?.weight || '-';
+                             return (
+                               <li key={i}><span className="font-bold">{g.name}</span> – {g.specs.packaging}, {g.specs.material} ({g.specs.holes} holes, {startWeight}g)</li>
+                             )
+                           })}
+                         </ul>
+                       </div>
+                       <p>The Fast Respiration Meter System 2.0 was used to measure the product respiration rate (RR O₂: {project.rrO2 || '-'}, RR CO₂: {project.rrCO2 || '-'}) at {project.rrTemp || '-'}°C.</p>
+                       <p>Stored at different temperatures (see supply chain) for {supplyChain.reduce((acc,s) => acc + parseFloat(s.daysStart || 0), 0)} days total.</p>
+                       <p>The product was packed on <strong>{project.date}</strong>.</p>
+                       <p>Unpacking moments were planned for {formatDay(groups[0].measurements[groups[0].measurements.length-1].day)}. Per packing moment, samples per treatment were unpacked.</p>
+                       
+                       <p>Product quality was evaluated at the start and at the unpacking moment. The following attributes are evaluated according to the score scale listed below. Scores of 7 and higher are considered to be within specification and of acceptable quality.</p>
+                       <ul className="list-disc pl-5">
+                         {project.criteria.length > 0 ? project.criteria.map((c, i) => <li key={i}>{c}</li>) : <li>General Quality</li>}
+                       </ul>
+
+                       <div className="my-6">
+                         <h4 className="font-bold mb-3 border-b pb-1 text-slate-700">Predicted Gas Levels (PerfoTec Hub)</h4>
+                         <div className="grid grid-cols-2 gap-4">
+                           {groups.map(g => g.predictedImage && (
+                               <div key={g.id} className="border rounded p-2"><div className="text-xs font-bold mb-1 text-center">{g.name}</div><img src={g.predictedImage} className="w-full h-32 object-contain" /></div>
+                           ))}
+                         </div>
+                       </div>
+
+                       <div>
+                         <h4 className="font-bold mb-2">Score scale:</h4>
+                         <div className="grid grid-cols-1 gap-1 text-xs text-slate-600 bg-slate-50 p-4 rounded border">
+                            <div><strong className="text-slate-900">10:</strong> excellent – exceptionally appealing quality, exceptional good</div>
+                            <div><strong className="text-slate-900">9:</strong> very good – natural quality of the product, full strong characteristic quality attributes</div>
+                            <div><strong className="text-slate-900">8:</strong> good – natural quality, with few specimens with slightly light impairment</div>
+                            <div><strong className="text-slate-900">7:</strong> commendable – natural quality, with several specimens with light impairment</div>
+                            <div><strong className="text-slate-900">6:</strong> satisfactory – slightly reduced quality attributes</div>
+                            <div><strong className="text-slate-900">5:</strong> unacceptable – impairment of natural quality attributes</div>
+                            <div><strong className="text-slate-900">4:</strong> beyond unacceptable – clear impairment of quality attributes</div>
+                            <div><strong className="text-slate-900">3:</strong> poor – generally severe loss of quality, no longer appealing</div>
+                            <div><strong className="text-slate-900">2:</strong> bad – strong and severe quality loss, strongly unpleasant</div>
+                            <div><strong className="text-slate-900">1:</strong> very bad – complete quality decay, spoiled and repulsive</div>
+                         </div>
+                       </div>
+                    </div>
+                  </div>
+
+                  <div className="page-break"></div>
+
+                  {/* RESULTS */}
+                  <div>
+                    <h2 className="report-section-title">4 Trial results</h2>
+                    <h3 className="font-bold text-lg mb-2 brand-heading text-slate-700">4.1 Gas Levels</h3>
+                    <p className="text-sm mb-4 italic brand-body text-slate-600">{analysis.graphNotes || 'Gas levels were monitored throughout the shelf life period.'}</p>
+                    
+                    {groups.map((g, idx) => (
+                      <div key={idx} className="flex gap-4 mb-8 break-inside-avoid items-center">
+                         {g.predictedImage ? (
+                           <div className="w-1/2 border rounded p-2">
+                              <div className="text-xs font-bold mb-1 text-center text-gray-500">Prediction (Hub)</div>
+                              <img src={g.predictedImage} className="w-full h-auto object-contain" />
+                           </div>
+                         ) : (
+                           <div className="w-1/2 border rounded p-8 text-center text-gray-300 italic">No Prediction Uploaded</div>
+                         )}
+                         <div className="w-1/2">
+                            <div className="text-xs font-bold mb-1 text-center text-gray-500">Actual Results</div>
+                            <VariantGasChart group={g} />
+                         </div>
+                      </div>
+                    ))}
+
+                    <h3 className="font-bold text-lg mb-2 mt-8 brand-heading text-slate-700">4.2 Weight Loss Comparison</h3>
+                    <WeightLossChart groups={groups} />
+
+                    <h3 className="font-bold text-lg mb-2 mt-8 brand-heading text-slate-700">4.3 Visual quality Overview</h3>
+                    <p className="text-sm mb-4 brand-body text-slate-800">
+                       On {formatDay(groups[0].measurements[groups[0].measurements.length-1].day)}, the visual quality was assessed.
+                    </p>
+                    <table className="report-table w-full mb-6">
+                      <thead><tr><th>Variant</th><th>Final Day</th><th>Visual Score</th><th>Weight Loss</th><th>Key Observation</th></tr></thead>
+                      <tbody>
+                        {groups.map((g,i) => {
+                          const last = g.measurements[g.measurements.length - 1];
+                          const day0 = g.measurements.find(m => m.day === 0);
+                          const loss = getWeightLoss(last.samples, day0?.samples);
+                          return (<tr key={i}><td>{g.name}</td><td>{formatDay(last.day)}</td><td className="font-bold">{last.quality}</td><td>{loss}%</td><td>{last.notes || '-'}</td></tr>)
+                        })}
+                      </tbody>
+                    </table>
+
+                    <h3 className="font-bold text-lg mb-2 mt-8 brand-heading text-slate-700">4.4 Detailed Quality Parameters (End of Trial)</h3>
+                    {project.criteria.length > 0 ? (
+                      <table className="report-table w-full mb-6 text-sm">
+                        <thead>
+                          <tr>
+                            <th>Criterion</th>
+                            {groups.map(g => <th key={g.id} className="text-center">{g.name}</th>)}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {project.criteria.map((crit, i) => (
+                            <tr key={i}>
+                              <td className="font-semibold">{crit}</td>
+                              {groups.map(g => {
+                                 const lastMeas = g.measurements[g.measurements.length - 1];
+                                 const param = lastMeas.qualityParams?.find(p => p.name === crit);
+                                 return (
+                                   <td key={g.id} className="text-center align-top">
+                                     {param && param.score ? (
+                                       <div className="flex flex-col items-center">
+                                         <span className="font-bold text-lg leading-none mb-1" style={{color: BRAND.colors.green}}>{param.score}</span>
+                                         {param.notes && <span className="text-xs italic text-gray-500 leading-tight">{param.notes}</span>}
+                                       </div>
+                                     ) : '-'}
+                                   </td>
+                                 )
+                              })}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    ) : (
+                      <p className="text-sm italic text-gray-500">No specific criteria were defined for this test.</p>
+                    )}
+                  </div>
+
+                  <div className="page-break"></div>
+
+                  {/* PHOTOS */}
+                  <div>
+                    <h2 className="report-section-title">5. Photos</h2>
+                    <div className="grid grid-cols-2 gap-8">
+                       {project.startImage && (
+                         <div className="col-span-2 mb-4">
+                            <div className="h-64 border rounded overflow-hidden flex items-center justify-center bg-slate-50"><img src={project.startImage} className="h-full object-contain"/></div>
+                            <p className="text-sm font-bold mt-2 text-center brand-heading">Picture 1. P+0 - Initial product quality</p>
+                         </div>
+                       )}
+                       {(() => {
+                         const allPhotos = groups.flatMap(g => 
+                            g.measurements.flatMap(m => 
+                              (m.images || []).map(img => ({
+                                 groupName: g.name,
+                                 day: m.day,
+                                 url: typeof img === 'string' ? img : img.url,
+                                 caption: typeof img === 'string' ? '' : img.caption
+                              }))
+                            )
+                         );
+                         
+                         let startIndex = project.startImage ? 2 : 1;
+                         
+                         return allPhotos.map((photo, idx) => (
+                           <div key={idx} className="break-inside-avoid">
+                              <div className="h-48 border rounded overflow-hidden flex items-center justify-center bg-slate-50 relative">
+                                 <img src={photo.url} className="w-full h-full object-contain bg-white"/>
+                                 <div className="absolute top-0 left-0 bg-white/90 px-2 py-1 text-xs font-bold border-b border-r" style={{fontFamily: BRAND.fonts.heading, color: BRAND.colors.green}}>{photo.groupName}</div>
+                              </div>
+                              <div className="text-sm mt-2 text-center brand-body px-2">
+                                <span className="font-bold">Picture {startIndex + idx}.</span> {photo.groupName} at {formatDay(photo.day)}.
+                                {photo.caption && <span className="block italic font-normal text-xs text-slate-500 mt-0.5">{photo.caption}</span>}
+                              </div>
+                           </div>
+                         ));
+                       })()}
+                    </div>
+                  </div>
+
+                  {/* PRINT BUTTON */}
+                  <div className="fixed bottom-8 right-8 flex gap-4 no-print z-50">
+                    <button onClick={() => setIsPreview(false)} className="bg-slate-600 text-white px-6 py-3 rounded-full shadow-lg font-bold">Edit</button>
+                    <button onClick={handlePrint} className="text-white px-6 py-3 rounded-full shadow-lg font-bold flex gap-2 hover:opacity-90" style={{backgroundColor: BRAND.colors.green}}>
+                      <Printer /> Download PDF
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-20">
+              <SampleModal isOpen={sampleModalOpen} onClose={() => setSampleModalOpen(false)} data={editingMeasurement ? editingMeasurement.data : {}} onSave={saveSampleData} day0Samples={editingMeasurement ? editingMeasurement.day0Samples : null} projectCriteria={project.criteria} isEvaluationDay={editingMeasurement ? editingMeasurement.isEvaluationDay : false} />
+              <DetailsModal isOpen={detailsModalOpen} onClose={() => setDetailsModalOpen(false)} data={editingMeasurement ? editingMeasurement.data : {}} onSave={saveDetailsData} />
+
+              <nav className="bg-white border-b sticky top-0 z-20 px-6 py-3 flex justify-between items-center shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="text-white p-2 rounded" style={{background: BRAND.colors.green}}><Layout size={24} /></div>
+                  <div><h1 className="font-bold text-lg" style={{fontFamily: 'League Spartan'}}>PERF<span style={{color:BRAND.colors.blue}}>O</span>TEC MANAGER</h1><p className="text-xs text-slate-400 font-medium tracking-wider">OFFICIAL TEMPLATE EDITION v21.0</p></div>
+                </div>
+                <div className="flex gap-3">
+                  <label className="text-slate-600 bg-white border px-4 py-2 rounded font-medium flex items-center gap-2 hover:bg-slate-50 transition cursor-pointer shadow-sm"><FolderOpen size={18} /> Load<input type="file" className="hidden" accept=".json" onChange={importData} ref={fileInputRef} /></label>
+                  <button onClick={exportData} className="text-slate-600 bg-white border px-4 py-2 rounded font-medium flex items-center gap-2 hover:bg-slate-50 transition shadow-sm"><Save size={18} /> Save</button>
+                  <button onClick={() => setIsPreview(true)} className="text-white px-4 py-2 rounded font-medium flex items-center gap-2 hover:opacity-90 transition shadow-lg shadow-green-100" style={{backgroundColor: BRAND.colors.blue}}><FileText size={18} /> Preview</button>
+                </div>
+              </nav>
+
+              <main className="max-w-7xl mx-auto p-6 grid grid-cols-12 gap-6">
+                <div className="col-span-12 flex gap-2 border-b border-slate-200 pb-1 mb-2">
+                  {['setup', 'groups', 'analysis'].map(tab => (
+                    <button key={tab} onClick={() => setActiveTab(tab)} className={`px-6 py-3 font-bold rounded-t-lg transition flex items-center gap-2 ${activeTab === tab ? 'text-white shadow-sm' : 'bg-white text-slate-500 hover:bg-slate-100'}`} style={{ backgroundColor: activeTab === tab ? BRAND.colors.green : undefined }}>
+                      {tab === 'setup' && <Settings size={16}/>}{tab === 'groups' && <Scale size={16}/>}{tab === 'analysis' && <Activity size={16}/>}{tab.charAt(0).toUpperCase() + tab.slice(1)}
+                    </button>
+                  ))}
+                </div>
+
+                {activeTab === 'setup' && (
+                  <div className="col-span-12 space-y-6">
+                    <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-100">
+                       <h2 className="font-bold text-lg mb-6 text-[#211A1A] border-b pb-2">1. Setting</h2>
+                       <div className="grid grid-cols-3 gap-8">
+                         <div className="col-span-2 grid grid-cols-2 gap-6">
+                           <div className="col-span-2"><label className="label">Report Title</label><input type="text" className="input text-lg font-bold" value={project.reportTitle} onChange={e => setProject({...project, reportTitle: e.target.value})} /></div>
+                           <div className="col-span-2"><label className="label">Product</label><input type="text" className="input text-lg font-bold" value={project.productName} onChange={e => setProject({...project, productName: e.target.value})} /></div>
+                           <div><label className="label">Total Duration (Days)</label><input type="number" className="input bg-yellow-50" value={project.totalDuration} onChange={handleDurationChange} placeholder="e.g. 10" /></div>
+                           <div><label className="label">Type</label><input type="text" className="input" value={project.type} onChange={e => setProject({...project, type: e.target.value})} /></div>
+                           <div><label className="label">Product Origin</label><input type="text" className="input" value={project.origin} onChange={e => setProject({...project, origin: e.target.value})} /></div>
+                           <div><label className="label">Company Name</label><input type="text" className="input" value={project.company} onChange={e => setProject({...project, company: e.target.value})} /></div>
+                           <div><label className="label">Contact Person</label><input type="text" className="input" value={project.contactName} onChange={e => setProject({...project, contactName: e.target.value})} /></div>
+                           <div><label className="label">Email Address</label><input type="email" className="input" value={project.contactEmail} onChange={e => setProject({...project, contactEmail: e.target.value})} /></div>
+                           <div><label className="label">PerfoTec Employee</label><input type="text" className="input" value={project.employee} onChange={e => setProject({...project, employee: e.target.value})} /></div>
+                           <div><label className="label">Trial Target</label><input type="text" className="input" value={project.trialTarget} onChange={e => setProject({...project, trialTarget: e.target.value})} /></div>
+                           <div className="col-span-2 bg-slate-50 p-4 rounded border border-slate-200"><label className="label text-blue-800 mb-2 border-b border-blue-200 pb-1 w-full block">Respiration Data</label><div className="grid grid-cols-3 gap-4"><div><label className="label">RR O₂</label><input type="text" className="input" value={project.rrO2} onChange={e => setProject({...project, rrO2: e.target.value})} /></div><div><label className="label">RR CO₂</label><input type="text" className="input" value={project.rrCO2} onChange={e => setProject({...project, rrCO2: e.target.value})} /></div><div><label className="label">Measured at (°C)</label><input type="text" className="input" value={project.rrTemp} onChange={e => setProject({...project, rrTemp: e.target.value})} /></div></div></div>
+                         </div>
+                         <div className="space-y-4">
+                            <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center bg-slate-50 relative group h-24"><input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleLogoUpload} />{project.logo ? <img src={project.logo} className="h-full object-contain" /> : <><Upload size={24} color={BRAND.colors.blue} className="mb-2"/><span className="font-bold text-xs text-slate-600">Upload Logo (PNG)</span></>}</div>
+                            <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center bg-slate-50 relative group h-32"><input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleCoverImageUpload} />{project.coverImage ? <img src={project.coverImage} className="w-full h-full object-cover rounded" /> : <><ImageIcon size={24} color={BRAND.colors.green} className="mb-2"/><span className="font-bold text-xs text-slate-600">Cover Photo</span></>}</div>
+                            <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center bg-slate-50 relative group h-32"><input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleStartImageUpload} />{project.startImage ? <img src={project.startImage} className="w-full h-full object-cover rounded" /> : <><ImageIcon size={24} color={BRAND.colors.green} className="mb-2"/><span className="font-bold text-xs text-slate-600">Ref Photo</span></>}</div>
+                         </div>
+                       </div>
+                    </div>
+                    <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-100">
+                      <h2 className="font-bold text-lg mb-6 text-[#211A1A] border-b pb-2 flex items-center gap-2"><Truck size={20}/> Product Supply Chain</h2>
+                      <div className="space-y-4">
+                        {supplyChain.map((step, idx) => (
+                           <div key={idx} className="flex gap-2 items-end bg-slate-50 p-4 rounded-lg border border-slate-200 relative group">
+                              <div className="flex flex-col gap-1 mr-2"><button onClick={() => moveChainStep(idx, 'up')} disabled={idx === 0} className="p-1 hover:bg-slate-200 rounded disabled:opacity-30"><ChevronUp size={16}/></button><button onClick={() => moveChainStep(idx, 'down')} disabled={idx === supplyChain.length - 1} className="p-1 hover:bg-slate-200 rounded disabled:opacity-30"><ChevronDown size={16}/></button></div>
+                              <div className="flex-1"><label className="label">Step {idx+1}</label>{idx === 2 ? (<select className="input" value={step.stage} onChange={e => updateChainStep(idx, 'stage', e.target.value)}><option>Transport by road</option><option>Seafreight</option><option>Airfreight</option><option>Storage</option></select>) : (<input type="text" className="input" value={step.stage} onChange={e => updateChainStep(idx, 'stage', e.target.value)} />)}</div>
+                              <div className="w-40 flex gap-2"><div><label className="label">Temp (°C)</label><input type="number" className="input font-bold" value={step.tempStart} onChange={e => updateChainStep(idx, 'tempStart', e.target.value)} /></div><div><label className="label">To</label><input type="number" className="input" value={step.tempEnd} onChange={e => updateChainStep(idx, 'tempEnd', e.target.value)} placeholder="-" /></div></div>
+                              <div className="w-32 flex gap-2"><div><label className="label">Days</label><input type="number" className="input" value={step.daysStart} onChange={e => updateChainStep(idx, 'daysStart', e.target.value)} /></div><div><label className="label">To</label><input type="number" className="input" value={step.daysEnd} onChange={e => updateChainStep(idx, 'daysEnd', e.target.value)} placeholder="-" /></div></div>
+                              <div className="w-32"><label className="label">Action</label><select className="input" value={step.action} onChange={e => updateChainStep(idx, 'action', e.target.value)}><option value="none">-</option><option value="pack">Pack</option><option value="unpack">Unpack</option></select></div>
+                              <button onClick={() => removeChainStep(idx)} className="p-2.5 bg-red-50 text-red-500 rounded border border-red-100 hover:bg-red-100"><Trash2 size={18}/></button>
+                           </div>
+                        ))}
+                        <button onClick={addChainStep} className="flex items-center gap-2 text-sm font-bold text-green-700 hover:text-green-800"><Plus size={16}/> Add Step</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'groups' && (
+                  <>
+                    <div className="col-span-3 space-y-4">
+                       {/* Global Criteria Config */}
+                       <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm mb-4">
+                          <label className="label mb-2 text-slate-700">Global Assessment Criteria</label>
+                          <div className="flex flex-wrap gap-2 mb-3">
+                            {project.criteria.length === 0 && <span className="text-xs text-gray-400 italic">No criteria selected.</span>}
+                            {project.criteria.map(c => (
+                              <span key={c} className="bg-slate-50 border border-slate-300 text-slate-700 text-xs px-2 py-1 rounded flex items-center gap-1">{c} <button onClick={() => toggleCriteria(c)} className="text-red-400 hover:text-red-600 font-bold">×</button></span>
+                            ))}
+                          </div>
+                          <div className="flex gap-2">
+                            <select className="input w-full" value={newCriteria} onChange={e => setNewCriteria(e.target.value)}>
+                               <option value="">Select standard criterion...</option>
+                               {DEFAULT_CRITERIA.filter(c => !project.criteria.includes(c)).map(c => <option key={c}>{c}</option>)}
+                            </select>
+                            <button onClick={addNewCriteria} className="bg-slate-800 text-white px-3 rounded hover:bg-black"><Plus size={16}/></button>
+                          </div>
+                       </div>
+
+                       <button onClick={addNewVariant} className="w-full py-3 rounded font-bold border-2 border-dashed hover:bg-green-50 text-green-700 transition" style={{borderColor: BRAND.colors.green}}>+ New Variant</button>
+                       {groups.map((g, idx) => (
+                         <div key={g.id} onClick={() => setActiveGroupId(g.id)} className={`p-4 rounded-lg border cursor-pointer transition relative group ${activeGroupId === g.id ? 'bg-white shadow-md border-green-500 border-l-4' : 'bg-slate-50 hover:bg-white'}`}>
+                           <div className="flex items-center gap-3 font-bold text-sm text-slate-700"><div className="w-3 h-3 rounded-full" style={{ backgroundColor: CHART_COLORS[idx % CHART_COLORS.length].stroke }}></div>{g.name}</div>
+                           <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition">
+                              <button onClick={(e) => { e.stopPropagation(); duplicateGroup(g.id); }} className="p-1.5 bg-blue-50 text-blue-600 rounded"><Copy size={14} /></button>
+                              <button onClick={(e) => { e.stopPropagation(); removeGroup(g.id); }} className="p-1.5 bg-red-50 text-red-600 rounded"><Trash2 size={14} /></button>
+                           </div>
+                         </div>
+                       ))}
+                    </div>
+                    <div className="col-span-9 bg-white p-8 rounded-xl shadow-sm border border-slate-100 space-y-8">
+                       {groups.find(g => g.id === activeGroupId) && (
+                         <>
+                           <div>
+                             <h3 className="font-bold text-lg mb-4 text-[#211A1A]">Trial Samples Config</h3>
+                             <div className="grid grid-cols-2 gap-6 mb-4"><div><label className="label">Name</label><input type="text" className="input font-bold" value={groups.find(g => g.id === activeGroupId).name} onChange={(e) => handleGroupChange(activeGroupId, 'name', null, e.target.value)} /></div><div><label className="label">Packaging Type</label><select className="input" value={groups.find(g => g.id === activeGroupId).specs.packaging} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'packaging', e.target.value)}>{PACKAGING_TYPES.map(t => <option key={t}>{t}</option>)}</select></div></div>
+                             
+                             <label className="label text-blue-800 mb-2 border-b border-blue-200 pb-1 w-full block mt-4">Packaging Dimensions</label>
+                             <div className="grid grid-cols-3 gap-4 bg-slate-50 p-4 rounded-t-lg border-x border-t border-slate-100">
+                                <div><label className="label">Length (mm)</label><input type="number" className="input" value={groups.find(g => g.id === activeGroupId).specs.length} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'length', e.target.value)} /></div>
+                                <div><label className="label">Width (mm)</label><input type="number" className="input" value={groups.find(g => g.id === activeGroupId).specs.width} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'width', e.target.value)} /></div>
+                                <div><label className="label">Height (mm)</label><input type="number" className="input" value={groups.find(g => g.id === activeGroupId).specs.height} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'height', e.target.value)} /></div>
+                             </div>
+                             <div className="grid grid-cols-4 gap-4 bg-slate-50 p-4 rounded-b-lg border border-slate-100 mb-6"><div><label className="label">Material</label><input className="input" value={groups.find(g => g.id === activeGroupId).specs.material} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'material', e.target.value)} /></div><div><label className="label">Transmission Value</label><input type="number" className="input" value={groups.find(g => g.id === activeGroupId).specs.holes} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'holes', e.target.value)} /></div></div>
+                             
+                             <div className="border-2 border-dashed border-blue-200 bg-blue-50 rounded-lg p-4 flex items-center justify-between"><div className="flex items-center gap-4"><LineChart size={24} className="text-blue-500" /><div><div className="font-bold text-sm text-blue-900">Predicted Gas Graph</div></div></div><label className="cursor-pointer bg-white border border-blue-200 text-blue-700 px-4 py-2 rounded font-bold text-xs hover:bg-blue-50 transition">Upload Image<input type="file" accept="image/*" className="hidden" onChange={(e) => handlePredictedImageUpload(e, activeGroupId)} /></label></div>
+                             {groups.find(g => g.id === activeGroupId).predictedImage && <div className="mt-2 border rounded p-2 bg-white inline-block"><img src={groups.find(g => g.id === activeGroupId).predictedImage} className="h-32 object-contain" /></div>}
+                           </div>
+                           
+                           <div>
+                             <div className="flex justify-between items-center mb-4 border-b pb-2"><h3 className="font-bold text-lg text-[#211A1A]">Measurements</h3><button onClick={() => addMeasurementDay(activeGroupId)} className="text-xs text-white px-3 py-1.5 rounded font-bold shadow-md hover:opacity-90" style={{background: BRAND.colors.green}}>+ Add Day</button></div>
+                             <table className="w-full text-sm">
+                               <thead><tr className="bg-slate-50 text-left text-slate-500"><th className="p-3">Day</th><th className="p-3">Samples</th><th className="p-3 font-bold" style={{color:BRAND.colors.blue}}>O₂</th><th className="p-3 font-bold" style={{color:BRAND.colors.green}}>CO₂</th><th className="p-3">Wt.</th><th className="p-3">Qual.</th><th className="p-3">Actions</th></tr></thead>
+                               <tbody>
+                                 {groups.find(g => g.id === activeGroupId).measurements.map((m, idx) => (
+                                     <tr key={idx} className="hover:bg-blue-50 transition border-b border-slate-50">
+                                       <td className="p-3 font-bold">{formatDay(m.day)}</td>
+                                       <td className="p-3 text-xs text-slate-400">{m.samples.length}x</td>
+                                       <td className="p-3 font-bold text-blue-700">{getAverage(m.samples, 'o2')}%</td>
+                                       <td className="p-3 font-bold text-green-700">{getAverage(m.samples, 'co2')}%</td>
+                                       <td className="p-3 text-slate-600">{getAverage(m.samples, 'weight')}g</td>
+                                       <td className="p-3"><input type="number" className="w-12 p-1 border rounded" value={m.quality} onChange={e => updateQuality(activeGroupId, idx, e.target.value)} /></td>
+                                       <td className="p-3 flex gap-2">
+                                          <button onClick={() => openSampleModal(activeGroupId, idx)} className="text-slate-500 hover:text-green-600 bg-white border shadow-sm p-1.5 rounded" title="Edit Data & Quality"><Edit3 size={14}/></button>
+                                          <button onClick={() => openDetailsModal(activeGroupId, idx)} className={`text-slate-500 hover:text-blue-600 bg-white border shadow-sm p-1.5 rounded ${m.images && m.images.length > 0 ? 'text-blue-600 border-blue-200 bg-blue-50' : ''}`} title="Photos"><Camera size={14}/></button>
+                                          <button onClick={() => removeMeasurementDay(activeGroupId, idx)} disabled={m.day === 0} className={`p-1.5 rounded border shadow-sm ${m.day === 0 ? 'bg-gray-100 text-gray-300' : 'bg-white text-red-500 hover:bg-red-50'}`}><Trash2 size={14}/></button>
+                                       </td>
+                                     </tr>
+                                 ))}
+                               </tbody>
+                             </table>
+                           </div>
+                         </>
+                       )}
+                    </div>
+                  </>
+                )}
+
+                {activeTab === 'analysis' && (
+                  <div className="col-span-12 space-y-6">
+                    <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-100 grid grid-cols-2 gap-8">
+                       <div className="col-span-2"><h2 className="font-bold text-lg border-b pb-2 mb-2 text-[#211A1A]">2 Summary and Conclusions</h2></div>
+                       <div><label className="label mb-2">Main Conclusion</label><textarea rows="6" className="input w-full" placeholder="The product quality in the PerfoTec Liner..." value={analysis.conclusion} onChange={(e) => setAnalysis(prev => ({ ...prev, conclusion: e.target.value }))} /></div>
+                       <div><label className="label mb-2">Detailed Conclusions</label><div className="flex gap-2 mb-2"><input type="text" className="input" placeholder="Add point..." value={newStep} onChange={e => setNewStep(e.target.value)} onKeyPress={e => e.key === 'Enter' && addNextStep()} /><button onClick={addNextStep} className="bg-slate-800 text-white px-4 rounded hover:bg-black"><Plus size={18}/></button></div><div className="space-y-1">{analysis.nextSteps.map((s, i) => (<div key={i} className="text-sm bg-slate-50 p-2 rounded flex justify-between"><span>• {s}</span><button onClick={() => removeNextStep(i)} className="text-red-500">×</button></div>))}</div></div>
+                       <div className="col-span-2"><label className="label mb-2">Gas Levels Analysis</label><textarea rows="4" className="input w-full" value={analysis.graphNotes} onChange={(e) => setAnalysis(prev => ({ ...prev, graphNotes: e.target.value }))} /></div>
+                    </div>
+                  </div>
+                )}
+              </main>
+            </div>
+          );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
