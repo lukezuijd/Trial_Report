@@ -236,7 +236,7 @@
           );
         };
 
-        const SampleModal = ({ isOpen, onClose, data, onSave, day0Samples, projectCriteria, isDayEditable }) => {
+        const SampleModal = ({ isOpen, onClose, data, onSave, day0Samples, projectCriteria, isEvaluationDay }) => {
           if (!isOpen) return null;
           const [samples, setSamples] = useState(data.samples || []);
           const [day, setDay] = useState(data.day);
@@ -288,7 +288,7 @@
                     <div className="flex flex-wrap justify-between items-center mb-4 bg-[#E9E9E9] p-3 rounded-lg text-xs gap-4">
                       <div className="flex items-center gap-2">
                          <label className="font-bold">Day:</label>
-                         <input type="number" value={day} onChange={e => setDay(e.target.value)} disabled={!isDayEditable} className={`w-16 p-1.5 border rounded text-center font-bold ${!isDayEditable ? 'bg-gray-200 cursor-not-allowed text-gray-500' : 'bg-white'}`} />
+                         <input type="number" value={day} disabled={!isEvaluationDay} onChange={e => setDay(e.target.value)} className={`w-16 p-1.5 border rounded text-center font-bold ${!isEvaluationDay ? 'bg-white' : 'bg-gray-200 cursor-not-allowed'}`} />
                       </div>
                       <div className="text-right flex gap-4">
                          {day > 0 && <div style={{ color: weightLoss > 3 ? '#dc2626' : BRAND.colors.green, fontWeight: 'bold' }}>Avg Loss: {weightLoss}%</div>}
@@ -328,19 +328,21 @@
                        <div className="flex-1 flex flex-col overflow-hidden">
                          <div className="flex-1 overflow-y-auto pr-2">
                            <table className="w-full text-sm">
-                             <thead className="text-left text-slate-500 sticky top-0 bg-slate-50"><tr><th className="pb-2">Criterion</th><th className="pb-2 w-16">Score</th></tr></thead>
+                             <thead className="text-left text-slate-500 sticky top-0 bg-slate-50"><tr><th className="pb-2">Criterion</th><th className="pb-2 w-16">Score</th><th className="pb-2">Notes</th></tr></thead>
                              <tbody>
-                               {qualityParams.length === 0 && <tr><td colSpan="2" className="text-center italic text-gray-400 py-4">No criteria selected in Groups tab.</td></tr>}
+                               {qualityParams.length === 0 && <tr><td colSpan="3" className="text-center italic text-gray-400 py-4">No criteria selected in Groups tab.</td></tr>}
                                {qualityParams.map((param, i) => (
                                  <tr key={i} className="border-b border-slate-200 last:border-0">
                                    <td className="py-2 text-slate-700 font-medium">{param.name}</td>
                                    <td className="py-2"><input type="number" min="1" max="10" className="w-full p-1.5 border rounded text-center font-bold outline-none focus:ring-2 focus:ring-blue-500" value={param.score} onChange={e => updateParam(i, 'score', e.target.value)} placeholder="-" /></td>
+                                   <td className="py-2"><input type="text" className="w-full p-1.5 border rounded outline-none focus:ring-2 focus:ring-blue-500" value={param.notes} onChange={e => updateParam(i, 'notes', e.target.value)} placeholder="..." /></td>
                                  </tr>
                                ))}
                              </tbody>
                            </table>
                          </div>
                          
+                         {/* Legend */}
                          <div className="mt-4 pt-4 border-t border-slate-200 shrink-0">
                            <p className="text-[10px] font-bold text-slate-500 mb-1 uppercase">Score Scale (1-10)</p>
                            <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[9px] text-slate-500">
@@ -526,9 +528,9 @@
           const openSampleModal = (groupId, index) => { 
             const g = groups.find(x => x.id === groupId); 
             const meas = g.measurements[index];
-            const isDayEditable = index !== 0 && index !== g.measurements.length - 1;
+            const isEvaluationDay = meas.day === 0 || (project.totalDuration && meas.day === parseInt(project.totalDuration));
             const day0 = g.measurements.find(m => m.day === 0);
-            setEditingMeasurement({ groupId, index, data: meas, day0Samples: day0?.samples, isDayEditable }); 
+            setEditingMeasurement({ groupId, index, data: meas, day0Samples: day0?.samples, isEvaluationDay }); 
             setSampleModalOpen(true); 
           };
           
@@ -544,15 +546,8 @@
           const addMeasurementDay = (groupId) => {
             setGroups(prev => prev.map(g => {
               if (g.id !== groupId) return g;
-              // Day is calculated right before the end day
-              const lastMeas = g.measurements[g.measurements.length - 1];
-              const prevMeas = g.measurements[g.measurements.length - 2];
-              const newDay = prevMeas ? prevMeas.day + 1 : 1;
-              const newMeas = { day: newDay, samples: [{id:1,o2:'',co2:'',weight:''},{id:2,o2:'',co2:'',weight:''},{id:3,o2:'',co2:'',weight:''}], quality: 9, notes: '', images: [], qualityParams: [], evaluateQuality: false };
-              // Insert before the last day
-              const updatedMeasurements = [...g.measurements];
-              updatedMeasurements.splice(updatedMeasurements.length - 1, 0, newMeas);
-              return { ...g, measurements: updatedMeasurements };
+              const lastDay = parseFloat(g.measurements[g.measurements.length - 1]?.day || 0);
+              return { ...g, measurements: [...g.measurements, { day: lastDay + 1, samples: [{id:1,o2:'',co2:'',weight:''},{id:2,o2:'',co2:'',weight:''},{id:3,o2:'',co2:'',weight:''}], quality: 9, notes: '', images: [], qualityParams: [] }]};
             }));
           };
           
@@ -615,8 +610,59 @@
           if (isPreview) {
             return (
               <div className="min-h-screen bg-gray-500 p-0 sm:p-8 overflow-y-auto font-sans print:p-0 print:bg-white">
+                <style>{`
+                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=League+Spartan:wght@700&display=swap');
+                    .brand-heading { font-family: 'League Spartan', sans-serif; }
+                    .brand-body { font-family: 'Inter', sans-serif; }
+                    .report-section-title { 
+                        color: ${BRAND.colors.green}; 
+                        font-family: 'League Spartan', sans-serif; 
+                        font-size: 2rem; 
+                        font-weight: bold; 
+                        text-transform: uppercase;
+                        border-bottom: 3px solid ${BRAND.colors.gray}; 
+                        padding-bottom: 0.5rem; 
+                        margin-bottom: 1.5rem; 
+                        margin-top: 1rem; 
+                    }
+                    .report-table th { background-color: ${BRAND.colors.green}; color: white; padding: 8px; text-align: left; font-family: 'League Spartan', sans-serif; }
+                    .report-table td { border-bottom: 1px solid ${BRAND.colors.gray}; padding: 8px; font-family: 'Inter', sans-serif; font-size: 0.9rem; }
+                    
+                    /* ROBUST PRINT STYLES */
+                    @media print {
+                      body { background: white; margin: 0; padding: 0; }
+                      body * { visibility: hidden; }
+                      #print-content, #print-content * { visibility: visible !important; }
+                      #print-content { 
+                        position: absolute; 
+                        left: 0; 
+                        top: 0; 
+                        width: 100%; 
+                        margin: 0; 
+                        padding: 0; 
+                        background: white; 
+                        box-shadow: none;
+                      }
+                      .print\\:hidden { display: none !important; }
+                      .page-break { page-break-before: always !important; }
+                      svg { break-inside: avoid; }
+                    }
+                `}</style>
+
+                {/* Knoppen BUITEN het print-gebied */}
+                <div className="fixed bottom-8 right-8 flex gap-4 print:hidden z-50">
+                  <button onClick={() => setIsPreview(false)} className="bg-slate-600 text-white px-6 py-3 rounded-full shadow-lg font-bold transition hover:bg-slate-700">Edit</button>
+                  <button onClick={handleWordExport} className="bg-blue-600 text-white px-6 py-3 rounded-full shadow-lg font-bold flex gap-2 hover:bg-blue-700 transition">
+                    <FileArchive size={20} /> Download Word
+                  </button>
+                  <button onClick={handlePrint} className="text-white px-6 py-3 rounded-full shadow-lg font-bold flex gap-2 hover:opacity-90 transition" style={{backgroundColor: BRAND.colors.green}}>
+                    <Printer size={20} /> Download PDF
+                  </button>
+                </div>
+
                 <div id="print-content" className="max-w-[21cm] mx-auto bg-white shadow-2xl min-h-[29.7cm] p-12 relative print:shadow-none print:max-w-full print:w-full print:p-0">
-                  {/* COVER */}
+                  
+                  {/* --- PAGE 1: COVER --- */}
                   <div className="h-[27cm] flex flex-col justify-between">
                      <div>
                         {/* Header Logos */}
@@ -642,23 +688,28 @@
 
                   <div className="page-break"></div>
 
-                  {/* SETTING & SUMMARY */}
-                  <div>
-                    <h3 className="text-xl font-bold mb-6 brand-heading">Contents</h3>
-                    <ul className="space-y-2 brand-body text-sm mb-12 text-slate-700">
-                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-1"><span>1 Setting</span> <span>3</span></li>
-                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-1"><span>2 Summary and Conclusions</span> <span>3</span></li>
-                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-1"><span>3 Trial set up</span> <span>4</span></li>
-                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-1"><span>4 Trial results</span> <span>5</span></li>
-                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-1"><span className="pl-4">4.1 Gas Levels</span> <span>5</span></li>
-                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-1"><span className="pl-4">4.2 Weight Loss</span> <span>6</span></li>
-                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-1"><span className="pl-4">4.3 Visual quality</span> <span>6</span></li>
-                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-1"><span className="pl-4">4.4 Detailed Quality Parameters</span> <span>6</span></li>
-                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-1"><span>5 Photos</span> <span>7</span></li>
+                  {/* --- PAGE 2: TOC --- */}
+                  <div className="min-h-[27cm] flex flex-col pt-4">
+                    <h3 className="text-3xl font-bold mb-8 brand-heading uppercase" style={{ color: BRAND.colors.green }}>Contents</h3>
+                    <ul className="space-y-4 brand-body text-lg mb-12 text-slate-700">
+                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><a href="#sec-1" className="hover:text-blue-600 transition cursor-pointer">1 Setting</a> <span>3</span></li>
+                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><a href="#sec-2" className="hover:text-blue-600 transition cursor-pointer">2 Summary and Conclusions</a> <span>4</span></li>
+                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><a href="#sec-3" className="hover:text-blue-600 transition cursor-pointer">3 Trial set up</a> <span>5</span></li>
+                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><a href="#sec-4" className="hover:text-blue-600 transition cursor-pointer">4 Trial results</a> <span>6</span></li>
+                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><a href="#sec-4-1" className="hover:text-blue-600 transition cursor-pointer pl-6">4.1 Gas Levels</a> <span>6</span></li>
+                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><a href="#sec-4-2" className="hover:text-blue-600 transition cursor-pointer pl-6">4.2 Weight Loss</a> <span>6</span></li>
+                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><a href="#sec-4-3" className="hover:text-blue-600 transition cursor-pointer pl-6">4.3 Visual quality</a> <span>6</span></li>
+                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><a href="#sec-4-4" className="hover:text-blue-600 transition cursor-pointer pl-6">4.4 Detailed Quality Parameters</a> <span>6</span></li>
+                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><a href="#sec-5" className="hover:text-blue-600 transition cursor-pointer">5 Photos</a> <span>7</span></li>
                     </ul>
+                  </div>
 
+                  <div className="page-break"></div>
+
+                  {/* --- PAGE 3: SETTING --- */}
+                  <div id="sec-1" className="pt-4">
                     <h2 className="report-section-title">1 Setting</h2>
-                    <div className="grid grid-cols-[180px_1fr] gap-y-3 text-sm brand-body text-slate-800">
+                    <div className="grid grid-cols-[180px_1fr] gap-y-3 text-base brand-body text-slate-800">
                        <div className="font-bold">Product :</div> <div>{project.productName}</div>
                        <div className="font-bold">Type :</div> <div>{project.type || '-'}</div>
                        <div className="font-bold">Product Origin :</div> <div>{project.origin || '-'}</div>
@@ -667,27 +718,32 @@
                        <div className="font-bold">PerfoTec Employee :</div> <div>{project.employee || '-'}</div>
                        <div className="font-bold">Technology :</div> <div>PerfoTec Laser Perforation</div>
                        <div className="font-bold">Trial Target :</div> <div>{project.trialTarget || 'Shelf life extension'}</div>
-                       <div className="font-bold col-span-2 mt-4 border-t border-slate-300 pt-2 text-lg" style={{color: BRAND.colors.green}}>Product Supply Chain :</div> 
-                       <div className="col-span-2 w-full mt-1"><SupplyChainFlow chain={supplyChain} /></div>
-                    </div>
-
-                    <h2 className="report-section-title">2 Summary and Conclusions</h2>
-                    <div className="brand-body text-sm leading-relaxed text-justify text-slate-800">
-                       <p className="font-bold mb-2">Main Conclusion:</p>
-                       <div className="mb-4 whitespace-pre-wrap">{analysis.conclusion || 'No conclusion entered.'}</div>
-                       {analysis.nextSteps.length > 0 && <ul className="list-disc pl-5 space-y-1">{analysis.nextSteps.map((s,i) => <li key={i}>{s}</li>)}</ul>}
+                       <div className="font-bold col-span-2 mt-6 border-t border-slate-300 pt-4 text-xl" style={{color: BRAND.colors.green}}>Product Supply Chain :</div> 
+                       <div className="col-span-2 w-full mt-2"><SupplyChainFlow chain={supplyChain} /></div>
                     </div>
                   </div>
 
                   <div className="page-break"></div>
 
-                  {/* TRIAL SET UP */}
-                  <div>
+                  {/* --- PAGE 4: SUMMARY --- */}
+                  <div id="sec-2" className="pt-4">
+                    <h2 className="report-section-title">2 Summary and Conclusions</h2>
+                    <div className="brand-body text-base leading-relaxed text-justify text-slate-800">
+                       <p className="font-bold mb-3 text-lg">Main Conclusion:</p>
+                       <div className="mb-6 whitespace-pre-wrap">{analysis.conclusion || 'No conclusion entered.'}</div>
+                       {analysis.nextSteps.length > 0 && <ul className="list-disc pl-6 space-y-2">{analysis.nextSteps.map((s,i) => <li key={i}>{s}</li>)}</ul>}
+                    </div>
+                  </div>
+
+                  <div className="page-break"></div>
+
+                  {/* --- PAGE 5: TRIAL SET UP --- */}
+                  <div id="sec-3" className="pt-4">
                     <h2 className="report-section-title">3 Trial set up</h2>
-                    <div className="brand-body text-sm space-y-4 text-slate-800">
+                    <div className="brand-body text-base space-y-5 text-slate-800">
                        <div>
-                         <h4 className="font-bold mb-1">Trial samples:</h4>
-                         <ul className="list-disc pl-5">
+                         <h4 className="font-bold mb-2">Trial samples:</h4>
+                         <ul className="list-disc pl-6 space-y-1">
                            {groups.map((g,i) => {
                              const day0 = g.measurements.find(m => m.day === 0);
                              const startWeight = day0?.samples[0]?.weight || '-';
@@ -703,22 +759,22 @@
                        <p>Unpacking moments were planned for {formatDay(groups[0].measurements[groups[0].measurements.length-1].day)}. Per packing moment, samples per treatment were unpacked.</p>
                        
                        <p>Product quality was evaluated at the start and at the unpacking moment. The following attributes are evaluated according to the score scale listed below. Scores of 7 and higher are considered to be within specification and of acceptable quality.</p>
-                       <ul className="list-disc pl-5">
+                       <ul className="list-disc pl-6 grid grid-cols-2 gap-2">
                          {project.criteria.length > 0 ? project.criteria.map((c, i) => <li key={i}>{c}</li>) : <li>General Quality</li>}
                        </ul>
 
-                       <div className="my-6">
-                         <h4 className="font-bold mb-3 border-b pb-1 text-slate-700">Predicted Gas Levels (PerfoTec Hub)</h4>
-                         <div className="grid grid-cols-2 gap-4">
+                       <div className="my-8">
+                         <h4 className="font-bold mb-4 border-b-2 pb-2 text-xl text-slate-700">Predicted Gas Levels (PerfoTec Hub)</h4>
+                         <div className="grid grid-cols-2 gap-6">
                            {groups.map(g => g.predictedImage && (
-                               <div key={g.id} className="border rounded p-2"><div className="text-xs font-bold mb-1 text-center">{g.name}</div><img src={g.predictedImage} className="w-full h-32 object-contain" /></div>
+                               <div key={g.id} className="border rounded p-3"><div className="text-sm font-bold mb-2 text-center">{g.name}</div><img src={g.predictedImage} className="w-full h-40 object-contain" /></div>
                            ))}
                          </div>
                        </div>
 
                        <div>
-                         <h4 className="font-bold mb-2">Score scale:</h4>
-                         <div className="grid grid-cols-1 gap-1 text-xs text-slate-600 bg-slate-50 p-4 rounded border">
+                         <h4 className="font-bold mb-3 text-lg">Score scale:</h4>
+                         <div className="grid grid-cols-1 gap-1 text-sm text-slate-600 bg-slate-50 p-5 rounded border">
                             <div><strong className="text-slate-900">10:</strong> excellent – exceptionally appealing quality, exceptional good</div>
                             <div><strong className="text-slate-900">9:</strong> very good – natural quality of the product, full strong characteristic quality attributes</div>
                             <div><strong className="text-slate-900">8:</strong> good – natural quality, with few specimens with slightly light impairment</div>
@@ -736,37 +792,38 @@
 
                   <div className="page-break"></div>
 
-                  {/* RESULTS */}
-                  <div>
+                  {/* --- PAGE 6: RESULTS --- */}
+                  <div id="sec-4" className="pt-4">
                     <h2 className="report-section-title">4 Trial results</h2>
-                    <h3 className="font-bold text-lg mb-2 brand-heading text-slate-700">4.1 Gas Levels</h3>
-                    <p className="text-sm mb-4 italic brand-body text-slate-600">{analysis.graphNotes || 'Gas levels were monitored throughout the shelf life period.'}</p>
+                    
+                    <h3 id="sec-4-1" className="font-bold text-xl mb-2 brand-heading text-slate-700">4.1 Gas Levels</h3>
+                    <p className="text-base mb-6 italic brand-body text-slate-600">{analysis.graphNotes || 'Gas levels were monitored throughout the shelf life period.'}</p>
                     
                     {groups.map((g, idx) => (
-                      <div key={idx} className="flex gap-4 mb-8 break-inside-avoid items-center">
+                      <div key={idx} className="flex gap-6 mb-10 break-inside-avoid items-center">
                          {g.predictedImage ? (
-                           <div className="w-1/2 border rounded p-2">
-                              <div className="text-xs font-bold mb-1 text-center text-gray-500">Prediction (Hub)</div>
+                           <div className="w-1/2 border rounded p-4 shadow-sm">
+                              <div className="text-sm font-bold mb-2 text-center text-gray-500">Prediction (Hub)</div>
                               <img src={g.predictedImage} className="w-full h-auto object-contain" />
                            </div>
                          ) : (
-                           <div className="w-1/2 border rounded p-8 text-center text-gray-300 italic">No Prediction Uploaded</div>
+                           <div className="w-1/2 border rounded p-8 text-center text-gray-300 italic shadow-sm">No Prediction Uploaded</div>
                          )}
-                         <div className="w-1/2">
-                            <div className="text-xs font-bold mb-1 text-center text-gray-500">Actual Results</div>
+                         <div className="w-1/2 shadow-sm">
+                            <div className="text-sm font-bold mb-2 text-center text-gray-500 border rounded-t bg-gray-50 py-2">Actual Results</div>
                             <VariantGasChart group={g} />
                          </div>
                       </div>
                     ))}
 
-                    <h3 className="font-bold text-lg mb-2 mt-8 brand-heading text-slate-700">4.2 Weight Loss Comparison</h3>
+                    <h3 id="sec-4-2" className="font-bold text-xl mb-4 mt-12 brand-heading text-slate-700">4.2 Weight Loss Comparison</h3>
                     <WeightLossChart groups={groups} />
 
-                    <h3 className="font-bold text-lg mb-2 mt-8 brand-heading text-slate-700">4.3 Visual quality Overview</h3>
-                    <p className="text-sm mb-4 brand-body text-slate-800">
+                    <h3 id="sec-4-3" className="font-bold text-xl mb-4 mt-12 brand-heading text-slate-700">4.3 Visual quality Overview</h3>
+                    <p className="text-base mb-4 brand-body text-slate-800">
                        On {formatDay(groups[0].measurements[groups[0].measurements.length-1].day)}, the visual quality was assessed.
                     </p>
-                    <table className="report-table w-full mb-6">
+                    <table className="report-table w-full mb-10 text-base shadow-sm">
                       <thead><tr><th>Variant</th><th>Final Day</th><th>Visual Score</th><th>Weight Loss</th><th>Key Observation</th></tr></thead>
                       <tbody>
                         {groups.map((g,i) => {
@@ -778,9 +835,9 @@
                       </tbody>
                     </table>
 
-                    <h3 className="font-bold text-lg mb-2 mt-8 brand-heading text-slate-700">4.4 Detailed Quality Parameters</h3>
+                    <h3 id="sec-4-4" className="font-bold text-xl mb-4 mt-12 brand-heading text-slate-700">4.4 Detailed Quality Parameters</h3>
                     {project.criteria.length > 0 ? (
-                      <table className="report-table w-full mb-6 text-sm">
+                      <table className="report-table w-full mb-6 text-sm shadow-sm break-inside-avoid">
                         <thead>
                           <tr>
                             <th>Criterion</th>
@@ -790,16 +847,15 @@
                         <tbody>
                           {project.criteria.map((crit, i) => (
                             <tr key={i}>
-                              <td className="font-semibold">{crit}</td>
+                              <td className="font-semibold text-base">{crit}</td>
                               {groups.map(g => {
-                                 // Look at the last measurement if it has evaluateQuality enabled
                                  const lastMeas = g.measurements[g.measurements.length - 1];
                                  const param = lastMeas.evaluateQuality ? lastMeas.qualityParams?.find(p => p.name === crit) : null;
                                  return (
                                    <td key={g.id} className="text-center align-top">
                                      {param && param.score ? (
                                        <div className="flex flex-col items-center">
-                                         <span className="font-bold text-lg leading-none mb-1" style={{color: BRAND.colors.green}}>{param.score}</span>
+                                         <span className="font-bold text-xl leading-none mb-1" style={{color: BRAND.colors.green}}>{param.score}</span>
                                          {param.notes && <span className="text-xs italic text-gray-500 leading-tight">{param.notes}</span>}
                                        </div>
                                      ) : '-'}
@@ -811,24 +867,23 @@
                         </tbody>
                       </table>
                     ) : (
-                      <p className="text-sm italic text-gray-500">No specific criteria were defined for this test.</p>
+                      <p className="text-base italic text-gray-500">No specific criteria were defined for this test.</p>
                     )}
                   </div>
 
                   <div className="page-break"></div>
 
-                  {/* PHOTOS */}
-                  <div>
+                  {/* --- PAGE 7: PHOTOS --- */}
+                  <div id="sec-5" className="pt-4">
                     <h2 className="report-section-title">5. Photos</h2>
                     <div className="grid grid-cols-2 gap-8">
                        {project.startImage && (
-                         <div className="col-span-2 mb-4">
-                            <div className="h-64 border rounded overflow-hidden flex items-center justify-center bg-slate-50"><img src={project.startImage} className="h-full object-contain"/></div>
-                            <p className="text-sm font-bold mt-2 text-center brand-heading">Picture 1. P+0 - Initial product quality</p>
+                         <div className="col-span-2 mb-6">
+                            <div className="h-80 border rounded overflow-hidden flex items-center justify-center bg-slate-50 shadow-sm"><img src={project.startImage} className="h-full object-contain"/></div>
+                            <p className="text-base font-bold mt-3 text-center brand-heading">Picture 1. P+0 - Initial product quality</p>
                          </div>
                        )}
                        {(() => {
-                         // Verzamel alle foto's van alle groepen en metingen
                          const allPhotos = groups.flatMap(g => 
                             g.measurements.flatMap(m => 
                               (m.images || []).map(img => ({
@@ -838,19 +893,19 @@
                                  caption: typeof img === 'string' ? '' : img.caption
                               }))
                             )
-                         ).sort((a,b) => a.day - b.day); // Sorteer op dag
+                         ).sort((a,b) => a.day - b.day);
                          
                          let startIndex = project.startImage ? 2 : 1;
                          
                          return allPhotos.map((photo, idx) => (
-                           <div key={idx} className="break-inside-avoid">
-                              <div className="h-48 border rounded overflow-hidden flex items-center justify-center bg-slate-50 relative">
+                           <div key={idx} className="break-inside-avoid mb-4">
+                              <div className="h-64 border rounded overflow-hidden flex items-center justify-center bg-slate-50 relative shadow-sm">
                                  <img src={photo.url} className="w-full h-full object-contain bg-white"/>
-                                 <div className="absolute top-0 left-0 bg-white/90 px-2 py-1 text-xs font-bold border-b border-r" style={{fontFamily: BRAND.fonts.heading, color: BRAND.colors.green}}>{photo.groupName}</div>
+                                 <div className="absolute top-0 left-0 bg-white/90 px-3 py-1.5 text-sm font-bold border-b border-r" style={{fontFamily: BRAND.fonts.heading, color: BRAND.colors.green}}>{photo.groupName}</div>
                               </div>
-                              <div className="text-sm mt-2 text-center brand-body px-2">
+                              <div className="text-base mt-3 text-center brand-body px-2">
                                 <span className="font-bold">Picture {startIndex + idx}.</span> {photo.groupName} at {formatDay(photo.day)}.
-                                {photo.caption && <span className="block italic font-normal text-xs text-slate-500 mt-0.5">{photo.caption}</span>}
+                                {photo.caption && <span className="block italic font-normal text-sm text-slate-500 mt-1">{photo.caption}</span>}
                               </div>
                            </div>
                          ));
@@ -858,30 +913,19 @@
                     </div>
                   </div>
                 </div>
-
-                {/* PRINT BUTTONS - Fixed with proper no-print classes */}
-                <div className="fixed bottom-8 right-8 flex gap-4 no-print z-50">
-                  <button onClick={() => setIsPreview(false)} className="bg-slate-600 text-white px-6 py-3 rounded-full shadow-lg font-bold transition hover:bg-slate-700">Edit</button>
-                  <button onClick={handleWordExport} className="bg-blue-600 text-white px-6 py-3 rounded-full shadow-lg font-bold flex gap-2 hover:bg-blue-700 transition">
-                    <FileArchive /> Download Word
-                  </button>
-                  <button onClick={handlePrint} className="text-white px-6 py-3 rounded-full shadow-lg font-bold flex gap-2 hover:opacity-90 transition" style={{backgroundColor: BRAND.colors.green}}>
-                    <Printer /> Download PDF
-                  </button>
-                </div>
               </div>
             );
           }
 
           return (
             <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-20">
-              <SampleModal isOpen={sampleModalOpen} onClose={() => setSampleModalOpen(false)} data={editingMeasurement ? editingMeasurement.data : {}} onSave={saveSampleData} day0Samples={editingMeasurement ? editingMeasurement.day0Samples : null} projectCriteria={project.criteria} isDayEditable={editingMeasurement ? editingMeasurement.isDayEditable : false} />
+              <SampleModal isOpen={sampleModalOpen} onClose={() => setSampleModalOpen(false)} data={editingMeasurement ? editingMeasurement.data : {}} onSave={saveSampleData} day0Samples={editingMeasurement ? editingMeasurement.day0Samples : null} projectCriteria={project.criteria} isEvaluationDay={editingMeasurement ? editingMeasurement.isEvaluationDay : false} />
               <DetailsModal isOpen={detailsModalOpen} onClose={() => setDetailsModalOpen(false)} data={editingMeasurement ? editingMeasurement.data : {}} onSave={saveDetailsData} />
 
               <nav className="bg-white border-b sticky top-0 z-20 px-6 py-3 flex justify-between items-center shadow-sm">
                 <div className="flex items-center gap-3">
                   <div className="text-white p-2 rounded" style={{background: BRAND.colors.green}}><Layout size={24} /></div>
-                  <div><h1 className="font-bold text-lg" style={{fontFamily: 'League Spartan'}}>PERF<span style={{color:BRAND.colors.blue}}>O</span>TEC MANAGER</h1><p className="text-xs text-slate-400 font-medium tracking-wider">OFFICIAL TEMPLATE EDITION v22.0</p></div>
+                  <div><h1 className="font-bold text-lg" style={{fontFamily: 'League Spartan'}}>PERF<span style={{color:BRAND.colors.blue}}>O</span>TEC MANAGER</h1><p className="text-xs text-slate-400 font-medium tracking-wider">OFFICIAL TEMPLATE EDITION v23.0</p></div>
                 </div>
                 <div className="flex gap-3">
                   <label className="text-slate-600 bg-white border px-4 py-2 rounded font-medium flex items-center gap-2 hover:bg-slate-50 transition cursor-pointer shadow-sm"><FolderOpen size={18} /> Load<input type="file" className="hidden" accept=".json" onChange={importData} ref={fileInputRef} /></label>
