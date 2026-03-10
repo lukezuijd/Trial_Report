@@ -133,7 +133,7 @@
           const width = 350;
           const height = 200;
           const padding = 30;
-          const data = group.measurements.sort((a,b) => a.day - b.day);
+          const data = group.measurements.sort((a,b) => parseFloat(a.day) - parseFloat(b.day));
           const maxDay = Math.max(...data.map(d => parseFloat(d.day) || 0), 5);
           const maxY = 25; 
           const getX = (day) => padding + (parseFloat(day) / maxDay) * (width - 2 * padding);
@@ -174,12 +174,12 @@
           const width = 600;
           const height = 250;
           const padding = 40;
-          const allDays = Array.from(new Set(groups.flatMap(g => g.measurements.map(m => m.day)))).sort((a,b) => a-b);
+          const allDays = Array.from(new Set(groups.flatMap(g => g.measurements.map(m => parseFloat(m.day))))).sort((a,b) => a-b);
           const days = allDays.filter(d => d > 0);
           if (days.length === 0) return <div className="text-center text-gray-400 italic p-4">No weight loss data available yet.</div>;
 
           const maxLoss = Math.max(...groups.flatMap(g => g.measurements.map(m => {
-             const day0 = g.measurements.find(meas => meas.day === 0);
+             const day0 = g.measurements.find(meas => parseFloat(meas.day) === 0);
              return getWeightLoss(m.samples, day0?.samples);
           })), 1); 
           
@@ -204,8 +204,8 @@
                   <g key={day}>
                     <text x={getX(dayIdx) + (slotWidth / 2)} y={height - 15} textAnchor="middle" fontSize="10" fill="#666" fontWeight="bold">{formatDay(day)}</text>
                     {groups.map((g, grpIdx) => {
-                       const meas = g.measurements.find(m => m.day === day);
-                       const day0 = g.measurements.find(m => m.day === 0);
+                       const meas = g.measurements.find(m => parseFloat(m.day) === day);
+                       const day0 = g.measurements.find(m => parseFloat(m.day) === 0);
                        const loss = getWeightLoss(meas?.samples, day0?.samples);
                        
                        const groupStartX = getX(dayIdx) + (slotWidth - barGroupWidth) / 2;
@@ -236,7 +236,7 @@
           );
         };
 
-        const SampleModal = ({ isOpen, onClose, data, onSave, day0Samples, projectCriteria, isEvaluationDay }) => {
+        const SampleModal = ({ isOpen, onClose, data, onSave, day0Samples, projectCriteria, isEvaluationDay, isDayEditable }) => {
           if (!isOpen) return null;
           const [samples, setSamples] = useState(data.samples || []);
           const [day, setDay] = useState(data.day);
@@ -245,7 +245,7 @@
           const [qualityParams, setQualityParams] = useState(data.qualityParams || []);
 
           useEffect(() => {
-            if (evaluateQuality && projectCriteria.length > 0) {
+            if (isEvaluationDay && projectCriteria.length > 0) {
               const currentParams = qualityParams || [];
               const newParams = projectCriteria.map(c => {
                 const existing = currentParams.find(p => p.name === c);
@@ -288,16 +288,22 @@
                     <div className="flex flex-wrap justify-between items-center mb-4 bg-[#E9E9E9] p-3 rounded-lg text-xs gap-4">
                       <div className="flex items-center gap-2">
                          <label className="font-bold">Day:</label>
-                         <input type="number" value={day} disabled={!isEvaluationDay} onChange={e => setDay(e.target.value)} className={`w-16 p-1.5 border rounded text-center font-bold ${!isEvaluationDay ? 'bg-white' : 'bg-gray-200 cursor-not-allowed'}`} />
+                         <input 
+                           type="number" 
+                           value={day} 
+                           disabled={!isDayEditable} 
+                           onChange={e => setDay(e.target.value)} 
+                           className={`w-16 p-1.5 border rounded text-center font-bold ${!isDayEditable ? 'bg-gray-200 cursor-not-allowed text-gray-500' : 'bg-white'}`} 
+                         />
                       </div>
                       <div className="text-right flex gap-4">
-                         {day > 0 && <div style={{ color: weightLoss > 3 ? '#dc2626' : BRAND.colors.green, fontWeight: 'bold' }}>Avg Loss: {weightLoss}%</div>}
+                         {parseFloat(day) > 0 && <div style={{ color: weightLoss > 3 ? '#dc2626' : BRAND.colors.green, fontWeight: 'bold' }}>Avg Loss: {weightLoss}%</div>}
                          <div>Avg Weight: <strong>{avgWeight}g</strong></div>
                       </div>
                     </div>
                     <div className="overflow-x-auto w-full">
                       <table className="w-full text-sm mb-4">
-                        <thead><tr className="text-left text-[#211A1A] border-b border-gray-200"><th className="pb-2 font-bold">#</th><th className="pb-2" style={{color: BRAND.colors.blue}}>O₂</th><th className="pb-2" style={{color: BRAND.colors.green}}>CO₂</th><th className="pb-2">Weight {day===0 && '(Start)'}</th><th className="pb-2"></th></tr></thead>
+                        <thead><tr className="text-left text-[#211A1A] border-b border-gray-200"><th className="pb-2 font-bold">#</th><th className="pb-2" style={{color: BRAND.colors.blue}}>O₂</th><th className="pb-2" style={{color: BRAND.colors.green}}>CO₂</th><th className="pb-2">Weight {parseFloat(day)===0 && '(Start)'}</th><th className="pb-2"></th></tr></thead>
                         <tbody>
                           {samples.map((s, i) => (
                             <tr key={i} className="border-b border-gray-100 last:border-0">
@@ -455,7 +461,7 @@
           const [groups, setGroups] = useState([
             {
               id: 1, name: 'Control',
-              specs: { packaging: 'Retail', material: 'BOPP', length: '', width: '', height: '', holes: '2', holeSize: '6000', otr: '', cotr: '', startGas: { o2: '20.9', co2: '0.03' } },
+              specs: { packaging: 'Retail', material: 'BOPP', length: '', width: '', height: '', holes: '2', holeSize: '6000', otr: '', cotr: '', startGas: { o2: '20.9', co2: '0.03' }, sampleCount: 3 },
               measurements: [{ day: 0, samples: [{id:1,o2:'20.9',co2:'0.03',weight:''}, {id:2,o2:'20.9',co2:'0.03',weight:''}, {id:3,o2:'20.9',co2:'0.03',weight:''}], quality: 10, notes: 'Start', images: [], qualityParams: [], evaluateQuality: true }],
               predictedImage: null 
             }
@@ -481,11 +487,37 @@
                  if (newMeas.length > 1) {
                      newMeas[newMeas.length - 1].day = endDay;
                  } else {
-                     newMeas.push({ day: endDay, samples: [{id:1,o2:'',co2:'',weight:''},{id:2,o2:'',co2:'',weight:''},{id:3,o2:'',co2:'',weight:''}], quality: 9, notes: 'End', images: [], qualityParams: [], evaluateQuality: true });
+                     const sCount = g.specs.sampleCount || 3;
+                     const endSamples = Array.from({length: sCount}, (_, i) => ({
+                         id: Date.now() + i, o2: '', co2: '', weight: ''
+                     }));
+                     newMeas.push({ day: endDay, samples: endSamples, quality: 9, notes: 'End', images: [], qualityParams: [], evaluateQuality: true });
                  }
+                 newMeas.sort((a,b) => parseFloat(a.day) - parseFloat(b.day));
                  return { ...g, measurements: newMeas };
                }));
             }
+          };
+
+          const handleSampleCountChange = (groupId, newCount) => {
+            if (isNaN(newCount) || newCount < 1) newCount = 1;
+            if (newCount > 50) newCount = 50; 
+            setGroups(prev => prev.map(g => {
+              if (g.id !== groupId) return g;
+              const newMeas = g.measurements.map(m => {
+                let newSamples = [...m.samples];
+                if (newSamples.length < newCount) {
+                  const toAdd = newCount - newSamples.length;
+                  for (let i = 0; i < toAdd; i++) {
+                    newSamples.push({ id: Date.now() + i + Math.random(), o2: parseFloat(m.day) === 0 ? '20.9' : '', co2: parseFloat(m.day) === 0 ? '0.03' : '', weight: '' });
+                  }
+                } else if (newSamples.length > newCount) {
+                  newSamples = newSamples.slice(0, newCount);
+                }
+                return { ...m, samples: newSamples };
+              });
+              return { ...g, specs: { ...g.specs, sampleCount: newCount }, measurements: newMeas };
+            }));
           };
 
           const exportData = () => {
@@ -528,9 +560,15 @@
           const openSampleModal = (groupId, index) => { 
             const g = groups.find(x => x.id === groupId); 
             const meas = g.measurements[index];
-            const isEvaluationDay = meas.day === 0 || (project.totalDuration && meas.day === parseInt(project.totalDuration));
-            const day0 = g.measurements.find(m => m.day === 0);
-            setEditingMeasurement({ groupId, index, data: meas, day0Samples: day0?.samples, isEvaluationDay }); 
+            const isEndDay = project.totalDuration && parseFloat(meas.day) === parseInt(project.totalDuration);
+            const isEvaluationDay = parseFloat(meas.day) === 0 || isEndDay;
+            
+            // P+0 and EndDay are NOT editable in terms of day-number
+            const isDayEditable = parseFloat(meas.day) !== 0 && !isEndDay;
+            
+            const day0 = g.measurements.find(m => parseFloat(m.day) === 0);
+            
+            setEditingMeasurement({ groupId, index, data: meas, day0Samples: day0?.samples, isEvaluationDay, isDayEditable }); 
             setSampleModalOpen(true); 
           };
           
@@ -540,14 +578,42 @@
             setDetailsModalOpen(true); 
           };
 
-          const saveSampleData = (u) => { setGroups(p => p.map(g => g.id !== editingMeasurement.groupId ? g : { ...g, measurements: g.measurements.map((m, i) => i === editingMeasurement.index ? { ...u, qualityParams: u.qualityParams } : m) })); };
+          const saveSampleData = (u) => { 
+            setGroups(p => p.map(g => {
+                if (g.id !== editingMeasurement.groupId) return g;
+                let newMeasurements = g.measurements.map((m, i) => i === editingMeasurement.index ? { ...u, qualityParams: u.qualityParams } : m);
+                newMeasurements.sort((a,b) => parseFloat(a.day) - parseFloat(b.day));
+                return { ...g, measurements: newMeasurements };
+            })); 
+          };
+
           const saveDetailsData = (u) => { setGroups(p => p.map(g => g.id !== editingMeasurement.groupId ? g : { ...g, measurements: g.measurements.map((m, i) => i === editingMeasurement.index ? { ...m, images: u.images } : m) })); };
 
           const addMeasurementDay = (groupId) => {
             setGroups(prev => prev.map(g => {
               if (g.id !== groupId) return g;
-              const lastDay = parseFloat(g.measurements[g.measurements.length - 1]?.day || 0);
-              return { ...g, measurements: [...g.measurements, { day: lastDay + 1, samples: [{id:1,o2:'',co2:'',weight:''},{id:2,o2:'',co2:'',weight:''},{id:3,o2:'',co2:'',weight:''}], quality: 9, notes: '', images: [], qualityParams: [] }]};
+              
+              const hasEndDay = project.totalDuration && parseInt(project.totalDuration) > 0 && g.measurements.length > 1;
+              const sCount = g.specs.sampleCount || 3;
+              const newSamples = Array.from({length: sCount}, (_, i) => ({
+                  id: Date.now() + i, o2: '', co2: '', weight: ''
+              }));
+
+              if (hasEndDay) {
+                  const lastIndex = g.measurements.length - 1;
+                  const prevMeas = g.measurements[lastIndex - 1];
+                  const newDay = prevMeas ? parseFloat(prevMeas.day) + 1 : 1;
+                  const newMeas = { day: newDay, samples: newSamples, quality: 9, notes: '', images: [], qualityParams: [], evaluateQuality: false };
+                  
+                  const updatedMeasurements = [...g.measurements];
+                  updatedMeasurements.splice(lastIndex, 0, newMeas);
+                  return { ...g, measurements: updatedMeasurements };
+              } else {
+                  const lastMeas = g.measurements[g.measurements.length - 1];
+                  const newDay = lastMeas ? parseFloat(lastMeas.day) + 1 : 1;
+                  const newMeas = { day: newDay, samples: newSamples, quality: 9, notes: '', images: [], qualityParams: [], evaluateQuality: false };
+                  return { ...g, measurements: [...g.measurements, newMeas] };
+              }
             }));
           };
           
@@ -565,12 +631,21 @@
           const addNewVariant = () => {
             const newId = Math.max(...groups.map(g => g.id)) + 1;
             const duration = parseInt(project.totalDuration) || 0;
-            const day0 = { day: 0, samples: [{id:1,o2:'20.9',co2:'0.03',weight:''},{id:2,o2:'20.9',co2:'0.03',weight:''},{id:3,o2:'20.9',co2:'0.03',weight:''}], quality: 10, notes: 'Start', images: [], qualityParams: [], evaluateQuality: true };
+            const sCount = groups[0].specs.sampleCount || 3;
+            
+            const generateSamples = (isDay0) => Array.from({length: sCount}, (_, i) => ({
+                id: Date.now() + i, 
+                o2: isDay0 ? '20.9' : '', 
+                co2: isDay0 ? '0.03' : '', 
+                weight: ''
+            }));
+
+            const day0 = { day: 0, samples: generateSamples(true), quality: 10, notes: 'Start', images: [], qualityParams: [], evaluateQuality: true };
             const meas = [day0];
             if (duration > 0) {
-               meas.push({ day: duration, samples: [{id:1,o2:'',co2:'',weight:''},{id:2,o2:'',co2:'',weight:''},{id:3,o2:'',co2:'',weight:''}], quality: 9, notes: 'End', images: [], qualityParams: [], evaluateQuality: true });
+               meas.push({ day: duration, samples: generateSamples(false), quality: 9, notes: 'End', images: [], qualityParams: [], evaluateQuality: true });
             }
-            setGroups([...groups, { id: newId, name: `Variant ${groups.length + 1}`, specs: { ...groups[0].specs }, measurements: meas, predictedImage: null }]);
+            setGroups([...groups, { id: newId, name: `Variant ${groups.length + 1}`, specs: { ...groups[0].specs, sampleCount: sCount }, measurements: meas, predictedImage: null }]);
             setActiveGroupId(newId);
           };
 
@@ -745,7 +820,7 @@
                          <h4 className="font-bold mb-2">Trial samples:</h4>
                          <ul className="list-disc pl-6 space-y-1">
                            {groups.map((g,i) => {
-                             const day0 = g.measurements.find(m => m.day === 0);
+                             const day0 = g.measurements.find(m => parseFloat(m.day) === 0);
                              const startWeight = day0?.samples[0]?.weight || '-';
                              return (
                                <li key={i}><span className="font-bold">{g.name}</span> – {g.specs.packaging}, {g.specs.material} ({g.specs.holes} holes, {startWeight}g)</li>
@@ -828,7 +903,7 @@
                       <tbody>
                         {groups.map((g,i) => {
                           const last = g.measurements[g.measurements.length - 1];
-                          const day0 = g.measurements.find(m => m.day === 0);
+                          const day0 = g.measurements.find(m => parseFloat(m.day) === 0);
                           const loss = getWeightLoss(last.samples, day0?.samples);
                           return (<tr key={i}><td>{g.name}</td><td>{formatDay(last.day)}</td><td className="font-bold">{last.quality}</td><td>{loss}%</td><td>{last.notes || '-'}</td></tr>)
                         })}
@@ -893,7 +968,7 @@
                                  caption: typeof img === 'string' ? '' : img.caption
                               }))
                             )
-                         ).sort((a,b) => a.day - b.day);
+                         ).sort((a,b) => parseFloat(a.day) - parseFloat(b.day));
                          
                          let startIndex = project.startImage ? 2 : 1;
                          
@@ -919,13 +994,13 @@
 
           return (
             <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-20">
-              <SampleModal isOpen={sampleModalOpen} onClose={() => setSampleModalOpen(false)} data={editingMeasurement ? editingMeasurement.data : {}} onSave={saveSampleData} day0Samples={editingMeasurement ? editingMeasurement.day0Samples : null} projectCriteria={project.criteria} isEvaluationDay={editingMeasurement ? editingMeasurement.isEvaluationDay : false} />
+              <SampleModal isOpen={sampleModalOpen} onClose={() => setSampleModalOpen(false)} data={editingMeasurement ? editingMeasurement.data : {}} onSave={saveSampleData} day0Samples={editingMeasurement ? editingMeasurement.day0Samples : null} projectCriteria={project.criteria} isEvaluationDay={editingMeasurement ? editingMeasurement.isEvaluationDay : false} isDayEditable={editingMeasurement ? editingMeasurement.isDayEditable : false} />
               <DetailsModal isOpen={detailsModalOpen} onClose={() => setDetailsModalOpen(false)} data={editingMeasurement ? editingMeasurement.data : {}} onSave={saveDetailsData} />
 
               <nav className="bg-white border-b sticky top-0 z-20 px-6 py-3 flex justify-between items-center shadow-sm">
                 <div className="flex items-center gap-3">
                   <div className="text-white p-2 rounded" style={{background: BRAND.colors.green}}><Layout size={24} /></div>
-                  <div><h1 className="font-bold text-lg" style={{fontFamily: 'League Spartan'}}>PERF<span style={{color:BRAND.colors.blue}}>O</span>TEC MANAGER</h1><p className="text-xs text-slate-400 font-medium tracking-wider">OFFICIAL TEMPLATE EDITION v23.0</p></div>
+                  <div><h1 className="font-bold text-lg" style={{fontFamily: 'League Spartan'}}>PERF<span style={{color:BRAND.colors.blue}}>O</span>TEC MANAGER</h1><p className="text-xs text-slate-400 font-medium tracking-wider">OFFICIAL TEMPLATE EDITION v24.0</p></div>
                 </div>
                 <div className="flex gap-3">
                   <label className="text-slate-600 bg-white border px-4 py-2 rounded font-medium flex items-center gap-2 hover:bg-slate-50 transition cursor-pointer shadow-sm"><FolderOpen size={18} /> Load<input type="file" className="hidden" accept=".json" onChange={importData} ref={fileInputRef} /></label>
@@ -1055,15 +1130,16 @@
                                <div><label className="label">Packaging Type</label><select className="input" value={groups.find(g => g.id === activeGroupId).specs.packaging} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'packaging', e.target.value)}>{PACKAGING_TYPES.map(t => <option key={t}>{t}</option>)}</select></div>
                              </div>
                              
-                             <label className="label text-blue-800 mb-2 border-b border-blue-200 pb-1 w-full block mt-4">Packaging Dimensions</label>
+                             <label className="label text-blue-800 mb-2 border-b border-blue-200 pb-1 w-full block mt-4">Packaging Dimensions & Samples</label>
                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-t-lg border-x border-t border-slate-100">
                                 <div><label className="label">Length (mm)</label><input type="number" className="input" value={groups.find(g => g.id === activeGroupId).specs.length} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'length', e.target.value)} /></div>
                                 <div><label className="label">Width (mm)</label><input type="number" className="input" value={groups.find(g => g.id === activeGroupId).specs.width} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'width', e.target.value)} /></div>
                                 <div><label className="label">Height (mm)</label><input type="number" className="input" value={groups.find(g => g.id === activeGroupId).specs.height} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'height', e.target.value)} /></div>
                              </div>
-                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-b-lg border border-slate-100 mb-6">
-                               <div className="sm:col-span-2 lg:col-span-2"><label className="label">Material</label><input className="input" value={groups.find(g => g.id === activeGroupId).specs.material} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'material', e.target.value)} /></div>
-                               <div className="sm:col-span-2 lg:col-span-2"><label className="label">Transmission Value</label><input type="number" className="input" value={groups.find(g => g.id === activeGroupId).specs.holes} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'holes', e.target.value)} /></div>
+                             <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-b-lg border border-slate-100 mb-6">
+                               <div><label className="label">Material</label><input className="input" value={groups.find(g => g.id === activeGroupId).specs.material} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'material', e.target.value)} /></div>
+                               <div><label className="label">Transmission Value</label><input type="number" className="input" value={groups.find(g => g.id === activeGroupId).specs.holes} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'holes', e.target.value)} /></div>
+                               <div><label className="label">Aantal Samples / Meting</label><input type="number" min="1" className="input bg-white border-blue-200 font-bold text-blue-900" value={groups.find(g => g.id === activeGroupId).specs.sampleCount || 3} onChange={(e) => handleSampleCountChange(activeGroupId, parseInt(e.target.value))} /></div>
                              </div>
                              
                              <div className="border-2 border-dashed border-blue-200 bg-blue-50 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -1088,7 +1164,10 @@
                                <table className="w-full text-sm min-w-[600px]">
                                  <thead><tr className="bg-slate-50 text-left text-slate-500"><th className="p-3">Day</th><th className="p-3">Samples</th><th className="p-3 font-bold" style={{color:BRAND.colors.blue}}>O₂</th><th className="p-3 font-bold" style={{color:BRAND.colors.green}}>CO₂</th><th className="p-3">Wt.</th><th className="p-3">Qual.</th><th className="p-3">Actions</th></tr></thead>
                                  <tbody>
-                                   {groups.find(g => g.id === activeGroupId).measurements.map((m, idx) => (
+                                   {groups.find(g => g.id === activeGroupId).measurements.map((m, idx) => {
+                                     const isEndDay = project.totalDuration && parseFloat(m.day) === parseInt(project.totalDuration);
+                                     const isFixedDay = parseFloat(m.day) === 0 || isEndDay;
+                                     return (
                                        <tr key={idx} className="hover:bg-blue-50 transition border-b border-slate-50">
                                          <td className="p-3 font-bold">{formatDay(m.day)}</td>
                                          <td className="p-3 text-xs text-slate-400">{m.samples.length}x</td>
@@ -1099,10 +1178,11 @@
                                          <td className="p-3 flex gap-2">
                                             <button onClick={() => openSampleModal(activeGroupId, idx)} className="text-slate-500 hover:text-green-600 bg-white border shadow-sm p-1.5 rounded" title="Edit Data & Quality"><Edit3 size={14}/></button>
                                             <button onClick={() => openDetailsModal(activeGroupId, idx)} className={`text-slate-500 hover:text-blue-600 bg-white border shadow-sm p-1.5 rounded ${m.images && m.images.length > 0 ? 'text-blue-600 border-blue-200 bg-blue-50' : ''}`} title="Photos"><Camera size={14}/></button>
-                                            <button onClick={() => removeMeasurementDay(activeGroupId, idx)} disabled={m.day === 0} className={`p-1.5 rounded border shadow-sm ${m.day === 0 ? 'bg-gray-100 text-gray-300' : 'bg-white text-red-500 hover:bg-red-50'}`}><Trash2 size={14}/></button>
+                                            <button onClick={() => removeMeasurementDay(activeGroupId, idx)} disabled={isFixedDay} className={`p-1.5 rounded border shadow-sm ${isFixedDay ? 'bg-gray-100 text-gray-300' : 'bg-white text-red-500 hover:bg-red-50'}`}><Trash2 size={14}/></button>
                                          </td>
                                        </tr>
-                                   ))}
+                                     )
+                                   })}
                                  </tbody>
                                </table>
                              </div>
