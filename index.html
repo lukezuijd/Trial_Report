@@ -47,7 +47,17 @@
           { stroke: '#9333ea', fill: '#f3e8ff', name: 'Purple' }   
         ];
 
-        const PACKAGING_TYPES = ['Retail', 'Box/ Crate', 'Cube crate', 'Pallet'];
+        const PACKAGING_TYPES = ['Punnets', 'Pillow Bag', 'Box/ Crate', 'Cube crate', 'Pallet'];
+
+        const PHOTO_CATEGORIES = [
+          'External Quality',
+          'Internal Quality',
+          'Loose Produce',
+          'Box/Crate',
+          'Weight measurement',
+          'Gas measurement',
+          'Other'
+        ];
 
         const DEFAULT_CRITERIA = [
           'General Quality', 'Taste', 'Visual Appearance', 'Color',
@@ -377,22 +387,26 @@
 
         const DetailsModal = ({ isOpen, onClose, data, onSave }) => {
           if (!isOpen) return null;
-          const initialImages = (data.images || []).map(img => typeof img === 'string' ? {url: img, caption: ''} : img);
+          const initialImages = (data.images || []).map(img => 
+            typeof img === 'string' 
+            ? {url: img, caption: '', category: 'External Quality'} 
+            : { ...img, category: img.category || 'External Quality' }
+          );
           const [images, setImages] = useState(initialImages);
 
           const handleImageUpload = (e) => {
             const files = Array.from(e.target.files);
             files.forEach(file => {
               const reader = new FileReader();
-              reader.onloadend = () => setImages(prev => [...prev, { url: reader.result, caption: '' }]);
+              reader.onloadend = () => setImages(prev => [...prev, { url: reader.result, caption: '', category: 'External Quality' }]);
               reader.readAsDataURL(file);
             });
           };
 
           const removeImage = (idx) => setImages(images.filter((_, i) => i !== idx));
-          const updateImageCaption = (idx, value) => {
+          const updateImageField = (idx, field, value) => {
             const newImgs = [...images];
-            newImgs[idx].caption = value;
+            newImgs[idx][field] = value;
             setImages(newImgs);
           };
 
@@ -400,7 +414,7 @@
 
           return (
             <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 font-sans backdrop-blur-sm print:hidden">
-              <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl overflow-hidden border border-gray-100 flex flex-col max-h-[90vh]">
+              <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl overflow-hidden border border-gray-100 flex flex-col max-h-[90vh]">
                 <div className="p-4 flex justify-between items-center text-white" style={{ background: `linear-gradient(90deg, ${BRAND.colors.black} 0%, #423B3B 50%, ${BRAND.colors.black} 100%)` }}>
                   <h3 className="font-bold flex items-center gap-2" style={{ fontFamily: BRAND.fonts.heading }}><Camera size={18}/> Manage Photos</h3>
                   <button onClick={onClose} className="hover:text-red-300 transition"><X size={20}/></button>
@@ -413,7 +427,14 @@
                            <img src={img.url} className="w-full h-full object-cover" />
                            <button onClick={() => removeImage(idx)} className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition shadow-lg"><X size={12}/></button>
                         </div>
-                        <input type="text" className="w-full p-2 text-xs border-t outline-none focus:bg-blue-50 transition" placeholder="Caption / Beschrijving..." value={img.caption} onChange={e => updateImageCaption(idx, e.target.value)} />
+                        <select 
+                            className="w-full p-2 text-xs border-t outline-none focus:bg-blue-50 transition bg-white" 
+                            value={img.category} 
+                            onChange={e => updateImageField(idx, 'category', e.target.value)}
+                        >
+                            {PHOTO_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                        <input type="text" className="w-full p-2 text-xs border-t outline-none focus:bg-blue-50 transition" placeholder="Caption / Beschrijving..." value={img.caption} onChange={e => updateImageField(idx, 'caption', e.target.value)} />
                       </div>
                     ))}
                     <label className="border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 aspect-square min-h-[150px]">
@@ -461,7 +482,7 @@
           const [groups, setGroups] = useState([
             {
               id: 1, name: 'Control',
-              specs: { packaging: 'Retail', material: 'BOPP', length: '', width: '', height: '', holes: '2', holeSize: '6000', otr: '', cotr: '', startGas: { o2: '20.9', co2: '0.03' }, sampleCount: 3 },
+              specs: { packaging: 'Punnets', material: 'BOPP', length: '', width: '', height: '', holes: '2', holeSize: '6000', otr: '', cotr: '', startGas: { o2: '20.9', co2: '0.03' }, sampleCount: 3 },
               measurements: [{ day: 0, samples: [{id:1,o2:'20.9',co2:'0.03',weight:''}, {id:2,o2:'20.9',co2:'0.03',weight:''}, {id:3,o2:'20.9',co2:'0.03',weight:''}], quality: 10, notes: 'Start', images: [], qualityParams: [], evaluateQuality: true }],
               predictedImage: null 
             }
@@ -683,6 +704,32 @@
           };
 
           if (isPreview) {
+            
+            // Verzamel en groepeer foto's voor sectie 5
+            const allPhotos = groups.flatMap(g => 
+              g.measurements.flatMap(m => 
+                (m.images || []).map(img => ({
+                   groupName: g.name,
+                   day: m.day,
+                   url: typeof img === 'string' ? img : img.url,
+                   caption: typeof img === 'string' ? '' : img.caption,
+                   category: (typeof img === 'object' && img.category) ? img.category : 'Other'
+                }))
+              )
+            );
+
+            const photosByCategory = {};
+            allPhotos.forEach(p => {
+                if (!photosByCategory[p.category]) photosByCategory[p.category] = [];
+                photosByCategory[p.category].push(p);
+            });
+
+            // Bewaar de gedefinieerde volgorde voor weergave
+            const categoriesPresent = PHOTO_CATEGORIES.filter(c => photosByCategory[c] && photosByCategory[c].length > 0);
+            Object.keys(photosByCategory).forEach(c => {
+                if (!categoriesPresent.includes(c)) categoriesPresent.push(c);
+            });
+
             return (
               <div className="min-h-screen bg-gray-500 p-0 sm:p-8 overflow-y-auto font-sans print:p-0 print:bg-white">
                 <style>{`
@@ -838,17 +885,8 @@
                          {project.criteria.length > 0 ? project.criteria.map((c, i) => <li key={i}>{c}</li>) : <li>General Quality</li>}
                        </ul>
 
-                       <div className="my-8">
-                         <h4 className="font-bold mb-4 border-b-2 pb-2 text-xl text-slate-700">Predicted Gas Levels (PerfoTec Hub)</h4>
-                         <div className="grid grid-cols-2 gap-6">
-                           {groups.map(g => g.predictedImage && (
-                               <div key={g.id} className="border rounded p-3"><div className="text-sm font-bold mb-2 text-center">{g.name}</div><img src={g.predictedImage} className="w-full h-40 object-contain" /></div>
-                           ))}
-                         </div>
-                       </div>
-
                        <div>
-                         <h4 className="font-bold mb-3 text-lg">Score scale:</h4>
+                         <h4 className="font-bold mb-2">Score scale:</h4>
                          <div className="grid grid-cols-1 gap-1 text-sm text-slate-600 bg-slate-50 p-5 rounded border">
                             <div><strong className="text-slate-900">10:</strong> excellent – exceptionally appealing quality, exceptional good</div>
                             <div><strong className="text-slate-900">9:</strong> very good – natural quality of the product, full strong characteristic quality attributes</div>
@@ -910,7 +948,7 @@
                       </tbody>
                     </table>
 
-                    <h3 id="sec-4-4" className="font-bold text-xl mb-4 mt-12 brand-heading text-slate-700">4.4 Detailed Quality Parameters</h3>
+                    <h3 id="sec-4-4" className="font-bold text-xl mb-4 mt-12 brand-heading text-slate-700">4.4 Detailed Quality Parameters (End of Trial)</h3>
                     {project.criteria.length > 0 ? (
                       <table className="report-table w-full mb-6 text-sm shadow-sm break-inside-avoid">
                         <thead>
@@ -951,41 +989,47 @@
                   {/* --- PAGE 7: PHOTOS --- */}
                   <div id="sec-5" className="pt-4">
                     <h2 className="report-section-title">5. Photos</h2>
-                    <div className="grid grid-cols-2 gap-8">
-                       {project.startImage && (
-                         <div className="col-span-2 mb-6">
-                            <div className="h-80 border rounded overflow-hidden flex items-center justify-center bg-slate-50 shadow-sm"><img src={project.startImage} className="h-full object-contain"/></div>
-                            <p className="text-base font-bold mt-3 text-center brand-heading">Picture 1. P+0 - Initial product quality</p>
-                         </div>
-                       )}
-                       {(() => {
-                         const allPhotos = groups.flatMap(g => 
-                            g.measurements.flatMap(m => 
-                              (m.images || []).map(img => ({
-                                 groupName: g.name,
-                                 day: m.day,
-                                 url: typeof img === 'string' ? img : img.url,
-                                 caption: typeof img === 'string' ? '' : img.caption
-                              }))
-                            )
-                         ).sort((a,b) => parseFloat(a.day) - parseFloat(b.day));
-                         
-                         let startIndex = project.startImage ? 2 : 1;
-                         
-                         return allPhotos.map((photo, idx) => (
-                           <div key={idx} className="break-inside-avoid mb-4">
-                              <div className="h-64 border rounded overflow-hidden flex items-center justify-center bg-slate-50 relative shadow-sm">
-                                 <img src={photo.url} className="w-full h-full object-contain bg-white"/>
-                                 <div className="absolute top-0 left-0 bg-white/90 px-3 py-1.5 text-sm font-bold border-b border-r" style={{fontFamily: BRAND.fonts.heading, color: BRAND.colors.green}}>{photo.groupName}</div>
-                              </div>
-                              <div className="text-base mt-3 text-center brand-body px-2">
-                                <span className="font-bold">Picture {startIndex + idx}.</span> {photo.groupName} at {formatDay(photo.day)}.
-                                {photo.caption && <span className="block italic font-normal text-sm text-slate-500 mt-1">{photo.caption}</span>}
-                              </div>
-                           </div>
-                         ));
-                       })()}
-                    </div>
+                    
+                    {project.startImage && (
+                        <div className="mb-8 break-inside-avoid">
+                            <h3 className="font-bold text-lg mb-4 brand-heading text-slate-700 border-b-2 border-slate-200 pb-1">Initial Reference</h3>
+                            <div className="h-64 w-full md:w-1/2 border rounded overflow-hidden flex items-center justify-center bg-slate-50 shadow-sm">
+                                <img src={project.startImage} className="h-full object-contain"/>
+                            </div>
+                        </div>
+                    )}
+                    
+                    {categoriesPresent.map(category => {
+                        const catPhotos = photosByCategory[category];
+                        const groupsInCat = Array.from(new Set(catPhotos.map(p => p.groupName)));
+
+                        return (
+                            <div key={category} className="mb-10 break-inside-avoid">
+                                <h3 className="font-bold text-xl mb-6 brand-heading text-slate-700 border-b-2 border-slate-200 pb-1 flex items-center gap-2">
+                                   <Camera size={20} color={BRAND.colors.green} /> {category}
+                                </h3>
+                                {groupsInCat.map(gName => {
+                                    const variantPhotos = catPhotos.filter(p => p.groupName === gName).sort((a,b) => parseFloat(a.day) - parseFloat(b.day));
+                                    return (
+                                        <div key={gName} className="mb-8">
+                                            <h4 className="font-bold text-md text-slate-600 mb-3">{gName}</h4>
+                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                                                {variantPhotos.map((photo, idx) => (
+                                                   <div key={idx} className="break-inside-avoid">
+                                                      <div className="h-56 border rounded-lg overflow-hidden flex items-center justify-center bg-slate-50 relative shadow-sm">
+                                                         <img src={photo.url} className="w-full h-full object-contain bg-white"/>
+                                                         <div className="absolute top-0 right-0 bg-white/90 px-3 py-1 text-xs font-bold border-b border-l rounded-bl-lg text-gray-700">{formatDay(photo.day)}</div>
+                                                      </div>
+                                                      {photo.caption && <div className="text-sm mt-2 text-center brand-body italic text-slate-600">{photo.caption}</div>}
+                                                   </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )
+                    })}
                   </div>
                 </div>
               </div>
@@ -1000,7 +1044,7 @@
               <nav className="bg-white border-b sticky top-0 z-20 px-6 py-3 flex justify-between items-center shadow-sm">
                 <div className="flex items-center gap-3">
                   <div className="text-white p-2 rounded" style={{background: BRAND.colors.green}}><Layout size={24} /></div>
-                  <div><h1 className="font-bold text-lg" style={{fontFamily: 'League Spartan'}}>PERF<span style={{color:BRAND.colors.blue}}>O</span>TEC MANAGER</h1><p className="text-xs text-slate-400 font-medium tracking-wider">OFFICIAL TEMPLATE EDITION v24.0</p></div>
+                  <div><h1 className="font-bold text-lg" style={{fontFamily: 'League Spartan'}}>PERF<span style={{color:BRAND.colors.blue}}>O</span>TEC MANAGER</h1><p className="text-xs text-slate-400 font-medium tracking-wider">OFFICIAL TEMPLATE EDITION</p></div>
                 </div>
                 <div className="flex gap-3">
                   <label className="text-slate-600 bg-white border px-4 py-2 rounded font-medium flex items-center gap-2 hover:bg-slate-50 transition cursor-pointer shadow-sm"><FolderOpen size={18} /> Load<input type="file" className="hidden" accept=".json" onChange={importData} ref={fileInputRef} /></label>
