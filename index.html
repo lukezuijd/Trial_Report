@@ -114,7 +114,7 @@
         const RichTextEditor = ({ value, onChange, placeholder }) => {
           const editorRef = useRef(null);
 
-          // Update de weergave als de value van buitenaf verandert (bijv. bij inladen JSON)
+          // Update de weergave als de value van buitenaf verandert
           useEffect(() => {
             if (editorRef.current && value !== editorRef.current.innerHTML) {
               editorRef.current.innerHTML = value || '';
@@ -280,7 +280,7 @@
               <div className="flex flex-wrap justify-center gap-4 mt-4">
                 {groups.map((g, idx) => (
                   <div key={g.id} className="flex items-center gap-2 text-xs font-bold" style={{fontFamily: BRAND.fonts.heading, color: BRAND.colors.black}}>
-                    <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: CHART_COLORS[idx % CHART_COLORS.length].stroke }}></div>
+                    <svg width="12" height="12" className="shrink-0"><rect width="12" height="12" rx="2" fill={CHART_COLORS[idx % CHART_COLORS.length].stroke} /></svg>
                     {g.name}
                   </div>
                 ))}
@@ -509,6 +509,7 @@
             productName: '', type: '', origin: '', company: '', contactName: '', contactEmail: '', employee: '', trialTarget: '',
             rrO2: '', rrCO2: '', rrTemp: '', totalDuration: '', criteria: [], 
             date: new Date().toISOString().split('T')[0],
+            packingDate: new Date().toISOString().split('T')[0],
             logo: 'https://cdn.prod.website-files.com/68b594c756c22085ddc6c1ea/68b59ba2f027bfeecd25261b_PerfoTec%20logo.png',
             clientLogo: null, startImage: null, coverImage: null
           });
@@ -606,7 +607,12 @@
             reader.onload = (ev) => { 
                 try { 
                     const d = JSON.parse(ev.target.result); 
-                    if(d.project) setProject(d.project); 
+                    if(d.project) {
+                      setProject({
+                        ...d.project,
+                        packingDate: d.project.packingDate || d.project.date || new Date().toISOString().split('T')[0]
+                      });
+                    } 
                     if(d.supplyChain) setSupplyChain(d.supplyChain); 
                     if(d.groups) setGroups(d.groups); 
                     if(d.analysis) {
@@ -856,8 +862,16 @@
                         background: white; 
                         box-shadow: none;
                       }
+                      * {
+                        -webkit-print-color-adjust: exact !important;
+                        print-color-adjust: exact !important;
+                      }
                       .print\\:hidden { display: none !important; }
                       .page-break { page-break-before: always !important; }
+                      .break-inside-avoid { 
+                        break-inside: avoid !important; 
+                        page-break-inside: avoid !important;
+                      }
                       svg { break-inside: avoid; }
                     }
                 `}</style>
@@ -881,11 +895,11 @@
                         {/* Header Logos */}
                         <div className="flex justify-between items-start mb-16 w-full">
                           <div className="flex flex-col">
-                            <img src={project.logo} alt="PerfoTec" className="h-20 object-contain self-start mb-2" />
+                            <img src={project.logo} alt="PerfoTec" className="h-16 max-w-[200px] object-contain self-start mb-2" />
                             <div className="text-sm font-bold tracking-[0.25em] uppercase" style={{ color: BRAND.colors.blue, fontFamily: BRAND.fonts.heading, marginLeft: '4px' }}>Best for Freshness</div>
                           </div>
                           {project.clientLogo && (
-                             <img src={project.clientLogo} alt="Client Logo" className="h-20 object-contain self-end" />
+                             <img src={project.clientLogo} alt="Client Logo" className="h-16 max-w-[200px] object-contain self-end" />
                           )}
                         </div>
 
@@ -893,7 +907,6 @@
                         <h2 className="text-4xl font-light brand-heading text-slate-600 mb-12">{project.productName || '<Product Name>'}</h2>
                         <div className="w-full h-[450px] bg-slate-50 border rounded-lg overflow-hidden flex items-center justify-center relative shadow-sm">
                            {project.coverImage || project.startImage ? <img src={project.coverImage || project.startImage} className="w-full h-full object-contain bg-white" /> : <span className="text-slate-300 italic">No Cover Photo</span>}
-                           <div className="absolute bottom-6 left-0 right-0 text-center"><span className="bg-white/90 px-6 py-2 rounded-full text-lg font-bold shadow-sm" style={{color: BRAND.colors.green, fontFamily: BRAND.fonts.heading}}>Super fresh quality</span></div>
                         </div>
                      </div>
                      <div className="text-center text-sm text-slate-400 brand-body">{new Date().getFullYear()} © PerfoTec B.V.</div>
@@ -946,14 +959,14 @@
                        <div className="mb-8 whitespace-pre-wrap pdf-rich-text" dangerouslySetInnerHTML={{ __html: analysis.conclusion || 'No conclusion entered.' }}></div>
                        
                        {groups.map(g => analysis.variantConclusions && analysis.variantConclusions[g.id] ? (
-                         <div key={`vc-${g.id}`} className="mb-6">
+                         <div key={`vc-${g.id}`} className="mb-6 break-inside-avoid">
                            <h4 className="font-bold text-lg" style={{color: BRAND.colors.green}}>Conclusion {g.name}:</h4>
                            <div className="whitespace-pre-wrap mt-1 pdf-rich-text" dangerouslySetInnerHTML={{ __html: analysis.variantConclusions[g.id] }}></div>
                          </div>
                        ) : null)}
 
                        {analysis.nextSteps.length > 0 && (
-                         <div className="mt-8 border-t pt-6 border-slate-200">
+                         <div className="mt-8 border-t pt-6 border-slate-200 break-inside-avoid">
                             <h4 className="font-bold text-xl mb-4" style={{color: BRAND.colors.black}}>Detailed Conclusions:</h4>
                             <ul className="list-disc pl-6 space-y-3">
                               {analysis.nextSteps.map((s, i) => {
@@ -978,30 +991,30 @@
                   <div id="sec-3" className="pt-4">
                     <h2 className="report-section-title">3 Trial set up</h2>
                     <div className="brand-body text-base space-y-5 text-slate-800">
-                       <div>
+                       <div className="break-inside-avoid">
                          <h4 className="font-bold mb-2">Trial samples:</h4>
                          <ul className="list-disc pl-6 space-y-1">
                            {groups.map((g,i) => {
                              const day0 = g.measurements.find(m => parseFloat(m.day) === 0);
                              const startWeight = day0?.samples[0]?.weight || '-';
                              return (
-                               <li key={i}><span className="font-bold">{g.name}</span> – {g.specs.packaging}, {g.specs.material} ({g.specs.holes} holes, {startWeight}g)</li>
+                               <li key={i}><span className="font-bold">{g.name}</span> – {g.specs.packaging}, {g.specs.material} (TV {g.specs.holes}, {startWeight}g)</li>
                              )
                            })}
                          </ul>
                        </div>
-                       <p>The Fast Respiration Meter System 2.0 was used to measure the product respiration rate (RR O₂: {project.rrO2 || '-'}, RR CO₂: {project.rrCO2 || '-'}) at {project.rrTemp || '-'}°C.</p>
+                       <p>The Fast Respiration Meter System was used to measure the product respiration rate (RR O₂: {project.rrO2 || '-'}, RR CO₂: {project.rrCO2 || '-'}) at {project.rrTemp || '-'}°C.</p>
                        <p>Stored at different temperatures (see supply chain) for {supplyChain.reduce((acc,s) => acc + parseFloat(s.daysStart || 0), 0)} days total.</p>
-                       <p>The product was packed on <strong>{project.date}</strong>.</p>
-                       <p>Unpacking moments were planned for {formatDay(groups[0].measurements[groups[0].measurements.length-1].day)}. Per packing moment, samples per treatment were unpacked.</p>
+                       <p>The product was packed on <strong>{project.packingDate || project.date}</strong>.</p>
+                       <p>Unpacking moments were planned for {formatDay(groups[0].measurements[groups[0].measurements.length-1].day)}.</p>
                        
                        <p>Product quality was evaluated at the start and at the unpacking moment. The following attributes are evaluated according to the score scale listed below. Scores of 7 and higher are considered to be within specification and of acceptable quality.</p>
                        <ul className="list-disc pl-6 grid grid-cols-2 gap-2">
                          {project.criteria.length > 0 ? project.criteria.map((c, i) => <li key={i}>{c}</li>) : <li>General Quality</li>}
                        </ul>
 
-                       <div className="my-8">
-                         <h4 className="font-bold mb-3 text-lg">Score scale:</h4>
+                       <div className="break-inside-avoid">
+                         <h4 className="font-bold mb-2 text-lg">Score scale:</h4>
                          <div className="grid grid-cols-1 gap-1 text-sm text-slate-600 bg-slate-50 p-5 rounded border">
                             <div><strong className="text-slate-900">10:</strong> excellent – exceptionally appealing quality, exceptional good</div>
                             <div><strong className="text-slate-900">9:</strong> very good – natural quality of the product, full strong characteristic quality attributes</div>
@@ -1024,79 +1037,87 @@
                   <div id="sec-4" className="pt-4">
                     <h2 className="report-section-title">4 Trial results</h2>
                     
-                    <h3 id="sec-4-1" className="font-bold text-xl mb-2 brand-heading text-slate-700">4.1 Gas Levels</h3>
-                    <div className="text-base mb-6 italic brand-body text-slate-600 pdf-rich-text" dangerouslySetInnerHTML={{ __html: analysis.graphNotes || 'Gas levels were monitored throughout the shelf life period.' }}></div>
-                    
-                    {groups.map((g, idx) => (
-                      <div key={idx} className="flex gap-4 mb-8 break-inside-avoid items-center">
-                         {g.predictedImage ? (
-                           <div className="w-1/2 border rounded p-2">
-                              <div className="text-xs font-bold mb-1 text-center text-gray-500">Prediction (Hub)</div>
-                              <img src={g.predictedImage} className="w-full h-auto object-contain" />
-                           </div>
-                         ) : (
-                           <div className="w-1/2 border rounded p-8 text-center text-gray-300 italic">No Prediction Uploaded</div>
-                         )}
-                         <div className="w-1/2">
-                            <div className="text-xs font-bold mb-1 text-center text-gray-500">Actual Results</div>
-                            <VariantGasChart group={g} />
-                         </div>
-                      </div>
-                    ))}
+                    <div className="break-inside-avoid mb-10">
+                        <h3 id="sec-4-1" className="font-bold text-xl mb-2 brand-heading text-slate-700">4.1 Gas Levels</h3>
+                        <div className="text-base mb-6 italic brand-body text-slate-600 pdf-rich-text" dangerouslySetInnerHTML={{ __html: analysis.graphNotes || 'Gas levels were monitored throughout the shelf life period.' }}></div>
+                        
+                        {groups.map((g, idx) => (
+                          <div key={idx} className="flex gap-4 mb-8 break-inside-avoid items-center">
+                             {g.predictedImage ? (
+                               <div className="w-1/2 border rounded p-2">
+                                  <div className="text-xs font-bold mb-1 text-center text-gray-500">Prediction (Hub)</div>
+                                  <img src={g.predictedImage} className="w-full h-auto object-contain" />
+                               </div>
+                             ) : (
+                               <div className="w-1/2 border rounded p-8 text-center text-gray-300 italic">No Prediction Uploaded</div>
+                             )}
+                             <div className="w-1/2">
+                                <div className="text-xs font-bold mb-1 text-center text-gray-500">Actual Results</div>
+                                <VariantGasChart group={g} />
+                             </div>
+                          </div>
+                        ))}
+                    </div>
 
-                    <h3 id="sec-4-2" className="font-bold text-xl mb-4 mt-12 brand-heading text-slate-700">4.2 Weight Loss Comparison</h3>
-                    <WeightLossChart groups={groups} />
+                    <div className="break-inside-avoid mb-10">
+                        <h3 id="sec-4-2" className="font-bold text-xl mb-4 mt-12 brand-heading text-slate-700">4.2 Weight Loss Comparison</h3>
+                        <WeightLossChart groups={groups} />
+                    </div>
 
-                    <h3 id="sec-4-3" className="font-bold text-xl mb-4 mt-12 brand-heading text-slate-700">4.3 Visual quality Overview</h3>
-                    <p className="text-base mb-4 brand-body text-slate-800">
-                       On {formatDay(groups[0].measurements[groups[0].measurements.length-1].day)}, the visual quality was assessed.
-                    </p>
-                    <table className="report-table w-full mb-10 text-base shadow-sm">
-                      <thead><tr><th>Variant</th><th>Final Day</th><th>Visual Score</th><th>Weight Loss</th><th>Key Observation</th></tr></thead>
-                      <tbody>
-                        {groups.map((g,i) => {
-                          const last = g.measurements[g.measurements.length - 1];
-                          const day0 = g.measurements.find(m => parseFloat(m.day) === 0);
-                          const loss = getWeightLoss(last.samples, day0?.samples);
-                          return (<tr key={i}><td>{g.name}</td><td>{formatDay(last.day)}</td><td className="font-bold">{last.quality}</td><td>{loss}%</td><td>{last.notes || '-'}</td></tr>)
-                        })}
-                      </tbody>
-                    </table>
+                    <div className="break-inside-avoid mb-10">
+                        <h3 id="sec-4-3" className="font-bold text-xl mb-4 mt-12 brand-heading text-slate-700">4.3 Visual quality Overview</h3>
+                        <p className="text-base mb-4 brand-body text-slate-800">
+                           On {formatDay(groups[0].measurements[groups[0].measurements.length-1].day)}, the visual quality was assessed.
+                        </p>
+                        <table className="report-table w-full text-base shadow-sm">
+                          <thead><tr><th>Variant</th><th>Final Day</th><th>Visual Score</th><th>Weight Loss</th><th>Key Observation</th></tr></thead>
+                          <tbody>
+                            {groups.map((g,i) => {
+                              const last = g.measurements[g.measurements.length - 1];
+                              const day0 = g.measurements.find(m => parseFloat(m.day) === 0);
+                              const loss = getWeightLoss(last.samples, day0?.samples);
+                              return (<tr key={i}><td>{g.name}</td><td>{formatDay(last.day)}</td><td className="font-bold">{last.quality}</td><td>{loss}%</td><td>{last.notes || '-'}</td></tr>)
+                            })}
+                          </tbody>
+                        </table>
+                    </div>
 
-                    <h3 id="sec-4-4" className="font-bold text-xl mb-4 mt-12 brand-heading text-slate-700">4.4 Detailed Quality Parameters (End of Trial)</h3>
-                    {project.criteria.length > 0 ? (
-                      <table className="report-table w-full mb-6 text-sm shadow-sm break-inside-avoid">
-                        <thead>
-                          <tr>
-                            <th>Criterion</th>
-                            {groups.map(g => <th key={g.id} className="text-center">{g.name}</th>)}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {project.criteria.map((crit, i) => (
-                            <tr key={i}>
-                              <td className="font-semibold text-base">{crit}</td>
-                              {groups.map(g => {
-                                 const lastMeas = g.measurements[g.measurements.length - 1];
-                                 const param = lastMeas.evaluateQuality ? lastMeas.qualityParams?.find(p => p.name === crit) : null;
-                                 return (
-                                   <td key={g.id} className="text-center align-top">
-                                     {param && param.score ? (
-                                       <div className="flex flex-col items-center">
-                                         <span className="font-bold text-xl leading-none mb-1" style={{color: BRAND.colors.green}}>{param.score}</span>
-                                         {param.notes && <span className="text-xs italic text-gray-500 leading-tight">{param.notes}</span>}
-                                       </div>
-                                     ) : '-'}
-                                   </td>
-                                 )
-                              })}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    ) : (
-                      <p className="text-base italic text-gray-500">No specific criteria were defined for this test.</p>
-                    )}
+                    <div className="break-inside-avoid mb-10">
+                        <h3 id="sec-4-4" className="font-bold text-xl mb-4 mt-12 brand-heading text-slate-700">4.4 Detailed Quality Parameters (End of Trial)</h3>
+                        {project.criteria.length > 0 ? (
+                          <table className="report-table w-full text-sm shadow-sm">
+                            <thead>
+                              <tr>
+                                <th>Criterion</th>
+                                {groups.map(g => <th key={g.id} className="text-center">{g.name}</th>)}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {project.criteria.map((crit, i) => (
+                                <tr key={i}>
+                                  <td className="font-semibold text-base">{crit}</td>
+                                  {groups.map(g => {
+                                     const lastMeas = g.measurements[g.measurements.length - 1];
+                                     const param = lastMeas.evaluateQuality ? lastMeas.qualityParams?.find(p => p.name === crit) : null;
+                                     return (
+                                       <td key={g.id} className="text-center align-top">
+                                         {param && param.score ? (
+                                           <div className="flex flex-col items-center">
+                                             <span className="font-bold text-xl leading-none mb-1" style={{color: BRAND.colors.green}}>{param.score}</span>
+                                             {param.notes && <span className="text-xs italic text-gray-500 leading-tight">{param.notes}</span>}
+                                           </div>
+                                         ) : '-'}
+                                       </td>
+                                     )
+                                  })}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        ) : (
+                          <p className="text-base italic text-gray-500">No specific criteria were defined for this test.</p>
+                        )}
+                    </div>
                   </div>
 
                   <div className="page-break"></div>
@@ -1199,6 +1220,8 @@
                          <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                            <div className="sm:col-span-2"><label className="label">Report Title</label><input type="text" className="input text-lg font-bold" value={project.reportTitle} onChange={e => setProject({...project, reportTitle: e.target.value})} /></div>
                            <div className="sm:col-span-2"><label className="label">Product</label><input type="text" className="input text-lg font-bold" value={project.productName} onChange={e => setProject({...project, productName: e.target.value})} /></div>
+                           <div><label className="label">Report Datum</label><input type="date" className="input" value={project.date} onChange={e => setProject({...project, date: e.target.value})} /></div>
+                           <div><label className="label">Packing Datum</label><input type="date" className="input bg-yellow-50" value={project.packingDate} onChange={e => setProject({...project, packingDate: e.target.value})} /></div>
                            <div><label className="label">Total Duration (Days)</label><input type="number" className="input bg-yellow-50" value={project.totalDuration} onChange={handleDurationChange} placeholder="e.g. 10" /></div>
                            <div><label className="label">Type</label><input type="text" className="input" value={project.type} onChange={e => setProject({...project, type: e.target.value})} /></div>
                            <div><label className="label">Product Origin</label><input type="text" className="input" value={project.origin} onChange={e => setProject({...project, origin: e.target.value})} /></div>
@@ -1311,7 +1334,7 @@
                              </div>
                              <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-b-lg border border-slate-100 mb-6">
                                <div><label className="label">Material</label><input className="input" value={groups.find(g => g.id === activeGroupId).specs.material} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'material', e.target.value)} /></div>
-                               <div><label className="label">Transmission Value</label><input type="number" className="input" value={groups.find(g => g.id === activeGroupId).specs.holes} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'holes', e.target.value)} /></div>
+                               <div><label className="label">Transmission Value (TV)</label><input type="number" className="input" value={groups.find(g => g.id === activeGroupId).specs.holes} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'holes', e.target.value)} /></div>
                                <div><label className="label">Aantal Samples / Meting</label><input type="number" min="1" className="input bg-white border-blue-200 font-bold text-blue-900" value={groups.find(g => g.id === activeGroupId).specs.sampleCount || 3} onChange={(e) => handleSampleCountChange(activeGroupId, parseInt(e.target.value))} /></div>
                              </div>
                              
