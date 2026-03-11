@@ -24,7 +24,7 @@
           ClipboardList, Image as ImageIcon, BarChart2, ChevronRight, Save, 
           Download, FolderOpen, LineChart, Tractor, Ship, Plane, 
           Warehouse, Store, Utensils, Factory, ArrowDown, ArrowUp, 
-          ChevronUp, ChevronDown, FileArchive
+          ChevronUp, ChevronDown, FileArchive, Bold, Italic, Underline, List
         } from 'https://esm.sh/lucide-react@0.292.0';
 
         // --- CONFIGURATIE ---
@@ -109,6 +109,49 @@
         const formatDay = (day) => `P+${day}`;
 
         // --- COMPONENTEN ---
+        
+        // Rich Text Editor Component
+        const RichTextEditor = ({ value, onChange, placeholder }) => {
+          const editorRef = useRef(null);
+
+          // Zet de initiële waarde slechts eenmalig om cursor sprongen te voorkomen
+          useEffect(() => {
+            if (editorRef.current && !editorRef.current.innerHTML && value) {
+              editorRef.current.innerHTML = value;
+            }
+          }, [value]);
+
+          const handleInput = () => {
+            if (editorRef.current) onChange(editorRef.current.innerHTML);
+          };
+
+          const execCmd = (cmd) => {
+            document.execCommand(cmd, false, null);
+            editorRef.current.focus();
+            handleInput();
+          };
+
+          return (
+            <div className="border border-slate-200 rounded-md overflow-hidden bg-white focus-within:border-green-600 focus-within:ring-2 focus-within:ring-green-100 transition">
+              <div className="bg-slate-50 border-b border-slate-200 p-1 flex gap-1">
+                <button type="button" onClick={() => execCmd('bold')} className="p-1.5 hover:bg-slate-200 rounded text-slate-700 w-8 flex justify-center items-center" title="Bold"><Bold size={16}/></button>
+                <button type="button" onClick={() => execCmd('italic')} className="p-1.5 hover:bg-slate-200 rounded text-slate-700 w-8 flex justify-center items-center" title="Italic"><Italic size={16}/></button>
+                <button type="button" onClick={() => execCmd('underline')} className="p-1.5 hover:bg-slate-200 rounded text-slate-700 w-8 flex justify-center items-center" title="Underline"><Underline size={16}/></button>
+                <div className="w-px bg-slate-300 mx-1 my-1"></div>
+                <button type="button" onClick={() => execCmd('insertUnorderedList')} className="p-1.5 hover:bg-slate-200 rounded text-slate-700 w-8 flex justify-center items-center" title="Bullet List"><List size={16}/></button>
+              </div>
+              <div
+                ref={editorRef}
+                contentEditable
+                onInput={handleInput}
+                onBlur={handleInput}
+                className="p-3 outline-none rich-text-editor text-sm font-sans"
+                data-placeholder={placeholder}
+              />
+            </div>
+          );
+        };
+
         const SupplyChainFlow = ({ chain }) => {
           if (!chain || chain.length === 0) return null;
           return (
@@ -488,8 +531,16 @@
             }
           ]);
 
-          const [analysis, setAnalysis] = useState({ graphNotes: '', conclusion: '', recommendation: 'retest', nextSteps: [] });
+          const [analysis, setAnalysis] = useState({ 
+            graphNotes: '', 
+            conclusion: '', 
+            variantConclusions: {},
+            recommendation: 'retest', 
+            nextSteps: [] 
+          });
+          
           const [newStep, setNewStep] = useState('');
+          const [newStepVariant, setNewStepVariant] = useState('general');
           const [newCriteria, setNewCriteria] = useState('');
 
           const handleLogoUpload = (e) => { const file = e.target.files[0]; if(file) { const reader = new FileReader(); reader.onloadend = () => setProject(p => ({...p, logo: reader.result})); reader.readAsDataURL(file); }};
@@ -547,7 +598,32 @@
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a'); a.href = url; a.download = `perfotec-report.json`; a.click();
           };
-          const importData = (e) => { const file = e.target.files[0]; if(!file) return; const reader = new FileReader(); reader.onload = (ev) => { try { const d = JSON.parse(ev.target.result); if(d.project) setProject(d.project); if(d.supplyChain) setSupplyChain(d.supplyChain); if(d.groups) setGroups(d.groups); if(d.analysis) setAnalysis(d.analysis); } catch(err){alert("Error loading file");} }; reader.readAsText(file); };
+          
+          const importData = (e) => { 
+            const file = e.target.files[0]; 
+            if(!file) return; 
+            const reader = new FileReader(); 
+            reader.onload = (ev) => { 
+                try { 
+                    const d = JSON.parse(ev.target.result); 
+                    if(d.project) setProject(d.project); 
+                    if(d.supplyChain) setSupplyChain(d.supplyChain); 
+                    if(d.groups) setGroups(d.groups); 
+                    if(d.analysis) {
+                        setAnalysis({
+                            graphNotes: d.analysis.graphNotes || '',
+                            conclusion: d.analysis.conclusion || '',
+                            variantConclusions: d.analysis.variantConclusions || {},
+                            recommendation: d.analysis.recommendation || 'retest',
+                            nextSteps: d.analysis.nextSteps || []
+                        });
+                    }
+                } catch(err){
+                    alert("Error loading file");
+                } 
+            }; 
+            reader.readAsText(file); 
+          };
 
           const handleGroupChange = (id, section, field, value) => {
             setGroups(prev => prev.map(g => {
@@ -673,7 +749,15 @@
           const duplicateGroup = (id) => { const org = groups.find(g => g.id === id); const newId = Math.max(...groups.map(g => g.id)) + 1; setGroups(p => [...p, { ...org, id: newId, name: `${org.name} (Copy)` }]); setActiveGroupId(newId); };
           const removeGroup = (id) => { if(groups.length > 1) { setGroups(p => p.filter(g => g.id !== id)); setActiveGroupId(groups[0].id); }};
 
-          const addNextStep = () => { if (newStep.trim()) { setAnalysis(prev => ({ ...prev, nextSteps: [...prev.nextSteps, newStep] })); setNewStep(''); }};
+          const addNextStep = () => { 
+            if (newStep.trim()) { 
+                setAnalysis(prev => ({ 
+                    ...prev, 
+                    nextSteps: [...prev.nextSteps, { text: newStep, variantId: newStepVariant }] 
+                })); 
+                setNewStep(''); 
+            }
+          };
           const removeNextStep = (i) => setAnalysis(prev => ({ ...prev, nextSteps: prev.nextSteps.filter((_, idx) => idx !== i) }));
 
           const handlePrint = () => { window.print(); };
@@ -750,6 +834,13 @@
                     .report-table th { background-color: ${BRAND.colors.green}; color: white; padding: 8px; text-align: left; font-family: 'League Spartan', sans-serif; }
                     .report-table td { border-bottom: 1px solid ${BRAND.colors.gray}; padding: 8px; font-family: 'Inter', sans-serif; font-size: 0.9rem; }
                     
+                    /* PDF Richtext Styles */
+                    .pdf-rich-text ul { list-style-type: disc; padding-left: 1.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem; }
+                    .pdf-rich-text li { margin-bottom: 0.25rem; }
+                    .pdf-rich-text b { font-weight: 700; }
+                    .pdf-rich-text i { font-style: italic; }
+                    .pdf-rich-text u { text-decoration: underline; }
+
                     /* ROBUST PRINT STYLES */
                     @media print {
                       body { background: white; margin: 0; padding: 0; }
@@ -851,9 +942,33 @@
                   <div id="sec-2" className="pt-4">
                     <h2 className="report-section-title">2 Summary and Conclusions</h2>
                     <div className="brand-body text-base leading-relaxed text-justify text-slate-800">
-                       <p className="font-bold mb-3 text-lg">Main Conclusion:</p>
-                       <div className="mb-6 whitespace-pre-wrap">{analysis.conclusion || 'No conclusion entered.'}</div>
-                       {analysis.nextSteps.length > 0 && <ul className="list-disc pl-6 space-y-2">{analysis.nextSteps.map((s,i) => <li key={i}>{s}</li>)}</ul>}
+                       <h4 className="font-bold mb-3 text-xl" style={{color: BRAND.colors.black}}>Main Conclusion:</h4>
+                       <div className="mb-8 whitespace-pre-wrap pdf-rich-text" dangerouslySetInnerHTML={{ __html: analysis.conclusion || 'No conclusion entered.' }}></div>
+                       
+                       {groups.map(g => analysis.variantConclusions && analysis.variantConclusions[g.id] ? (
+                         <div key={`vc-${g.id}`} className="mb-6">
+                           <h4 className="font-bold text-lg" style={{color: BRAND.colors.green}}>Conclusion {g.name}:</h4>
+                           <p className="whitespace-pre-wrap mt-1">{analysis.variantConclusions[g.id]}</p>
+                         </div>
+                       ) : null)}
+
+                       {analysis.nextSteps.length > 0 && (
+                         <div className="mt-8 border-t pt-6 border-slate-200">
+                            <h4 className="font-bold text-xl mb-4" style={{color: BRAND.colors.black}}>Detailed Conclusions:</h4>
+                            <ul className="list-disc pl-6 space-y-3">
+                              {analysis.nextSteps.map((s, i) => {
+                                const stepObj = typeof s === 'string' ? { text: s, variantId: 'general' } : s;
+                                const variantBadge = stepObj.variantId === 'general' ? '' : `[${groups.find(g => g.id === parseInt(stepObj.variantId))?.name || 'Deleted Variant'}]`;
+                                return (
+                                  <li key={i}>
+                                    {variantBadge && <span className="font-bold text-slate-600 mr-2">{variantBadge}</span>}
+                                    {stepObj.text}
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                         </div>
+                       )}
                     </div>
                   </div>
 
@@ -885,8 +1000,8 @@
                          {project.criteria.length > 0 ? project.criteria.map((c, i) => <li key={i}>{c}</li>) : <li>General Quality</li>}
                        </ul>
 
-                       <div>
-                         <h4 className="font-bold mb-2">Score scale:</h4>
+                       <div className="my-8">
+                         <h4 className="font-bold mb-3 text-lg">Score scale:</h4>
                          <div className="grid grid-cols-1 gap-1 text-sm text-slate-600 bg-slate-50 p-5 rounded border">
                             <div><strong className="text-slate-900">10:</strong> excellent – exceptionally appealing quality, exceptional good</div>
                             <div><strong className="text-slate-900">9:</strong> very good – natural quality of the product, full strong characteristic quality attributes</div>
@@ -948,7 +1063,7 @@
                       </tbody>
                     </table>
 
-                    <h3 id="sec-4-4" className="font-bold text-xl mb-4 mt-12 brand-heading text-slate-700">4.4 Detailed Quality Parameters (End of Trial)</h3>
+                    <h3 id="sec-4-4" className="font-bold text-xl mb-4 mt-12 brand-heading text-slate-700">4.4 Detailed Quality Parameters</h3>
                     {project.criteria.length > 0 ? (
                       <table className="report-table w-full mb-6 text-sm shadow-sm break-inside-avoid">
                         <thead>
@@ -1038,6 +1153,20 @@
 
           return (
             <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-20">
+              <style>{`
+                .label { display: block; font-size: 0.75rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.35rem; font-family: 'Inter', sans-serif; } 
+                .input { width: 100%; padding: 0.6rem; border: 1px solid #e2e8f0; border-radius: 0.5rem; outline: none; transition: 0.2s; font-size: 0.9rem; font-family: 'Inter', sans-serif; } 
+                .input:focus { border-color: ${BRAND.colors.green}; box-shadow: 0 0 0 3px rgba(0, 124, 39, 0.1); }
+                
+                /* Rich Text Editor Editor Styles */
+                .rich-text-editor { min-height: 120px; }
+                .rich-text-editor ul { list-style-type: disc; padding-left: 1.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem; }
+                .rich-text-editor li { margin-bottom: 0.25rem; }
+                .rich-text-editor b { font-weight: 700; }
+                .rich-text-editor i { font-style: italic; }
+                .rich-text-editor u { text-decoration: underline; }
+                [contenteditable]:empty:before { content: attr(data-placeholder); color: #94a3b8; pointer-events: none; display: block; }
+              `}</style>
               <SampleModal isOpen={sampleModalOpen} onClose={() => setSampleModalOpen(false)} data={editingMeasurement ? editingMeasurement.data : {}} onSave={saveSampleData} day0Samples={editingMeasurement ? editingMeasurement.day0Samples : null} projectCriteria={project.criteria} isEvaluationDay={editingMeasurement ? editingMeasurement.isEvaluationDay : false} isDayEditable={editingMeasurement ? editingMeasurement.isDayEditable : false} />
               <DetailsModal isOpen={detailsModalOpen} onClose={() => setDetailsModalOpen(false)} data={editingMeasurement ? editingMeasurement.data : {}} onSave={saveDetailsData} />
 
@@ -1241,14 +1370,64 @@
                   <div className="col-span-1 md:col-span-12 space-y-6">
                     <div className="bg-white p-4 sm:p-8 rounded-xl shadow-sm border border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-8">
                        <div className="md:col-span-2"><h2 className="font-bold text-lg border-b pb-2 mb-2 text-[#211A1A]">2 Summary and Conclusions</h2></div>
-                       <div><label className="label mb-2">Main Conclusion</label><textarea rows="6" className="input w-full" placeholder="The product quality in the PerfoTec Liner..." value={analysis.conclusion} onChange={(e) => setAnalysis(prev => ({ ...prev, conclusion: e.target.value }))} /></div>
-                       <div><label className="label mb-2">Detailed Conclusions</label><div className="flex gap-2 mb-2"><input type="text" className="input" placeholder="Add point..." value={newStep} onChange={e => setNewStep(e.target.value)} onKeyPress={e => e.key === 'Enter' && addNextStep()} /><button onClick={addNextStep} className="bg-slate-800 text-white px-4 rounded hover:bg-black"><Plus size={18}/></button></div><div className="space-y-1">{analysis.nextSteps.map((s, i) => (<div key={i} className="text-sm bg-slate-50 p-2 rounded flex justify-between"><span>• {s}</span><button onClick={() => removeNextStep(i)} className="text-red-500">×</button></div>))}</div></div>
+                       
+                       <div className="md:col-span-2">
+                          <label className="label mb-2">Main Conclusion</label>
+                          <RichTextEditor 
+                             value={analysis.conclusion} 
+                             onChange={(val) => setAnalysis(prev => ({...prev, conclusion: val}))} 
+                             placeholder="Schrijf hier de algemene hoofdconclusie..."
+                          />
+                       </div>
+
+                       <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6">
+                          {groups.map(g => (
+                             <div key={g.id}>
+                                <label className="label mb-2">Conclusie: {g.name}</label>
+                                <textarea 
+                                  rows="3" 
+                                  className="input w-full" 
+                                  placeholder={`Specifieke conclusie voor ${g.name}...`} 
+                                  value={(analysis.variantConclusions || {})[g.id] || ''} 
+                                  onChange={(e) => setAnalysis(prev => ({ ...prev, variantConclusions: { ...(prev.variantConclusions || {}), [g.id]: e.target.value } }))} 
+                                />
+                             </div>
+                          ))}
+                       </div>
+
+                       <div className="md:col-span-2">
+                          <label className="label mb-2">Detailed Conclusions</label>
+                          <div className="flex flex-col sm:flex-row gap-2 mb-2">
+                            <select className="input sm:w-1/4" value={newStepVariant} onChange={e => setNewStepVariant(e.target.value)}>
+                               <option value="general">Algemeen</option>
+                               {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                            </select>
+                            <input type="text" className="input flex-1" placeholder="Voeg actiepunt of detail conclusie toe..." value={newStep} onChange={e => setNewStep(e.target.value)} onKeyPress={e => e.key === 'Enter' && addNextStep()} />
+                            <button onClick={addNextStep} className="bg-slate-800 text-white px-4 py-2 rounded hover:bg-black"><Plus size={18}/></button>
+                          </div>
+                          
+                          <div className="space-y-2 mt-4">
+                            {analysis.nextSteps.map((s, i) => {
+                               const stepObj = typeof s === 'string' ? { text: s, variantId: 'general' } : s;
+                               const vName = stepObj.variantId === 'general' ? 'Algemeen' : groups.find(g => g.id === parseInt(stepObj.variantId))?.name || 'Verwijderde Variant';
+                               return (
+                                 <div key={i} className="text-sm bg-slate-50 p-3 rounded border border-slate-200 flex justify-between items-start gap-4">
+                                   <div>
+                                     <span className="text-[10px] font-bold uppercase bg-slate-200 text-slate-600 px-2 py-0.5 rounded mr-2">{vName}</span>
+                                     <span className="text-slate-800">{stepObj.text}</span>
+                                   </div>
+                                   <button onClick={() => removeNextStep(i)} className="text-red-400 hover:text-red-600 shrink-0"><Trash2 size={16}/></button>
+                                 </div>
+                               );
+                            })}
+                          </div>
+                       </div>
+                       
                        <div className="md:col-span-2"><label className="label mb-2">Gas Levels Analysis</label><textarea rows="4" className="input w-full" value={analysis.graphNotes} onChange={(e) => setAnalysis(prev => ({ ...prev, graphNotes: e.target.value }))} /></div>
                     </div>
                   </div>
                 )}
               </main>
-              <style>{`.label { display: block; font-size: 0.75rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.35rem; font-family: 'Inter', sans-serif; } .input { width: 100%; padding: 0.6rem; border: 1px solid #e2e8f0; border-radius: 0.5rem; outline: none; transition: 0.2s; font-size: 0.9rem; font-family: 'Inter', sans-serif; } .input:focus { border-color: ${BRAND.colors.green}; box-shadow: 0 0 0 3px rgba(0, 124, 39, 0.1); }`}</style>
             </div>
           );
         };
