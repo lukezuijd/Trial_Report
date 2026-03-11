@@ -10,6 +10,10 @@
     
     <!-- Babel compiler -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <style>
+        html { scroll-behavior: smooth; }
+    </style>
 </head>
 <body>
     <div id="root"></div>
@@ -114,7 +118,6 @@
         const RichTextEditor = ({ value, onChange, placeholder }) => {
           const editorRef = useRef(null);
 
-          // Update de weergave als de value van buitenaf verandert
           useEffect(() => {
             if (editorRef.current && value !== editorRef.current.innerHTML) {
               editorRef.current.innerHTML = value || '';
@@ -795,6 +798,9 @@
 
           if (isPreview) {
             
+            // Total chain days calculation
+            const totalChainDays = supplyChain.reduce((acc, step) => acc + (parseFloat(step.daysStart) || 0), 0);
+
             // Verzamel en groepeer foto's voor sectie 5
             const allPhotos = groups.flatMap(g => 
               g.measurements.flatMap(m => 
@@ -866,8 +872,13 @@
                         -webkit-print-color-adjust: exact !important;
                         print-color-adjust: exact !important;
                       }
-                      .print\\:hidden { display: none !important; }
-                      .page-break { page-break-before: always !important; }
+                      .no-print, .no-print * { 
+                        display: none !important; 
+                        opacity: 0 !important; 
+                        visibility: hidden !important; 
+                      }
+                      button { display: none !important; }
+                      .page-break { page-break-before: always !important; break-before: page !important; }
                       .break-inside-avoid { 
                         break-inside: avoid !important; 
                         page-break-inside: avoid !important;
@@ -876,296 +887,298 @@
                     }
                 `}</style>
 
-                {/* Knoppen BUITEN het print-gebied */}
-                <div className="fixed bottom-8 right-8 flex gap-4 print:hidden z-50">
-                  <button onClick={() => setIsPreview(false)} className="bg-slate-600 text-white px-6 py-3 rounded-full shadow-lg font-bold transition hover:bg-slate-700">Edit</button>
-                  <button onClick={handleWordExport} className="bg-blue-600 text-white px-6 py-3 rounded-full shadow-lg font-bold flex gap-2 hover:bg-blue-700 transition">
-                    <FileArchive size={20} /> Download Word
-                  </button>
-                  <button onClick={handlePrint} className="text-white px-6 py-3 rounded-full shadow-lg font-bold flex gap-2 hover:opacity-90 transition" style={{backgroundColor: BRAND.colors.green}}>
-                    <Printer size={20} /> Download PDF
-                  </button>
-                </div>
-
-                <div id="print-content" className="max-w-[21cm] mx-auto bg-white shadow-2xl min-h-[29.7cm] p-12 relative print:shadow-none print:max-w-full print:w-full print:p-0">
-                  
-                  {/* --- PAGE 1: COVER --- */}
-                  <div className="h-[27cm] flex flex-col justify-between">
-                     <div>
-                        {/* Header Logos */}
-                        <div className="flex justify-between items-start mb-16 w-full">
-                          <div className="flex flex-col">
-                            <img src={project.logo} alt="PerfoTec" className="h-16 max-w-[200px] object-contain self-start mb-2" />
-                            <div className="text-sm font-bold tracking-[0.25em] uppercase" style={{ color: BRAND.colors.blue, fontFamily: BRAND.fonts.heading, marginLeft: '4px' }}>Best for Freshness</div>
-                          </div>
-                          {project.clientLogo && (
-                             <img src={project.clientLogo} alt="Client Logo" className="h-16 max-w-[200px] object-contain self-end" />
-                          )}
-                        </div>
-
-                        <h1 className="text-5xl font-bold uppercase mb-4 brand-heading" style={{ color: BRAND.colors.green }}>{project.reportTitle}</h1>
-                        <h2 className="text-4xl font-light brand-heading text-slate-600 mb-12">{project.productName || '<Product Name>'}</h2>
-                        <div className="w-full h-[450px] bg-slate-50 border rounded-lg overflow-hidden flex items-center justify-center relative shadow-sm">
-                           {project.coverImage || project.startImage ? <img src={project.coverImage || project.startImage} className="w-full h-full object-contain bg-white" /> : <span className="text-slate-300 italic">No Cover Photo</span>}
-                        </div>
-                     </div>
-                     <div className="text-center text-sm text-slate-400 brand-body">{new Date().getFullYear()} © PerfoTec B.V.</div>
+                <div>
+                  {/* Knoppen BUITEN het print-gebied */}
+                  <div className="fixed bottom-8 right-8 flex gap-4 no-print z-50">
+                    <button onClick={() => setIsPreview(false)} className="bg-slate-600 text-white px-6 py-3 rounded-full shadow-lg font-bold transition hover:bg-slate-700">Edit</button>
+                    <button onClick={handleWordExport} className="bg-blue-600 text-white px-6 py-3 rounded-full shadow-lg font-bold flex gap-2 hover:bg-blue-700 transition">
+                      <FileArchive size={20} /> Download Word
+                    </button>
+                    <button onClick={handlePrint} className="text-white px-6 py-3 rounded-full shadow-lg font-bold flex gap-2 hover:opacity-90 transition" style={{backgroundColor: BRAND.colors.green}}>
+                      <Printer size={20} /> Download PDF
+                    </button>
                   </div>
 
-                  <div className="page-break"></div>
-
-                  {/* --- PAGE 2: TOC --- */}
-                  <div className="min-h-[27cm] flex flex-col pt-4">
-                    <h3 className="text-3xl font-bold mb-8 brand-heading uppercase" style={{ color: BRAND.colors.green }}>Contents</h3>
-                    <ul className="space-y-4 brand-body text-lg mb-12 text-slate-700">
-                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><a href="#sec-1" className="hover:text-blue-600 transition cursor-pointer">1 Setting</a> <span>3</span></li>
-                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><a href="#sec-2" className="hover:text-blue-600 transition cursor-pointer">2 Summary and Conclusions</a> <span>4</span></li>
-                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><a href="#sec-3" className="hover:text-blue-600 transition cursor-pointer">3 Trial set up</a> <span>5</span></li>
-                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><a href="#sec-4" className="hover:text-blue-600 transition cursor-pointer">4 Trial results</a> <span>6</span></li>
-                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><a href="#sec-4-1" className="hover:text-blue-600 transition cursor-pointer pl-6">4.1 Gas Levels</a> <span>6</span></li>
-                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><a href="#sec-4-2" className="hover:text-blue-600 transition cursor-pointer pl-6">4.2 Weight Loss</a> <span>6</span></li>
-                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><a href="#sec-4-3" className="hover:text-blue-600 transition cursor-pointer pl-6">4.3 Visual quality</a> <span>6</span></li>
-                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><a href="#sec-4-4" className="hover:text-blue-600 transition cursor-pointer pl-6">4.4 Detailed Quality Parameters</a> <span>6</span></li>
-                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><a href="#sec-5" className="hover:text-blue-600 transition cursor-pointer">5 Photos</a> <span>7</span></li>
-                    </ul>
-                  </div>
-
-                  <div className="page-break"></div>
-
-                  {/* --- PAGE 3: SETTING --- */}
-                  <div id="sec-1" className="pt-4">
-                    <h2 className="report-section-title">1 Setting</h2>
-                    <div className="grid grid-cols-[180px_1fr] gap-y-3 text-base brand-body text-slate-800">
-                       <div className="font-bold">Product :</div> <div>{project.productName}</div>
-                       <div className="font-bold">Type :</div> <div>{project.type || '-'}</div>
-                       <div className="font-bold">Product Origin :</div> <div>{project.origin || '-'}</div>
-                       <div className="font-bold">Company Name :</div> <div>{project.company || '-'}</div>
-                       <div className="font-bold">Contact Person :</div> <div>{project.contactName || '-'} {project.contactEmail && `(${project.contactEmail})`}</div>
-                       <div className="font-bold">PerfoTec Employee :</div> <div>{project.employee || '-'}</div>
-                       <div className="font-bold">Technology :</div> <div>PerfoTec Laser Perforation</div>
-                       <div className="font-bold">Trial Target :</div> <div>{project.trialTarget || 'Shelf life extension'}</div>
-                       <div className="font-bold col-span-2 mt-6 border-t border-slate-300 pt-4 text-xl" style={{color: BRAND.colors.green}}>Product Supply Chain :</div> 
-                       <div className="col-span-2 w-full mt-2"><SupplyChainFlow chain={supplyChain} /></div>
-                    </div>
-                  </div>
-
-                  <div className="page-break"></div>
-
-                  {/* --- PAGE 4: SUMMARY --- */}
-                  <div id="sec-2" className="pt-4">
-                    <h2 className="report-section-title">2 Summary and Conclusions</h2>
-                    <div className="brand-body text-base leading-relaxed text-justify text-slate-800">
-                       <h4 className="font-bold mb-3 text-xl" style={{color: BRAND.colors.black}}>Main Conclusion:</h4>
-                       <div className="mb-8 whitespace-pre-wrap pdf-rich-text" dangerouslySetInnerHTML={{ __html: analysis.conclusion || 'No conclusion entered.' }}></div>
-                       
-                       {groups.map(g => analysis.variantConclusions && analysis.variantConclusions[g.id] ? (
-                         <div key={`vc-${g.id}`} className="mb-6 break-inside-avoid">
-                           <h4 className="font-bold text-lg" style={{color: BRAND.colors.green}}>Conclusion {g.name}:</h4>
-                           <div className="whitespace-pre-wrap mt-1 pdf-rich-text" dangerouslySetInnerHTML={{ __html: analysis.variantConclusions[g.id] }}></div>
-                         </div>
-                       ) : null)}
-
-                       {analysis.nextSteps.length > 0 && (
-                         <div className="mt-8 border-t pt-6 border-slate-200 break-inside-avoid">
-                            <h4 className="font-bold text-xl mb-4" style={{color: BRAND.colors.black}}>Detailed Conclusions:</h4>
-                            <ul className="list-disc pl-6 space-y-3">
-                              {analysis.nextSteps.map((s, i) => {
-                                const stepObj = typeof s === 'string' ? { text: s, variantId: 'general' } : s;
-                                const variantBadge = stepObj.variantId === 'general' ? '' : `[${groups.find(g => g.id === parseInt(stepObj.variantId))?.name || 'Deleted Variant'}]`;
-                                return (
-                                  <li key={i}>
-                                    {variantBadge && <span className="font-bold text-slate-600 mr-2">{variantBadge}</span>}
-                                    {stepObj.text}
-                                  </li>
-                                );
-                              })}
-                            </ul>
-                         </div>
-                       )}
-                    </div>
-                  </div>
-
-                  <div className="page-break"></div>
-
-                  {/* --- PAGE 5: TRIAL SET UP --- */}
-                  <div id="sec-3" className="pt-4">
-                    <h2 className="report-section-title">3 Trial set up</h2>
-                    <div className="brand-body text-base space-y-5 text-slate-800">
-                       <div className="break-inside-avoid">
-                         <h4 className="font-bold mb-2">Trial samples:</h4>
-                         <ul className="list-disc pl-6 space-y-1">
-                           {groups.map((g,i) => {
-                             const day0 = g.measurements.find(m => parseFloat(m.day) === 0);
-                             const startWeight = day0?.samples[0]?.weight || '-';
-                             return (
-                               <li key={i}><span className="font-bold">{g.name}</span> – {g.specs.packaging}, {g.specs.material} (TV {g.specs.holes}, {startWeight}g)</li>
-                             )
-                           })}
-                         </ul>
-                       </div>
-                       <p>The Fast Respiration Meter System was used to measure the product respiration rate (RR O₂: {project.rrO2 || '-'}, RR CO₂: {project.rrCO2 || '-'}) at {project.rrTemp || '-'}°C.</p>
-                       <p>Stored at different temperatures (see supply chain) for {supplyChain.reduce((acc,s) => acc + parseFloat(s.daysStart || 0), 0)} days total.</p>
-                       <p>The product was packed on <strong>{project.packingDate || project.date}</strong>.</p>
-                       <p>Unpacking moments were planned for {formatDay(groups[0].measurements[groups[0].measurements.length-1].day)}.</p>
-                       
-                       <p>Product quality was evaluated at the start and at the unpacking moment. The following attributes are evaluated according to the score scale listed below. Scores of 7 and higher are considered to be within specification and of acceptable quality.</p>
-                       <ul className="list-disc pl-6 grid grid-cols-2 gap-2">
-                         {project.criteria.length > 0 ? project.criteria.map((c, i) => <li key={i}>{c}</li>) : <li>General Quality</li>}
-                       </ul>
-
-                       <div className="break-inside-avoid">
-                         <h4 className="font-bold mb-2 text-lg">Score scale:</h4>
-                         <div className="grid grid-cols-1 gap-1 text-sm text-slate-600 bg-slate-50 p-5 rounded border">
-                            <div><strong className="text-slate-900">10:</strong> excellent – exceptionally appealing quality, exceptional good</div>
-                            <div><strong className="text-slate-900">9:</strong> very good – natural quality of the product, full strong characteristic quality attributes</div>
-                            <div><strong className="text-slate-900">8:</strong> good – natural quality, with few specimens with slightly light impairment</div>
-                            <div><strong className="text-slate-900">7:</strong> commendable – natural quality, with several specimens with light impairment</div>
-                            <div><strong className="text-slate-900">6:</strong> satisfactory – slightly reduced quality attributes</div>
-                            <div><strong className="text-slate-900">5:</strong> unacceptable – impairment of natural quality attributes</div>
-                            <div><strong className="text-slate-900">4:</strong> beyond unacceptable – clear impairment of quality attributes</div>
-                            <div><strong className="text-slate-900">3:</strong> poor – generally severe loss of quality, no longer appealing</div>
-                            <div><strong className="text-slate-900">2:</strong> bad – strong and severe quality loss, strongly unpleasant</div>
-                            <div><strong className="text-slate-900">1:</strong> very bad – complete quality decay, spoiled and repulsive</div>
-                         </div>
-                       </div>
-                    </div>
-                  </div>
-
-                  <div className="page-break"></div>
-
-                  {/* --- PAGE 6: RESULTS --- */}
-                  <div id="sec-4" className="pt-4">
-                    <h2 className="report-section-title">4 Trial results</h2>
+                  <div id="print-content" className="max-w-[21cm] mx-auto bg-white shadow-2xl min-h-[29.7cm] p-12 relative print:shadow-none print:max-w-full print:w-full print:p-0">
                     
-                    <div className="break-inside-avoid mb-10">
-                        <h3 id="sec-4-1" className="font-bold text-xl mb-2 brand-heading text-slate-700">4.1 Gas Levels</h3>
-                        <div className="text-base mb-6 italic brand-body text-slate-600 pdf-rich-text" dangerouslySetInnerHTML={{ __html: analysis.graphNotes || 'Gas levels were monitored throughout the shelf life period.' }}></div>
-                        
-                        {groups.map((g, idx) => (
-                          <div key={idx} className="flex gap-4 mb-8 break-inside-avoid items-center">
-                             {g.predictedImage ? (
-                               <div className="w-1/2 border rounded p-2">
-                                  <div className="text-xs font-bold mb-1 text-center text-gray-500">Prediction (Hub)</div>
-                                  <img src={g.predictedImage} className="w-full h-auto object-contain" />
-                               </div>
-                             ) : (
-                               <div className="w-1/2 border rounded p-8 text-center text-gray-300 italic">No Prediction Uploaded</div>
-                             )}
-                             <div className="w-1/2">
-                                <div className="text-xs font-bold mb-1 text-center text-gray-500">Actual Results</div>
-                                <VariantGasChart group={g} />
-                             </div>
+                    {/* --- PAGE 1: COVER --- */}
+                    <div className="h-[27cm] flex flex-col justify-between">
+                       <div>
+                          {/* Header Logos */}
+                          <div className="flex justify-between items-start mb-16 w-full">
+                            <div className="flex flex-col">
+                              <img src={project.logo} alt="PerfoTec" className="h-16 max-w-[200px] object-contain self-start mb-2" />
+                              <div className="text-sm font-bold tracking-[0.25em] uppercase" style={{ color: BRAND.colors.blue, fontFamily: BRAND.fonts.heading, marginLeft: '4px' }}>Best for Freshness</div>
+                            </div>
+                            {project.clientLogo && (
+                               <img src={project.clientLogo} alt="Client Logo" className="h-16 max-w-[200px] object-contain self-end" />
+                            )}
                           </div>
-                        ))}
+
+                          <h1 className="text-5xl font-bold uppercase mb-4 brand-heading" style={{ color: BRAND.colors.green }}>{project.reportTitle}</h1>
+                          <h2 className="text-4xl font-light brand-heading text-slate-600 mb-12">{project.productName || '<Product Name>'}</h2>
+                          <div className="w-full h-[450px] bg-slate-50 border rounded-lg overflow-hidden flex items-center justify-center relative shadow-sm">
+                             {project.coverImage || project.startImage ? <img src={project.coverImage || project.startImage} className="w-full h-full object-contain bg-white" /> : <span className="text-slate-300 italic">No Cover Photo</span>}
+                          </div>
+                       </div>
+                       <div className="text-center text-sm text-slate-400 brand-body">{new Date().getFullYear()} © PerfoTec B.V.</div>
                     </div>
 
-                    <div className="break-inside-avoid mb-10">
-                        <h3 id="sec-4-2" className="font-bold text-xl mb-4 mt-12 brand-heading text-slate-700">4.2 Weight Loss Comparison</h3>
-                        <WeightLossChart groups={groups} />
+                    <div className="page-break"></div>
+
+                    {/* --- PAGE 2: TOC --- */}
+                    <div id="sec-toc" className="min-h-[27cm] flex flex-col pt-4">
+                      <h3 className="text-3xl font-bold mb-8 brand-heading uppercase" style={{ color: BRAND.colors.green }}>Contents</h3>
+                      <ul className="space-y-4 brand-body text-lg mb-12 text-slate-700">
+                        <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><a href="#sec-1" className="hover:text-blue-600 transition cursor-pointer font-bold">1 Setting</a> <span>3</span></li>
+                        <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><a href="#sec-2" className="hover:text-blue-600 transition cursor-pointer font-bold">2 Summary and Conclusions</a> <span>4</span></li>
+                        <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><a href="#sec-3" className="hover:text-blue-600 transition cursor-pointer font-bold">3 Trial set up</a> <span>5</span></li>
+                        <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><a href="#sec-4" className="hover:text-blue-600 transition cursor-pointer font-bold">4 Trial results</a> <span>6</span></li>
+                        <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><a href="#sec-4-1" className="hover:text-blue-600 transition cursor-pointer pl-6">4.1 Gas Levels</a> <span>6</span></li>
+                        <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><a href="#sec-4-2" className="hover:text-blue-600 transition cursor-pointer pl-6">4.2 Weight Loss</a> <span>6</span></li>
+                        <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><a href="#sec-4-3" className="hover:text-blue-600 transition cursor-pointer pl-6">4.3 Visual quality</a> <span>6</span></li>
+                        <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><a href="#sec-4-4" className="hover:text-blue-600 transition cursor-pointer pl-6">4.4 Detailed Quality Parameters</a> <span>6</span></li>
+                        <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><a href="#sec-5" className="hover:text-blue-600 transition cursor-pointer font-bold">5 Photos</a> <span>7</span></li>
+                      </ul>
                     </div>
 
-                    <div className="break-inside-avoid mb-10">
-                        <h3 id="sec-4-3" className="font-bold text-xl mb-4 mt-12 brand-heading text-slate-700">4.3 Visual quality Overview</h3>
-                        <p className="text-base mb-4 brand-body text-slate-800">
-                           On {formatDay(groups[0].measurements[groups[0].measurements.length-1].day)}, the visual quality was assessed.
-                        </p>
-                        <table className="report-table w-full text-base shadow-sm">
-                          <thead><tr><th>Variant</th><th>Final Day</th><th>Visual Score</th><th>Weight Loss</th><th>Key Observation</th></tr></thead>
-                          <tbody>
-                            {groups.map((g,i) => {
-                              const last = g.measurements[g.measurements.length - 1];
-                              const day0 = g.measurements.find(m => parseFloat(m.day) === 0);
-                              const loss = getWeightLoss(last.samples, day0?.samples);
-                              return (<tr key={i}><td>{g.name}</td><td>{formatDay(last.day)}</td><td className="font-bold">{last.quality}</td><td>{loss}%</td><td>{last.notes || '-'}</td></tr>)
-                            })}
-                          </tbody>
-                        </table>
+                    <div className="page-break"></div>
+
+                    {/* --- PAGE 3: SETTING --- */}
+                    <div id="sec-1" className="pt-4">
+                      <h2 className="report-section-title">1 Setting</h2>
+                      <div className="grid grid-cols-[180px_1fr] gap-y-3 text-base brand-body text-slate-800">
+                         <div className="font-bold">Product :</div> <div>{project.productName}</div>
+                         <div className="font-bold">Type :</div> <div>{project.type || '-'}</div>
+                         <div className="font-bold">Product Origin :</div> <div>{project.origin || '-'}</div>
+                         <div className="font-bold">Company Name :</div> <div>{project.company || '-'}</div>
+                         <div className="font-bold">Contact Person :</div> <div>{project.contactName || '-'} {project.contactEmail && `(${project.contactEmail})`}</div>
+                         <div className="font-bold">PerfoTec Employee :</div> <div>{project.employee || '-'}</div>
+                         <div className="font-bold">Technology :</div> <div>PerfoTec Laser Perforation</div>
+                         <div className="font-bold">Trial Target :</div> <div>{project.trialTarget || 'Shelf life extension'}</div>
+                         <div className="font-bold col-span-2 mt-6 border-t border-slate-300 pt-4 text-xl" style={{color: BRAND.colors.green}}>Product Supply Chain :</div> 
+                         <div className="col-span-2 w-full mt-2"><SupplyChainFlow chain={supplyChain} /></div>
+                      </div>
                     </div>
 
-                    <div className="break-inside-avoid mb-10">
-                        <h3 id="sec-4-4" className="font-bold text-xl mb-4 mt-12 brand-heading text-slate-700">4.4 Detailed Quality Parameters (End of Trial)</h3>
-                        {project.criteria.length > 0 ? (
-                          <table className="report-table w-full text-sm shadow-sm">
-                            <thead>
-                              <tr>
-                                <th>Criterion</th>
-                                {groups.map(g => <th key={g.id} className="text-center">{g.name}</th>)}
-                              </tr>
-                            </thead>
+                    <div className="page-break"></div>
+
+                    {/* --- PAGE 4: SUMMARY --- */}
+                    <div id="sec-2" className="pt-4">
+                      <h2 className="report-section-title">2 Summary and Conclusions</h2>
+                      <div className="brand-body text-base leading-relaxed text-justify text-slate-800">
+                         <h4 className="font-bold mb-3 text-xl" style={{color: BRAND.colors.black}}>Main Conclusion:</h4>
+                         <div className="mb-8 whitespace-pre-wrap pdf-rich-text" dangerouslySetInnerHTML={{ __html: analysis.conclusion || 'No conclusion entered.' }}></div>
+                         
+                         {groups.map(g => analysis.variantConclusions && analysis.variantConclusions[g.id] ? (
+                           <div key={`vc-${g.id}`} className="mb-6 break-inside-avoid">
+                             <h4 className="font-bold text-lg" style={{color: BRAND.colors.green}}>Conclusion {g.name}:</h4>
+                             <div className="whitespace-pre-wrap mt-1 pdf-rich-text" dangerouslySetInnerHTML={{ __html: analysis.variantConclusions[g.id] }}></div>
+                           </div>
+                         ) : null)}
+
+                         {analysis.nextSteps.length > 0 && (
+                           <div className="mt-8 border-t pt-6 border-slate-200 break-inside-avoid">
+                              <h4 className="font-bold text-xl mb-4" style={{color: BRAND.colors.black}}>Detailed Conclusions:</h4>
+                              <ul className="list-disc pl-6 space-y-3">
+                                {analysis.nextSteps.map((s, i) => {
+                                  const stepObj = typeof s === 'string' ? { text: s, variantId: 'general' } : s;
+                                  const variantBadge = stepObj.variantId === 'general' ? '' : `[${groups.find(g => g.id === parseInt(stepObj.variantId))?.name || 'Deleted Variant'}]`;
+                                  return (
+                                    <li key={i}>
+                                      {variantBadge && <span className="font-bold text-slate-600 mr-2">{variantBadge}</span>}
+                                      {stepObj.text}
+                                    </li>
+                                  );
+                                })}
+                              </ul>
+                           </div>
+                         )}
+                      </div>
+                    </div>
+
+                    <div className="page-break"></div>
+
+                    {/* --- PAGE 5: TRIAL SET UP --- */}
+                    <div id="sec-3" className="pt-4">
+                      <h2 className="report-section-title">3 Trial set up</h2>
+                      <div className="brand-body text-base space-y-5 text-slate-800">
+                         <div className="break-inside-avoid">
+                           <h4 className="font-bold mb-2">Trial samples:</h4>
+                           <ul className="list-disc pl-6 space-y-1">
+                             {groups.map((g,i) => {
+                               const day0 = g.measurements.find(m => parseFloat(m.day) === 0);
+                               const startWeight = day0?.samples[0]?.weight || '-';
+                               return (
+                                 <li key={i}><span className="font-bold">{g.name}</span> – {g.specs.packaging}, {g.specs.material} (TV {g.specs.holes}, {startWeight}g)</li>
+                               )
+                             })}
+                           </ul>
+                         </div>
+                         <p>The Fast Respiration Meter System was used to measure the product respiration rate (RR O₂: {project.rrO2 || '-'}, RR CO₂: {project.rrCO2 || '-'}) at {project.rrTemp || '-'}°C.</p>
+                         <p>Stored at different temperatures (see supply chain) for {totalChainDays} days total.</p>
+                         <p>The product was packed on <strong>{project.packingDate || project.date}</strong>.</p>
+                         <p>Unpacking moments were planned for {formatDay(groups[0].measurements[groups[0].measurements.length-1].day)}.</p>
+                         
+                         <p>Product quality was evaluated at the start and at the unpacking moment. The following attributes are evaluated according to the score scale listed below. Scores of 7 and higher are considered to be within specification and of acceptable quality.</p>
+                         <ul className="list-disc pl-6 grid grid-cols-2 gap-2">
+                           {project.criteria.length > 0 ? project.criteria.map((c, i) => <li key={i}>{c}</li>) : <li>General Quality</li>}
+                         </ul>
+
+                         <div className="break-inside-avoid mt-8">
+                           <h4 className="font-bold mb-2 text-lg">Score scale:</h4>
+                           <div className="grid grid-cols-1 gap-1 text-sm text-slate-600 bg-slate-50 p-5 rounded border">
+                              <div><strong className="text-slate-900">10:</strong> excellent – exceptionally appealing quality, exceptional good</div>
+                              <div><strong className="text-slate-900">9:</strong> very good – natural quality of the product, full strong characteristic quality attributes</div>
+                              <div><strong className="text-slate-900">8:</strong> good – natural quality, with few specimens with slightly light impairment</div>
+                              <div><strong className="text-slate-900">7:</strong> commendable – natural quality, with several specimens with light impairment</div>
+                              <div><strong className="text-slate-900">6:</strong> satisfactory – slightly reduced quality attributes</div>
+                              <div><strong className="text-slate-900">5:</strong> unacceptable – impairment of natural quality attributes</div>
+                              <div><strong className="text-slate-900">4:</strong> beyond unacceptable – clear impairment of quality attributes</div>
+                              <div><strong className="text-slate-900">3:</strong> poor – generally severe loss of quality, no longer appealing</div>
+                              <div><strong className="text-slate-900">2:</strong> bad – strong and severe quality loss, strongly unpleasant</div>
+                              <div><strong className="text-slate-900">1:</strong> very bad – complete quality decay, spoiled and repulsive</div>
+                           </div>
+                         </div>
+                      </div>
+                    </div>
+
+                    <div className="page-break"></div>
+
+                    {/* --- PAGE 6: RESULTS --- */}
+                    <div id="sec-4" className="pt-4">
+                      <h2 className="report-section-title">4 Trial results</h2>
+                      
+                      <div className="break-inside-avoid mb-10">
+                          <h3 id="sec-4-1" className="font-bold text-xl mb-2 brand-heading text-slate-700">4.1 Gas Levels</h3>
+                          <div className="text-base mb-6 italic brand-body text-slate-600 pdf-rich-text" dangerouslySetInnerHTML={{ __html: analysis.graphNotes || 'Gas levels were monitored throughout the shelf life period.' }}></div>
+                          
+                          {groups.map((g, idx) => (
+                            <div key={idx} className="flex gap-4 mb-8 break-inside-avoid items-center">
+                               {g.predictedImage ? (
+                                 <div className="w-1/2 border rounded p-2">
+                                    <div className="text-xs font-bold mb-1 text-center text-gray-500">Prediction (Hub)</div>
+                                    <img src={g.predictedImage} className="w-full h-auto object-contain" />
+                                 </div>
+                               ) : (
+                                 <div className="w-1/2 border rounded p-8 text-center text-gray-300 italic">No Prediction Uploaded</div>
+                               )}
+                               <div className="w-1/2">
+                                  <div className="text-xs font-bold mb-1 text-center text-gray-500">Actual Results</div>
+                                  <VariantGasChart group={g} />
+                               </div>
+                            </div>
+                          ))}
+                      </div>
+
+                      <div className="break-inside-avoid mb-10">
+                          <h3 id="sec-4-2" className="font-bold text-xl mb-4 mt-12 brand-heading text-slate-700">4.2 Weight Loss Comparison</h3>
+                          <WeightLossChart groups={groups} />
+                      </div>
+
+                      <div className="break-inside-avoid mb-10">
+                          <h3 id="sec-4-3" className="font-bold text-xl mb-4 mt-12 brand-heading text-slate-700">4.3 Visual quality Overview</h3>
+                          <p className="text-base mb-4 brand-body text-slate-800">
+                             On {formatDay(groups[0].measurements[groups[0].measurements.length-1].day)}, the visual quality was assessed.
+                          </p>
+                          <table className="report-table w-full text-base shadow-sm">
+                            <thead><tr><th>Variant</th><th>Final Day</th><th>Visual Score</th><th>Weight Loss</th><th>Key Observation</th></tr></thead>
                             <tbody>
-                              {project.criteria.map((crit, i) => (
-                                <tr key={i}>
-                                  <td className="font-semibold text-base">{crit}</td>
-                                  {groups.map(g => {
-                                     const lastMeas = g.measurements[g.measurements.length - 1];
-                                     const param = lastMeas.evaluateQuality ? lastMeas.qualityParams?.find(p => p.name === crit) : null;
-                                     return (
-                                       <td key={g.id} className="text-center align-top">
-                                         {param && param.score ? (
-                                           <div className="flex flex-col items-center">
-                                             <span className="font-bold text-xl leading-none mb-1" style={{color: BRAND.colors.green}}>{param.score}</span>
-                                             {param.notes && <span className="text-xs italic text-gray-500 leading-tight">{param.notes}</span>}
-                                           </div>
-                                         ) : '-'}
-                                       </td>
-                                     )
-                                  })}
-                                </tr>
-                              ))}
+                              {groups.map((g,i) => {
+                                const last = g.measurements[g.measurements.length - 1];
+                                const day0 = g.measurements.find(m => parseFloat(m.day) === 0);
+                                const loss = getWeightLoss(last.samples, day0?.samples);
+                                return (<tr key={i}><td>{g.name}</td><td>{formatDay(last.day)}</td><td className="font-bold">{last.quality}</td><td>{loss}%</td><td>{last.notes || '-'}</td></tr>)
+                              })}
                             </tbody>
                           </table>
-                        ) : (
-                          <p className="text-base italic text-gray-500">No specific criteria were defined for this test.</p>
-                        )}
+                      </div>
+
+                      <div className="break-inside-avoid mb-10">
+                          <h3 id="sec-4-4" className="font-bold text-xl mb-4 mt-12 brand-heading text-slate-700">4.4 Detailed Quality Parameters (End of Trial)</h3>
+                          {project.criteria.length > 0 ? (
+                            <table className="report-table w-full text-sm shadow-sm">
+                              <thead>
+                                <tr>
+                                  <th>Criterion</th>
+                                  {groups.map(g => <th key={g.id} className="text-center">{g.name}</th>)}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {project.criteria.map((crit, i) => (
+                                  <tr key={i}>
+                                    <td className="font-semibold text-base">{crit}</td>
+                                    {groups.map(g => {
+                                       const lastMeas = g.measurements[g.measurements.length - 1];
+                                       const param = lastMeas.evaluateQuality ? lastMeas.qualityParams?.find(p => p.name === crit) : null;
+                                       return (
+                                         <td key={g.id} className="text-center align-top">
+                                           {param && param.score ? (
+                                             <div className="flex flex-col items-center">
+                                               <span className="font-bold text-xl leading-none mb-1" style={{color: BRAND.colors.green}}>{param.score}</span>
+                                               {param.notes && <span className="text-xs italic text-gray-500 leading-tight">{param.notes}</span>}
+                                             </div>
+                                           ) : '-'}
+                                         </td>
+                                       )
+                                    })}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          ) : (
+                            <p className="text-base italic text-gray-500">No specific criteria were defined for this test.</p>
+                          )}
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="page-break"></div>
+                    <div className="page-break"></div>
 
-                  {/* --- PAGE 7: PHOTOS --- */}
-                  <div id="sec-5" className="pt-4">
-                    <h2 className="report-section-title">5. Photos</h2>
-                    
-                    {project.startImage && (
-                        <div className="mb-8 break-inside-avoid">
-                            <h3 className="font-bold text-lg mb-4 brand-heading text-slate-700 border-b-2 border-slate-200 pb-1">Initial Reference</h3>
-                            <div className="h-64 w-full md:w-1/2 border rounded overflow-hidden flex items-center justify-center bg-slate-50 shadow-sm">
-                                <img src={project.startImage} className="h-full object-contain"/>
-                            </div>
-                        </div>
-                    )}
-                    
-                    {categoriesPresent.map(category => {
-                        const catPhotos = photosByCategory[category];
-                        const groupsInCat = Array.from(new Set(catPhotos.map(p => p.groupName)));
+                    {/* --- PAGE 7: PHOTOS --- */}
+                    <div id="sec-5" className="pt-4">
+                      <h2 className="report-section-title">5. Photos</h2>
+                      
+                      {project.startImage && (
+                          <div className="mb-8 break-inside-avoid">
+                              <h3 className="font-bold text-lg mb-4 brand-heading text-slate-700 border-b-2 border-slate-200 pb-1">Initial Reference</h3>
+                              <div className="h-64 w-full md:w-1/2 border rounded overflow-hidden flex items-center justify-center bg-slate-50 shadow-sm">
+                                  <img src={project.startImage} className="h-full object-contain"/>
+                              </div>
+                          </div>
+                      )}
+                      
+                      {categoriesPresent.map(category => {
+                          const catPhotos = photosByCategory[category];
+                          const groupsInCat = Array.from(new Set(catPhotos.map(p => p.groupName)));
 
-                        return (
-                            <div key={category} className="mb-10 break-inside-avoid">
-                                <h3 className="font-bold text-xl mb-6 brand-heading text-slate-700 border-b-2 border-slate-200 pb-1 flex items-center gap-2">
-                                   <Camera size={20} color={BRAND.colors.green} /> {category}
-                                </h3>
-                                {groupsInCat.map(gName => {
-                                    const variantPhotos = catPhotos.filter(p => p.groupName === gName).sort((a,b) => parseFloat(a.day) - parseFloat(b.day));
-                                    return (
-                                        <div key={gName} className="mb-8">
-                                            <h4 className="font-bold text-md text-slate-600 mb-3">{gName}</h4>
-                                            <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-                                                {variantPhotos.map((photo, idx) => (
-                                                   <div key={idx} className="break-inside-avoid">
-                                                      <div className="h-56 border rounded-lg overflow-hidden flex items-center justify-center bg-slate-50 relative shadow-sm">
-                                                         <img src={photo.url} className="w-full h-full object-contain bg-white"/>
-                                                         <div className="absolute top-0 right-0 bg-white/90 px-3 py-1 text-xs font-bold border-b border-l rounded-bl-lg text-gray-700">{formatDay(photo.day)}</div>
-                                                      </div>
-                                                      {photo.caption && <div className="text-sm mt-2 text-center brand-body italic text-slate-600">{photo.caption}</div>}
-                                                   </div>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )
-                    })}
+                          return (
+                              <div key={category} className="mb-10 break-inside-avoid">
+                                  <h3 className="font-bold text-xl mb-6 brand-heading text-slate-700 border-b-2 border-slate-200 pb-1 flex items-center gap-2">
+                                     <Camera size={20} color={BRAND.colors.green} /> {category}
+                                  </h3>
+                                  {groupsInCat.map(gName => {
+                                      const variantPhotos = catPhotos.filter(p => p.groupName === gName).sort((a,b) => parseFloat(a.day) - parseFloat(b.day));
+                                      return (
+                                          <div key={gName} className="mb-8">
+                                              <h4 className="font-bold text-md text-slate-600 mb-3">{gName}</h4>
+                                              <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                                                  {variantPhotos.map((photo, idx) => (
+                                                     <div key={idx} className="break-inside-avoid">
+                                                        <div className="h-56 border rounded-lg overflow-hidden flex items-center justify-center bg-slate-50 relative shadow-sm">
+                                                           <img src={photo.url} className="w-full h-full object-contain bg-white"/>
+                                                           <div className="absolute top-0 right-0 bg-white/90 px-3 py-1 text-xs font-bold border-b border-l rounded-bl-lg text-gray-700">{formatDay(photo.day)}</div>
+                                                        </div>
+                                                        {photo.caption && <div className="text-sm mt-2 text-center brand-body italic text-slate-600">{photo.caption}</div>}
+                                                     </div>
+                                                  ))}
+                                              </div>
+                                          </div>
+                                      );
+                                  })}
+                              </div>
+                          )
+                      })}
+                    </div>
                   </div>
                 </div>
               </div>
