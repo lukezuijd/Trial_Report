@@ -1,1 +1,788 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PerfoTec Client Intake</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        html { scroll-behavior: smooth; }
+        body { background-color: #f8fafc; }
+        
+        /* Styling voor invulvelden */
+        .label { 
+            display: block; 
+            font-size: 0.75rem; 
+            font-weight: 700; 
+            color: #64748b; 
+            text-transform: uppercase; 
+            letter-spacing: 0.05em; 
+            margin-bottom: 0.5rem; 
+        }
+        .input { 
+            width: 100%; 
+            padding: 0.75rem 1rem; 
+            border: 1px solid #cbd5e1; 
+            border-radius: 0.5rem; 
+            outline: none; 
+            transition: all 0.2s; 
+            background-color: #ffffff; 
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); 
+            color: #1e293b;
+        }
+        .input:focus { 
+            border-color: #007C27; 
+            box-shadow: 0 0 0 3px rgba(0, 124, 39, 0.15); 
+        }
+        .input::placeholder { 
+            color: #94a3b8; 
+            font-weight: normal; 
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
 
+    <script type="text/babel" data-type="module">
+        import React, { useState, useEffect } from 'https://esm.sh/react@18.2.0';
+        import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
+        import { 
+          Building2, User, Phone, Mail, MapPin, PackagePlus, 
+          Trash2, Plus, ChevronUp, ChevronDown, Upload, 
+          Image as ImageIcon, Send, CheckCircle, Target, AlertCircle,
+          Globe, FileJson, AlertTriangle,
+          Truck, Tractor, Ship, Plane, Warehouse, Store, Utensils, Factory,
+          Thermometer, Clock, ChevronRight, ArrowDown, ArrowUp
+        } from 'https://esm.sh/lucide-react@0.292.0';
+
+        const BRAND = {
+          colors: { green: '#007C27', blue: '#054E9A', black: '#211A1A' }
+        };
+
+        const PACKAGING_TYPES = ['Punnets', 'Pillow Bag', 'Box/ Crate', 'Bin crate', 'Pallet'];
+
+        // --- TRANSLATIONS ---
+        const T = {
+          nl: {
+            title: "Klant Intake Formulier",
+            subtitle: "Test Aanvraag Voorbereiding",
+            introTitle: "Welkom bij PerfoTec!",
+            introText: "Om uw producten zo goed mogelijk te kunnen testen, vragen wij u om dit formulier compleet in te vullen. U kunt meerdere producten toevoegen. Klik onderaan op 'Controleren & Verzenden' om de aanvraag naar PerfoTec te sturen.",
+            sec1Title: "1. Bedrijfs- & Contactgegevens",
+            companyName: "Bedrijfsnaam",
+            street: "Straat",
+            houseNumber: "Nummer",
+            zipCode: "Postcode",
+            city: "Plaats / Stad",
+            country: "Land",
+            contactName: "Naam Contactpersoon",
+            role: "Functie",
+            email: "E-mailadres",
+            phone: "Telefoonnummer (Optioneel)",
+            logoUpload: "Bedrijfslogo (Optioneel)",
+            clickUpload: "Klik om te uploaden",
+            sec2Title: "2. Product(en) voor de Test",
+            prodDetails: "Product Details",
+            delProd: "Verwijder Product",
+            secATitle: "A. Product & Verpakking",
+            prodName: "Productnaam",
+            prodPhoto: "Product Foto (Optioneel)",
+            packType: "Type Verpakking",
+            material: "Huidig Verpakkingsmateriaal",
+            dimens: "Verpakkingsdimensies (Binnenmaat in mm)",
+            len: "Lengte",
+            wid: "Breedte",
+            widSeal: "Breedte Seal",
+            hei: "Hoogte",
+            weight: "Standaard Verpakt Gewicht (in gram)",
+            secBTitle: "B. Uitdaging & Doelstelling",
+            challenge: "Huidige Uitdaging",
+            challengePl: "Tegen welke problemen loopt u momenteel aan? (Bijv. condens, schimmel...)",
+            goal: "Beoogd Doel met PerfoTec",
+            goalPl: "Wat moet onze oplossing concreet opleveren? (Bijv. 3 dagen extra houdbaarheid...)",
+            secCTitle: "C. Huidige Supply Chain",
+            chainDesc: "Bouw hieronder stap voor stap de huidige levenscyclus op, van oogst tot consument.",
+            step: "Stap",
+            phase: "Fase (Omschrijving)",
+            temp: "Temp (°C)",
+            to: "Tot",
+            days: "Dagen",
+            action: "Verpak-Actie",
+            actNone: "- Geen -",
+            actPack: "Inpakken",
+            actUnpack: "Uitpakken",
+            addStep: "Extra Stap Toevoegen",
+            addProd: "Voeg nog een product toe",
+            submitBtn: "Controleren & Verzenden",
+            validationErr: "Nog niet alle verplichte velden zijn ingevuld:",
+            successMsg: "Bestand Gedownload! Uw e-mailprogramma is geopend om de aanvraag naar Luke te sturen.",
+            reqField: "is verplicht",
+            reqProd: "Product"
+          },
+          en: {
+            title: "Client Intake Form",
+            subtitle: "Test Request Preparation",
+            introTitle: "Welcome to PerfoTec!",
+            introText: "To test your products properly, we ask you to fill out this form as completely as possible. You can add multiple products. Click 'Review & Send' at the bottom to send the request to PerfoTec.",
+            sec1Title: "1. Company & Contact Details",
+            companyName: "Company Name",
+            street: "Street",
+            houseNumber: "Number",
+            zipCode: "Zip / Postal Code",
+            city: "City",
+            country: "Country",
+            contactName: "Contact Person Name",
+            role: "Job Title",
+            email: "Email Address",
+            phone: "Phone Number (Optional)",
+            logoUpload: "Company Logo (Optional)",
+            clickUpload: "Click to upload",
+            sec2Title: "2. Product(s) for Testing",
+            prodDetails: "Product Details",
+            delProd: "Remove Product",
+            secATitle: "A. Product & Packaging",
+            prodName: "Product Name",
+            prodPhoto: "Product Photo (Optional)",
+            packType: "Packaging Type",
+            material: "Current Packaging Material",
+            dimens: "Packaging Dimensions (Internal size in mm)",
+            len: "Length",
+            wid: "Width",
+            widSeal: "Seal Width",
+            hei: "Height",
+            weight: "Standard Packed Weight (in grams)",
+            secBTitle: "B. Challenge & Objectives",
+            challenge: "Current Challenge",
+            challengePl: "What issues are you currently facing? (e.g. condensation, mold...)",
+            goal: "Target Goal with PerfoTec",
+            goalPl: "What exactly should our solution deliver? (e.g. 3 days extra shelf life...)",
+            secCTitle: "C. Current Supply Chain",
+            chainDesc: "Build the current life cycle below, step by step, from harvest to consumer.",
+            step: "Step",
+            phase: "Phase (Description)",
+            temp: "Temp (°C)",
+            to: "To",
+            days: "Days",
+            action: "Packing Action",
+            actNone: "- None -",
+            actPack: "Pack",
+            actUnpack: "Unpack",
+            addStep: "Add Extra Step",
+            addProd: "Add another product",
+            submitBtn: "Review & Send",
+            validationErr: "Not all mandatory fields have been filled in:",
+            successMsg: "File Downloaded! Your email program has opened to send the request to Luke.",
+            reqField: "is required",
+            reqProd: "Product"
+          },
+          es: {
+            title: "Formulario de Ingreso",
+            subtitle: "Preparación de Solicitud de Prueba",
+            introTitle: "¡Bienvenido a PerfoTec!",
+            introText: "Para probar sus productos correctamente, le pedimos que complete este formulario. Puede añadir varios productos. Haga clic en 'Revisar y Enviar' en la parte inferior para enviar su solicitud.",
+            sec1Title: "1. Datos de la Empresa y Contacto",
+            companyName: "Nombre de la Empresa",
+            street: "Calle",
+            houseNumber: "Número",
+            zipCode: "Código Postal",
+            city: "Ciudad",
+            country: "País",
+            contactName: "Persona de Contacto",
+            role: "Cargo",
+            email: "Correo Electrónico",
+            phone: "Teléfono (Opcional)",
+            logoUpload: "Logo de la Empresa (Opcional)",
+            clickUpload: "Clic para subir",
+            sec2Title: "2. Producto(s) para Prueba",
+            prodDetails: "Detalles del Producto",
+            delProd: "Eliminar Producto",
+            secATitle: "A. Producto y Empaque",
+            prodName: "Nombre del Producto",
+            prodPhoto: "Foto del Producto (Opcional)",
+            packType: "Tipo de Empaque",
+            material: "Material de Empaque Actual",
+            dimens: "Dimensiones del Empaque (Medida interna en mm)",
+            len: "Longitud",
+            wid: "Ancho",
+            widSeal: "Ancho del Sello",
+            hei: "Altura",
+            weight: "Peso Estándar Empacado (en gramos)",
+            secBTitle: "B. Desafío y Objetivos",
+            challenge: "Desafío Actual",
+            challengePl: "¿Qué problemas enfrenta actualmente? (Ej. condensación, moho...)",
+            goal: "Objetivo con PerfoTec",
+            goalPl: "¿Qué debería ofrecer nuestra solución? (Ej. 3 días extra de vida útil...)",
+            secCTitle: "C. Cadena de Suministro Actual",
+            chainDesc: "Construya el ciclo de vida actual paso a paso, desde la cosecha hasta el consumidor.",
+            step: "Paso",
+            phase: "Fase (Descripción)",
+            temp: "Temp (°C)",
+            to: "A",
+            days: "Días",
+            action: "Acción Empaque",
+            actNone: "- Ninguna -",
+            actPack: "Empacar",
+            actUnpack: "Desempacar",
+            addStep: "Añadir Paso",
+            addProd: "Añadir otro producto",
+            submitBtn: "Revisar y Enviar",
+            validationErr: "Faltan campos obligatorios por completar:",
+            successMsg: "¡Archivo descargado! Su programa de correo se ha abierto para enviar la solicitud a Luke.",
+            reqField: "es obligatorio",
+            reqProd: "Producto"
+          }
+        };
+
+        const DEFAULT_SUPPLY_CHAIN = [
+          { stage: 'Farm / Harvest', tempStart: '15', tempEnd: '', daysStart: '0', daysEnd: '', action: 'none' },
+          { stage: 'Packing House', tempStart: '12', tempEnd: '', daysStart: '1', daysEnd: '', action: 'pack' },
+          { stage: 'Transport', tempStart: '6', tempEnd: '', daysStart: '2', daysEnd: '', action: 'none' },
+          { stage: 'Distribution Center', tempStart: '4', tempEnd: '', daysStart: '1', daysEnd: '', action: 'none' },
+          { stage: 'Retail Store', tempStart: '18', tempEnd: '', daysStart: '4', daysEnd: '', action: 'none' },
+          { stage: 'Consumer', tempStart: '20', tempEnd: '', daysStart: '2', daysEnd: '', action: 'unpack' }
+        ];
+
+        // --- HOOFD APPLICATIE ---
+        const App = () => {
+          const [lang, setLang] = useState('nl');
+          const t = T[lang];
+
+          const [clientInfo, setClientInfo] = useState({
+            companyName: '', street: '', houseNumber: '', zipCode: '', city: '', country: '',
+            contactName: '', role: '', email: '', phone: '', logo: null
+          });
+
+          const [products, setProducts] = useState([
+            {
+              id: Date.now(),
+              name: '', packagingType: 'Punnets', length: '', width: '', height: '', weight: '', material: '',
+              supplyChain: JSON.parse(JSON.stringify(DEFAULT_SUPPLY_CHAIN)),
+              currentChallenge: '', targetGoal: '', photo: null
+            }
+          ]);
+
+          const [errors, setErrors] = useState([]);
+          const [isSuccess, setIsSuccess] = useState(false);
+
+          // --- HANDLERS CLIENT INFO ---
+          const handleClientChange = (field, value) => {
+            setClientInfo(prev => ({ ...prev, [field]: value }));
+            if (errors.length > 0) setErrors([]); 
+          };
+
+          const handleLogoUpload = (e) => {
+            const file = e.target.files[0];
+            if (file) {
+              const reader = new FileReader();
+              reader.onloadend = () => handleClientChange('logo', reader.result);
+              reader.readAsDataURL(file);
+            }
+          };
+
+          // --- HANDLERS PRODUCTS ---
+          const addProduct = () => {
+            setProducts([...products, {
+              id: Date.now(), name: '', packagingType: 'Punnets', length: '', width: '', height: '', weight: '', material: '',
+              supplyChain: JSON.parse(JSON.stringify(DEFAULT_SUPPLY_CHAIN)),
+              currentChallenge: '', targetGoal: '', photo: null
+            }]);
+          };
+
+          const removeProduct = (id) => {
+            if (products.length > 1) setProducts(products.filter(p => p.id !== id));
+          };
+
+          const handleProductChange = (id, field, value) => {
+            setProducts(prev => prev.map(p => {
+              if (p.id === id) {
+                const updatedProduct = { ...p, [field]: value };
+                
+                // Smart Supply Chain Logic for Packaging Action
+                if (field === 'packagingType') {
+                  const bulkTypes = ['Box/ Crate', 'Bin crate', 'Pallet'];
+                  const isBulk = bulkTypes.includes(value);
+                  
+                  updatedProduct.supplyChain = updatedProduct.supplyChain.map(step => {
+                    const stageLower = step.stage.toLowerCase();
+                    let newAction = step.action;
+                    
+                    // Reset all unpack actions first to avoid multiple unpack stages
+                    if (newAction === 'unpack') newAction = 'none';
+
+                    if (stageLower.includes('packing') || stageLower.includes('verpak')) {
+                       newAction = 'pack';
+                    } else if (stageLower.includes('distribution') || stageLower.includes('dc') || stageLower.includes('distributie')) {
+                       if (isBulk) newAction = 'unpack';
+                    } else if (stageLower.includes('consumer') || stageLower.includes('consument')) {
+                       if (!isBulk) newAction = 'unpack';
+                    }
+                    
+                    return { ...step, action: newAction };
+                  });
+                }
+                
+                return updatedProduct;
+              }
+              return p;
+            }));
+            
+            if (errors.length > 0) setErrors([]);
+          };
+
+          const handleProductPhotoUpload = (e, id) => {
+            const file = e.target.files[0];
+            if (file) {
+              const reader = new FileReader();
+              reader.onloadend = () => handleProductChange(id, 'photo', reader.result);
+              reader.readAsDataURL(file);
+            }
+          };
+
+          // --- HANDLERS SUPPLY CHAIN ---
+          const addChainStep = (productId) => {
+            setProducts(prev => prev.map(p => p.id === productId ? { ...p, supplyChain: [...p.supplyChain, { stage: '', tempStart: '', tempEnd: '', daysStart: '', daysEnd: '', action: 'none' }] } : p));
+          };
+          const updateChainStep = (productId, index, field, value) => {
+            setProducts(prev => prev.map(p => {
+              if (p.id === productId) {
+                const newChain = [...p.supplyChain]; newChain[index][field] = value; return { ...p, supplyChain: newChain };
+              }
+              return p;
+            }));
+            if (errors.length > 0) setErrors([]);
+          };
+          const removeChainStep = (productId, index) => {
+            setProducts(prev => prev.map(p => p.id === productId ? { ...p, supplyChain: p.supplyChain.filter((_, i) => i !== index) } : p));
+          };
+          const moveChainStep = (productId, index, direction) => {
+            setProducts(prev => prev.map(p => {
+              if (p.id === productId) {
+                const newChain = [...p.supplyChain];
+                if (direction === 'up' && index > 0) [newChain[index], newChain[index - 1]] = [newChain[index - 1], newChain[index]];
+                else if (direction === 'down' && index < newChain.length - 1) [newChain[index], newChain[index + 1]] = [newChain[index + 1], newChain[index]];
+                return { ...p, supplyChain: newChain };
+              }
+              return p;
+            }));
+          };
+
+          const getStageIcon = (name) => {
+            const n = name.toLowerCase();
+            if (n.includes('farm') || n.includes('harvest')) return <Tractor size={14} color={BRAND.colors.black} />;
+            if (n.includes('sea')) return <Ship size={14} color={BRAND.colors.black} />;
+            if (n.includes('air')) return <Plane size={14} color={BRAND.colors.black} />;
+            if (n.includes('storage') || n.includes('dc') || n.includes('distribution')) return <Warehouse size={14} color={BRAND.colors.black} />;
+            if (n.includes('store') || n.includes('retail')) return <Store size={14} color={BRAND.colors.black} />;
+            if (n.includes('consumer') || n.includes('eat')) return <Utensils size={14} color={BRAND.colors.black} />;
+            if (n.includes('pack') && !n.includes('transport')) return <Factory size={14} color={BRAND.colors.black} />;
+            return <Truck size={14} color={BRAND.colors.black} />;
+          };
+
+          // --- VALIDATION & EXPORT ---
+          const validateForm = () => {
+            let newErrors = [];
+            
+            // Check Client Info
+            if (!clientInfo.companyName.trim()) newErrors.push(`${t.companyName} ${t.reqField}`);
+            if (!clientInfo.street.trim()) newErrors.push(`${t.street} ${t.reqField}`);
+            if (!clientInfo.houseNumber.trim()) newErrors.push(`${t.houseNumber} ${t.reqField}`);
+            if (!clientInfo.zipCode.trim()) newErrors.push(`${t.zipCode} ${t.reqField}`);
+            if (!clientInfo.city.trim()) newErrors.push(`${t.city} ${t.reqField}`);
+            if (!clientInfo.country.trim()) newErrors.push(`${t.country} ${t.reqField}`);
+            
+            if (!clientInfo.contactName.trim()) newErrors.push(`${t.contactName} ${t.reqField}`);
+            if (!clientInfo.email.trim()) newErrors.push(`${t.email} ${t.reqField}`);
+
+            // Check Products
+            products.forEach((p, idx) => {
+              const prefix = `${t.reqProd} ${idx + 1} (${p.name || '?'}): `;
+              if (!p.name.trim()) newErrors.push(`${prefix}${t.prodName} ${t.reqField}`);
+              if (!p.material.trim()) newErrors.push(`${prefix}${t.material} ${t.reqField}`);
+              if (!p.length.toString().trim()) newErrors.push(`${prefix}${t.len} ${t.reqField}`);
+              if (!p.width.toString().trim()) newErrors.push(`${prefix}${p.packagingType === 'Pillow Bag' ? t.widSeal : t.wid} ${t.reqField}`);
+              if (p.packagingType !== 'Pillow Bag' && !p.height.toString().trim()) newErrors.push(`${prefix}${t.hei} ${t.reqField}`);
+              if (!p.weight.toString().trim()) newErrors.push(`${prefix}${t.weight} ${t.reqField}`);
+              if (!p.currentChallenge.trim()) newErrors.push(`${prefix}${t.challenge} ${t.reqField}`);
+              if (!p.targetGoal.trim()) newErrors.push(`${prefix}${t.goal} ${t.reqField}`);
+
+              // Check supply chain (only mandatory fields)
+              p.supplyChain.forEach((step, sIdx) => {
+                 if (!step.stage.trim()) newErrors.push(`${prefix}${t.step} ${sIdx + 1} - ${t.phase} ${t.reqField}`);
+                 if (step.tempStart === '') newErrors.push(`${prefix}${t.step} ${sIdx + 1} - ${t.temp} ${t.reqField}`);
+                 if (step.daysStart === '') newErrors.push(`${prefix}${t.step} ${sIdx + 1} - ${t.days} ${t.reqField}`);
+              });
+            });
+
+            setErrors(newErrors);
+            return newErrors.length === 0;
+          };
+
+          const handleSubmit = () => {
+            if (!validateForm()) {
+               window.scrollTo({ top: 0, behavior: 'smooth' });
+               return;
+            }
+
+            const exportData = {
+              isPerfoTecIntake: true,
+              exportDate: new Date().toISOString(),
+              language: lang,
+              client: clientInfo,
+              products: products
+            };
+
+            const dataString = JSON.stringify(exportData, null, 2);
+            const blob = new Blob([dataString], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const cleanCompanyName = clientInfo.companyName.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'new_client';
+            a.download = `perfotec_intake_${cleanCompanyName}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            const subject = encodeURIComponent(`New PerfoTec Intake - ${clientInfo.companyName}`);
+            let bodyText = '';
+            if (lang === 'nl') {
+               bodyText = `Beste Luke,\n\nIn de bijlage vind je ons ingevulde intake formulier (het JSON bestand is zojuist gedownload op mijn computer).\n\nMet vriendelijke groet,\n${clientInfo.contactName}\n${clientInfo.companyName}`;
+            } else if (lang === 'es') {
+               bodyText = `Estimado Luke,\n\nAdjunto encontrará nuestro formulario de ingreso completado (el archivo JSON acaba de descargarse en mi computadora).\n\nAtentamente,\n${clientInfo.contactName}\n${clientInfo.companyName}`;
+            } else {
+               bodyText = `Dear Luke,\n\nPlease find our completed intake form attached (the JSON file has just been downloaded to my computer).\n\nBest regards,\n${clientInfo.contactName}\n${clientInfo.companyName}`;
+            }
+            
+            window.location.href = `mailto:luke.zuijderwijk@perfotec.com?subject=${subject}&body=${encodeURIComponent(bodyText)}`;
+
+            setIsSuccess(true);
+            setTimeout(() => setIsSuccess(false), 8000);
+          };
+
+          return (
+            <div className="min-h-screen pb-20 font-sans text-slate-800">
+              
+              {/* HEADER */}
+              <header className="bg-white border-b border-slate-200 sticky top-0 z-20 shadow-sm">
+                <div className="max-w-5xl mx-auto px-4 md:px-6 py-4 flex justify-between items-center">
+                  <div className="flex items-center gap-3">
+                    <img src="https://cdn.prod.website-files.com/68b594c756c22085ddc6c1ea/68b59ba2f027bfeecd25261b_PerfoTec%20logo.png" alt="PerfoTec" className="h-8 md:h-10 object-contain" />
+                    <div className="border-l border-slate-300 pl-3 ml-1 hidden sm:block">
+                      <h1 className="font-bold text-xl leading-none" style={{color: BRAND.colors.blue}}>{t.title}</h1>
+                      <p className="text-xs text-slate-500 font-medium mt-0.5">{t.subtitle}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center bg-slate-100 rounded-lg p-1 border border-slate-200">
+                       <Globe size={16} className="text-slate-400 ml-1 mr-1" />
+                       <select className="bg-transparent text-sm font-bold outline-none cursor-pointer" value={lang} onChange={(e) => setLang(e.target.value)}>
+                         <option value="nl">NL</option>
+                         <option value="en">EN</option>
+                         <option value="es">ES</option>
+                       </select>
+                    </div>
+                  </div>
+                </div>
+              </header>
+
+              <main className="max-w-4xl mx-auto p-4 md:p-6 mt-2 md:mt-6 space-y-8">
+                
+                {/* BANNERS */}
+                {errors.length > 0 && (
+                  <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded shadow-sm animate-pulse">
+                    <h3 className="font-bold text-red-800 flex items-center gap-2 mb-2"><AlertTriangle size={18}/> {t.validationErr}</h3>
+                    <ul className="list-disc pl-6 text-sm text-red-700 space-y-1">
+                      {errors.map((err, i) => <li key={i}>{err}</li>)}
+                    </ul>
+                  </div>
+                )}
+                {isSuccess && (
+                  <div className="bg-green-50 border-l-4 border-green-500 p-4 rounded shadow-sm flex items-center gap-3">
+                    <CheckCircle size={24} className="text-green-600" />
+                    <p className="font-bold text-green-800">{t.successMsg}</p>
+                  </div>
+                )}
+                
+                {/* INTRO */}
+                <div className="bg-blue-50 border-l-4 border-blue-600 p-5 rounded-r-xl shadow-sm">
+                   <h2 className="font-bold text-blue-900 mb-2">{t.introTitle}</h2>
+                   <p className="text-sm text-blue-800 leading-relaxed">{t.introText}</p>
+                </div>
+
+                {/* 1. BEDRIJFSGEGEVENS */}
+                <section className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-200">
+                  <div className="flex items-center gap-3 border-b border-slate-100 pb-4 mb-6">
+                    <Building2 size={24} color={BRAND.colors.green} />
+                    <h2 className="text-xl font-bold text-slate-800">{t.sec1Title}</h2>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div className="md:col-span-2 flex flex-col gap-6">
+                      
+                      {/* Bedrijfsnaam full width */}
+                      <div>
+                        <label className="label">{t.companyName} *</label>
+                        <input type="text" className="input font-bold text-lg" value={clientInfo.companyName} onChange={e => handleClientChange('companyName', e.target.value)} />
+                      </div>
+
+                      {/* Adres Blok */}
+                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 grid grid-cols-4 gap-4">
+                         <div className="col-span-4 sm:col-span-3">
+                           <label className="label">{t.street} *</label>
+                           <input type="text" className="input" value={clientInfo.street} onChange={e => handleClientChange('street', e.target.value)} />
+                         </div>
+                         <div className="col-span-4 sm:col-span-1">
+                           <label className="label">{t.houseNumber} *</label>
+                           <input type="text" className="input" value={clientInfo.houseNumber} onChange={e => handleClientChange('houseNumber', e.target.value)} />
+                         </div>
+                         <div className="col-span-4 sm:col-span-2">
+                           <label className="label">{t.zipCode} *</label>
+                           <input type="text" className="input" value={clientInfo.zipCode} onChange={e => handleClientChange('zipCode', e.target.value)} />
+                         </div>
+                         <div className="col-span-4 sm:col-span-2">
+                           <label className="label">{t.city} *</label>
+                           <input type="text" className="input" value={clientInfo.city} onChange={e => handleClientChange('city', e.target.value)} />
+                         </div>
+                         <div className="col-span-4">
+                           <label className="label">{t.country} *</label>
+                           <input type="text" className="input" value={clientInfo.country} onChange={e => handleClientChange('country', e.target.value)} />
+                         </div>
+                      </div>
+
+                      {/* Contact Info */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                          <div>
+                            <label className="label">{t.contactName} *</label>
+                            <input type="text" className="input" value={clientInfo.contactName} onChange={e => handleClientChange('contactName', e.target.value)} />
+                          </div>
+                          <div>
+                            <label className="label">{t.role}</label>
+                            <input type="text" className="input" value={clientInfo.role} onChange={e => handleClientChange('role', e.target.value)} />
+                          </div>
+                          <div>
+                            <label className="label">{t.email} *</label>
+                            <input type="email" className="input" value={clientInfo.email} onChange={e => handleClientChange('email', e.target.value)} />
+                          </div>
+                          <div>
+                            <label className="label">{t.phone}</label>
+                            <input type="tel" className="input" value={clientInfo.phone} onChange={e => handleClientChange('phone', e.target.value)} />
+                          </div>
+                      </div>
+
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                       <label className="label">{t.logoUpload}</label>
+                       <label className="border-2 border-dashed border-slate-300 rounded-xl flex-1 flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-slate-100 transition cursor-pointer relative overflow-hidden min-h-[150px]">
+                          <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+                          {clientInfo.logo ? (
+                            <img src={clientInfo.logo} className="w-full h-full object-contain p-2" />
+                          ) : (
+                            <div className="p-4">
+                              <Upload size={28} className="mx-auto text-slate-400 mb-2" />
+                              <span className="font-bold text-sm text-slate-600 block">{t.clickUpload}</span>
+                            </div>
+                          )}
+                       </label>
+                    </div>
+                  </div>
+                </section>
+
+                {/* 2. PRODUCTEN */}
+                <div className="flex items-center gap-3 pb-2 pt-4">
+                  <PackagePlus size={28} color={BRAND.colors.blue} />
+                  <h2 className="text-2xl font-bold text-slate-800">{t.sec2Title}</h2>
+                </div>
+
+                <div className="space-y-8">
+                  {products.map((product, productIndex) => {
+                    const isPillowBag = product.packagingType === 'Pillow Bag';
+                    return (
+                      <section key={product.id} className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative">
+                        {/* Product Header */}
+                        <div className="bg-slate-800 text-white p-4 flex justify-between items-center">
+                           <h3 className="font-bold text-lg flex items-center gap-2">
+                             <span className="bg-slate-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs">{productIndex + 1}</span>
+                             {t.prodDetails} {product.name ? `- ${product.name}` : ''}
+                           </h3>
+                           {products.length > 1 && (
+                             <button onClick={() => removeProduct(product.id)} className="text-red-300 hover:text-red-400 bg-slate-700 hover:bg-slate-600 p-2 rounded transition flex items-center gap-2 text-sm font-bold">
+                               <Trash2 size={16} /> <span className="hidden sm:inline">{t.delProd}</span>
+                             </button>
+                           )}
+                        </div>
+
+                        <div className="p-5 md:p-8 space-y-8">
+                          
+                          {/* A. Basis & Verpakking */}
+                          <div>
+                            <h4 className="font-bold text-slate-700 mb-4 border-b pb-2">{t.secATitle}</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                              <div className="md:col-span-2">
+                                <label className="label">{t.prodName} *</label>
+                                <input type="text" className="input font-bold text-lg" value={product.name} onChange={e => handleProductChange(product.id, 'name', e.target.value)} />
+                              </div>
+                              
+                              <div className="md:col-span-1 md:row-span-3">
+                                 <label className="label">{t.prodPhoto}</label>
+                                 <label className="border-2 border-dashed border-slate-300 rounded-xl w-full h-full min-h-[150px] flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-slate-100 transition cursor-pointer relative overflow-hidden">
+                                    <input type="file" accept="image/*" className="hidden" onChange={(e) => handleProductPhotoUpload(e, product.id)} />
+                                    {product.photo ? (
+                                      <img src={product.photo} className="w-full h-full object-cover" />
+                                    ) : (
+                                      <div className="p-4">
+                                        <ImageIcon size={28} className="mx-auto text-slate-400 mb-2" />
+                                        <span className="font-bold text-sm text-slate-600 block">{t.clickUpload}</span>
+                                      </div>
+                                    )}
+                                 </label>
+                              </div>
+
+                              <div>
+                                <label className="label">{t.packType} *</label>
+                                <select className="input" value={product.packagingType} onChange={e => handleProductChange(product.id, 'packagingType', e.target.value)}>
+                                  {PACKAGING_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="label">{t.material} *</label>
+                                <input type="text" className="input" value={product.material} onChange={e => handleProductChange(product.id, 'material', e.target.value)} />
+                              </div>
+
+                              <div className="md:col-span-2 bg-slate-50 p-5 rounded-xl border border-slate-200">
+                                 <label className="label text-blue-800 border-b border-blue-200 pb-2 mb-4">{t.dimens}</label>
+                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-5">
+                                   <div>
+                                     <label className="text-xs text-slate-500 font-bold uppercase mb-1 block">{t.len} *</label>
+                                     <input type="number" className="input text-center" value={product.length} onChange={e => handleProductChange(product.id, 'length', e.target.value)} />
+                                   </div>
+                                   <div>
+                                     <label className="text-xs text-slate-500 font-bold uppercase mb-1 block">{isPillowBag ? t.widSeal : t.wid} *</label>
+                                     <input type="number" className="input text-center" value={product.width} onChange={e => handleProductChange(product.id, 'width', e.target.value)} />
+                                   </div>
+                                   {!isPillowBag && (
+                                     <div className="col-span-2 sm:col-span-1">
+                                       <label className="text-xs text-slate-500 font-bold uppercase mb-1 block">{t.hei} *</label>
+                                       <input type="number" className="input text-center" value={product.height} onChange={e => handleProductChange(product.id, 'height', e.target.value)} />
+                                     </div>
+                                   )}
+                                 </div>
+                              </div>
+                              
+                              <div className="md:col-span-2">
+                                <label className="label">{t.weight} *</label>
+                                <input type="number" className="input w-full sm:w-1/2" value={product.weight} onChange={e => handleProductChange(product.id, 'weight', e.target.value)} />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* B. Doel & Uitdaging */}
+                          <div>
+                            <h4 className="font-bold text-slate-700 mb-4 border-b pb-2 flex items-center gap-2"><Target size={18} color={BRAND.colors.green}/> {t.secBTitle}</h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                              <div>
+                                <label className="label text-orange-600 flex items-center gap-1"><AlertCircle size={14}/> {t.challenge} *</label>
+                                <textarea rows="4" className="input" placeholder={t.challengePl} value={product.currentChallenge} onChange={e => handleProductChange(product.id, 'currentChallenge', e.target.value)}></textarea>
+                              </div>
+                              <div>
+                                <label className="label text-green-600 flex items-center gap-1"><CheckCircle size={14}/> {t.goal} *</label>
+                                <textarea rows="4" className="input" placeholder={t.goalPl} value={product.targetGoal} onChange={e => handleProductChange(product.id, 'targetGoal', e.target.value)}></textarea>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* C. Supply Chain */}
+                          <div>
+                            <h4 className="font-bold text-slate-700 mb-4 border-b pb-2 flex items-center gap-2"><Truck size={18} color={BRAND.colors.blue}/> {t.secCTitle}</h4>
+                            <p className="text-sm text-slate-500 mb-4">{t.chainDesc}</p>
+                            
+                            <div className="space-y-4">
+                              {product.supplyChain.map((step, idx) => (
+                                 <div key={idx} className="bg-slate-50 p-5 rounded-xl border border-slate-200 shadow-sm relative">
+                                    <div className="flex justify-between items-center mb-4 border-b border-slate-200 pb-3">
+                                      <span className="font-bold text-base text-slate-700">{t.step} {idx+1}</span>
+                                      <div className="flex gap-2">
+                                         <button onClick={() => moveChainStep(product.id, idx, 'up')} disabled={idx === 0} className="p-1.5 bg-white text-slate-500 hover:text-blue-600 rounded border shadow-sm disabled:opacity-30"><ChevronUp size={16}/></button>
+                                         <button onClick={() => moveChainStep(product.id, idx, 'down')} disabled={idx === product.supplyChain.length - 1} className="p-1.5 bg-white text-slate-500 hover:text-blue-600 rounded border shadow-sm disabled:opacity-30"><ChevronDown size={16}/></button>
+                                         <button onClick={() => removeChainStep(product.id, idx)} className="p-1.5 bg-white text-red-500 hover:bg-red-50 hover:border-red-200 rounded border shadow-sm ml-2"><Trash2 size={16}/></button>
+                                      </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
+                                       <div className="md:col-span-4">
+                                         <label className="label">{t.phase} *</label>
+                                         <input type="text" className="input" value={step.stage} onChange={e => updateChainStep(product.id, idx, 'stage', e.target.value)} />
+                                       </div>
+                                       
+                                       <div className="md:col-span-3 flex gap-3">
+                                         <div className="w-1/2">
+                                           <label className="label">{t.temp} *</label>
+                                           <input type="number" className="input font-bold text-center" value={step.tempStart} onChange={e => updateChainStep(product.id, idx, 'tempStart', e.target.value)} />
+                                         </div>
+                                         <div className="w-1/2">
+                                           <label className="label">{t.to}</label>
+                                           <input type="number" className="input text-center" value={step.tempEnd} placeholder="-" onChange={e => updateChainStep(product.id, idx, 'tempEnd', e.target.value)} />
+                                         </div>
+                                       </div>
+
+                                       <div className="md:col-span-3 flex gap-3">
+                                         <div className="w-1/2">
+                                           <label className="label">{t.days} *</label>
+                                           <input type="number" className="input text-center" value={step.daysStart} onChange={e => updateChainStep(product.id, idx, 'daysStart', e.target.value)} />
+                                         </div>
+                                         <div className="w-1/2">
+                                           <label className="label">{t.to}</label>
+                                           <input type="number" className="input text-center" value={step.daysEnd} placeholder="-" onChange={e => updateChainStep(product.id, idx, 'daysEnd', e.target.value)} />
+                                         </div>
+                                       </div>
+
+                                       <div className="md:col-span-2">
+                                         <label className="label">{t.action}</label>
+                                         <select className="input font-bold text-slate-700" value={step.action} onChange={e => updateChainStep(product.id, idx, 'action', e.target.value)}>
+                                           <option value="none">{t.actNone}</option>
+                                           <option value="pack" className="text-green-700">{t.actPack}</option>
+                                           <option value="unpack" className="text-red-700">{t.actUnpack}</option>
+                                         </select>
+                                       </div>
+                                    </div>
+                                 </div>
+                              ))}
+                              <button onClick={() => addChainStep(product.id)} className="flex items-center gap-2 text-sm font-bold text-blue-700 hover:text-blue-900 mt-4 px-2 py-1"><Plus size={16}/> {t.addStep}</button>
+                            </div>
+                          </div>
+
+                        </div>
+                      </section>
+                    );
+                  })}
+                </div>
+
+                {/* ADD NEW PRODUCT BUTTON */}
+                <button 
+                  onClick={addProduct} 
+                  className="w-full py-4 rounded-xl font-bold border-2 border-dashed text-lg transition flex items-center justify-center gap-2 bg-white" 
+                  style={{borderColor: BRAND.colors.green, color: BRAND.colors.green}}
+                >
+                  <Plus size={24} /> {t.addProd}
+                </button>
+
+                {/* FINAL SUBMIT BUTTON */}
+                <div className="pt-8 pb-12 flex justify-end">
+                   <button onClick={handleSubmit} className="bg-green-600 hover:bg-green-700 text-white px-8 md:px-10 py-4 rounded-full font-bold text-lg shadow-xl shadow-green-200 transition flex items-center gap-3 transform hover:scale-105">
+                      <Send size={24} />
+                      {t.submitBtn}
+                   </button>
+                </div>
+
+              </main>
+            </div>
+          );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
