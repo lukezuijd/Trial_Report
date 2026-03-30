@@ -198,7 +198,7 @@
           const pointsCO2 = data.map(d => `${getX(d.day)},${getY(getAverage(d.samples, 'co2'))}`).join(' ');
 
           return (
-            <div className="border rounded bg-white p-3 font-sans w-full h-full flex flex-col justify-between">
+            <div className="flex-1 border rounded bg-white p-3 font-sans w-full h-full flex flex-col justify-between">
               <h5 className="text-center font-bold text-sm mb-2 text-slate-800 border-b pb-1">Actual Results: {group.name}</h5>
               <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
                 {[0, 5, 10, 15, 20, 25].map(val => (
@@ -296,12 +296,12 @@
           if (!isOpen) return null;
           const [samples, setSamples] = useState(data.samples || []);
           const [day, setDay] = useState(data.day);
-          const [notes, setNotes] = useState(data.notes);
+          const [notes, setNotes] = useState(data.notes || '');
           const [evaluateQuality, setEvaluateQuality] = useState(data.evaluateQuality !== undefined ? data.evaluateQuality : false);
           const [qualityParams, setQualityParams] = useState(data.qualityParams || []);
 
           useEffect(() => {
-            if (isEvaluationDay && projectCriteria.length > 0) {
+            if (evaluateQuality && projectCriteria.length > 0) {
               const currentParams = qualityParams || [];
               const newParams = projectCriteria.map(c => {
                 const existing = currentParams.find(p => p.name === c);
@@ -346,7 +346,7 @@
                          <label className="font-bold">Day:</label>
                          <input 
                            type="number" 
-                           value={day} 
+                           value={day || ''} 
                            disabled={!isDayEditable} 
                            onChange={e => setDay(e.target.value)} 
                            className={`w-16 p-1.5 border rounded text-center font-bold ${!isDayEditable ? 'bg-gray-200 cursor-not-allowed text-gray-500' : 'bg-white'}`} 
@@ -364,9 +364,9 @@
                           {samples.map((s, i) => (
                             <tr key={i} className="border-b border-gray-100 last:border-0">
                               <td className="py-2 font-medium text-gray-500">{i + 1}</td>
-                              <td className="py-2"><input type="number" className="w-16 md:w-20 p-1.5 border rounded" value={s.o2} onChange={e => updateSample(i, 'o2', e.target.value)} /></td>
-                              <td className="py-2"><input type="number" className="w-16 md:w-20 p-1.5 border rounded" value={s.co2} onChange={e => updateSample(i, 'co2', e.target.value)} /></td>
-                              <td className="py-2"><input type="number" className="w-16 md:w-20 p-1.5 border rounded" value={s.weight} onChange={e => updateSample(i, 'weight', e.target.value)} placeholder="g" /></td>
+                              <td className="py-2"><input type="number" className="w-16 md:w-20 p-1.5 border rounded" value={s.o2 || ''} onChange={e => updateSample(i, 'o2', e.target.value)} /></td>
+                              <td className="py-2"><input type="number" className="w-16 md:w-20 p-1.5 border rounded" value={s.co2 || ''} onChange={e => updateSample(i, 'co2', e.target.value)} /></td>
+                              <td className="py-2"><input type="number" className="w-16 md:w-20 p-1.5 border rounded" value={s.weight || ''} onChange={e => updateSample(i, 'weight', e.target.value)} placeholder="g" /></td>
                               <td className="py-2 text-right"><button onClick={() => removeSample(i)} className="text-red-400 hover:text-red-600"><Trash2 size={16}/></button></td>
                             </tr>
                           ))}
@@ -396,8 +396,8 @@
                                {qualityParams.map((param, i) => (
                                  <tr key={i} className="border-b border-slate-200 last:border-0">
                                    <td className="py-2 text-slate-700 font-medium">{param.name}</td>
-                                   <td className="py-2"><input type="number" min="1" max="10" className="w-full p-1.5 border rounded text-center font-bold outline-none focus:ring-2 focus:ring-blue-500" value={param.score} onChange={e => updateParam(i, 'score', e.target.value)} placeholder="-" /></td>
-                                   <td className="py-2"><input type="text" className="w-full p-1.5 border rounded outline-none focus:ring-2 focus:ring-blue-500" value={param.notes} onChange={e => updateParam(i, 'notes', e.target.value)} placeholder="..." /></td>
+                                   <td className="py-2"><input type="number" min="1" max="10" className="w-full p-1.5 border rounded text-center font-bold outline-none focus:ring-2 focus:ring-blue-500" value={param.score || ''} onChange={e => updateParam(i, 'score', e.target.value)} placeholder="-" /></td>
+                                   <td className="py-2"><input type="text" className="w-full p-1.5 border rounded outline-none focus:ring-2 focus:ring-blue-500" value={param.notes || ''} onChange={e => updateParam(i, 'notes', e.target.value)} placeholder="..." /></td>
                                  </tr>
                                ))}
                              </tbody>
@@ -480,7 +480,7 @@
                         >
                             {PHOTO_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
-                        <input type="text" className="w-full p-2 text-xs border-t outline-none focus:bg-blue-50 transition" placeholder="Caption / Beschrijving..." value={img.caption} onChange={e => updateImageField(idx, 'caption', e.target.value)} />
+                        <input type="text" className="w-full p-2 text-xs border-t outline-none focus:bg-blue-50 transition" placeholder="Caption / Beschrijving..." value={img.caption || ''} onChange={e => updateImageField(idx, 'caption', e.target.value)} />
                       </div>
                     ))}
                     <label className="border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 aspect-square min-h-[150px]">
@@ -917,8 +917,8 @@
 
                           <h1 className="text-5xl font-bold uppercase mb-4 brand-heading" style={{ color: BRAND.colors.green }}>{project.reportTitle}</h1>
                           <h2 className="text-4xl font-light brand-heading text-slate-600 mb-12">{project.productName || '<Product Name>'}</h2>
-                          <div className="w-full h-[450px] bg-slate-50 border rounded-lg overflow-hidden flex items-center justify-center relative shadow-sm">
-                             {project.coverImage || project.startImage ? <img src={project.coverImage || project.startImage} className="w-full h-full object-contain bg-white" /> : <span className="text-slate-300 italic">No Cover Photo</span>}
+                          <div className="w-full h-[450px] overflow-hidden flex items-center justify-center relative">
+                             {project.coverImage || project.startImage ? <img src={project.coverImage || project.startImage} className="w-full h-full object-contain" /> : <span className="text-slate-300 italic">No Cover Photo</span>}
                           </div>
                        </div>
                        <div className="text-center text-sm text-slate-400 brand-body">{new Date().getFullYear()} © PerfoTec B.V.</div>
@@ -1008,9 +1008,9 @@
                            <ul className="list-disc pl-6 space-y-1">
                              {groups.map((g,i) => {
                                const day0 = g.measurements.find(m => parseFloat(m.day) === 0);
-                               const startWeight = day0?.samples[0]?.weight || '-';
+                               const startWeight = getAverage(day0?.samples, 'weight');
                                return (
-                                 <li key={i}><span className="font-bold">{g.name}</span> – {g.specs.packaging}, {g.specs.material} (TV {g.specs.holes}, {startWeight}g)</li>
+                                 <li key={i}><span className="font-bold">{g.name}</span> – {g.specs.packaging}, {g.specs.material} (TV {g.specs.holes}, Start Weight: {startWeight}g)</li>
                                )
                              })}
                            </ul>
@@ -1054,17 +1054,18 @@
                           <div className="text-base mb-6 italic brand-body text-slate-600 pdf-rich-text" dangerouslySetInnerHTML={{ __html: analysis.graphNotes || 'Gas levels were monitored throughout the shelf life period.' }}></div>
                           
                           {groups.map((g, idx) => (
-                            <div key={idx} className="flex gap-4 mb-8 break-inside-avoid items-center">
-                               {g.predictedImage ? (
-                                 <div className="w-1/2 border rounded p-2">
-                                    <div className="text-xs font-bold mb-1 text-center text-gray-500">Prediction (Hub)</div>
-                                    <img src={g.predictedImage} className="w-full h-auto object-contain" />
-                                 </div>
-                               ) : (
-                                 <div className="w-1/2 border rounded p-8 text-center text-gray-300 italic">No Prediction Uploaded</div>
-                               )}
-                               <div className="w-1/2">
-                                  <div className="text-xs font-bold mb-1 text-center text-gray-500">Actual Results</div>
+                            <div key={idx} className="flex flex-row gap-6 mb-8 break-inside-avoid items-stretch">
+                               <div className="w-1/2 flex flex-col border rounded bg-white p-3 font-sans">
+                                  <h5 className="text-center font-bold text-sm mb-2 text-slate-800 border-b pb-1">Prediction (Hub): {g.name}</h5>
+                                  <div className="flex-1 flex items-center justify-center p-2">
+                                     {g.predictedImage ? (
+                                       <img src={g.predictedImage} className="w-full h-auto max-h-[220px] object-contain" />
+                                     ) : (
+                                       <span className="text-slate-300 italic text-xs">No Prediction Uploaded</span>
+                                     )}
+                                  </div>
+                               </div>
+                               <div className="w-1/2 flex flex-col">
                                   <VariantGasChart group={g} />
                                </div>
                             </div>
@@ -1095,40 +1096,53 @@
                       </div>
 
                       <div className="break-inside-avoid mb-10">
-                          <h3 id="sec-4-4" className="font-bold text-xl mb-4 mt-12 brand-heading text-slate-700">4.4 Detailed Quality Parameters (End of Trial)</h3>
-                          {project.criteria.length > 0 ? (
-                            <table className="report-table w-full text-sm shadow-sm">
-                              <thead>
-                                <tr>
-                                  <th>Criterion</th>
-                                  {groups.map(g => <th key={g.id} className="text-center">{g.name}</th>)}
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {project.criteria.map((crit, i) => (
-                                  <tr key={i}>
-                                    <td className="font-semibold text-base">{crit}</td>
-                                    {groups.map(g => {
-                                       const lastMeas = g.measurements[g.measurements.length - 1];
-                                       const param = lastMeas.evaluateQuality ? lastMeas.qualityParams?.find(p => p.name === crit) : null;
-                                       return (
-                                         <td key={g.id} className="text-center align-top">
-                                           {param && param.score ? (
-                                             <div className="flex flex-col items-center">
-                                               <span className="font-bold text-xl leading-none mb-1" style={{color: BRAND.colors.green}}>{param.score}</span>
-                                               {param.notes && <span className="text-xs italic text-gray-500 leading-tight">{param.notes}</span>}
-                                             </div>
-                                           ) : '-'}
-                                         </td>
-                                       )
-                                    })}
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          ) : (
-                            <p className="text-base italic text-gray-500">No specific criteria were defined for this test.</p>
-                          )}
+                          <h3 id="sec-4-4" className="font-bold text-xl mb-4 mt-12 brand-heading text-slate-700">4.4 Detailed Quality Parameters</h3>
+                          {(() => {
+                             const allEvalDays = Array.from(new Set(
+                               groups.flatMap(g => 
+                                 g.measurements.filter(m => m.evaluateQuality || m.qualityParams?.length > 0).map(m => parseFloat(m.day))
+                               )
+                             )).sort((a, b) => a - b);
+
+                             if (allEvalDays.length === 0 || project.criteria.length === 0) {
+                               return <p className="text-base italic text-gray-500">No specific criteria were evaluated during this test.</p>;
+                             }
+
+                             return allEvalDays.map(dayVal => (
+                               <div key={dayVal} className="mb-8 break-inside-avoid">
+                                 <h4 className="font-bold text-lg mb-3 text-slate-600">Evaluation: Day {dayVal}</h4>
+                                 <table className="report-table w-full text-sm shadow-sm">
+                                   <thead>
+                                     <tr>
+                                       <th>Criterion</th>
+                                       {groups.map(g => <th key={g.id} className="text-center">{g.name}</th>)}
+                                     </tr>
+                                   </thead>
+                                   <tbody>
+                                     {project.criteria.map((crit, i) => (
+                                       <tr key={i}>
+                                         <td className="font-semibold text-base">{crit}</td>
+                                         {groups.map(g => {
+                                            const meas = g.measurements.find(m => parseFloat(m.day) === dayVal);
+                                            const param = (meas?.evaluateQuality || meas?.qualityParams?.length > 0) ? meas.qualityParams?.find(p => p.name === crit) : null;
+                                            return (
+                                              <td key={g.id} className="text-center align-top">
+                                                {param && param.score ? (
+                                                  <div className="flex flex-col items-center">
+                                                    <span className="font-bold text-xl leading-none mb-1" style={{color: BRAND.colors.green}}>{param.score}</span>
+                                                    {param.notes && <span className="text-xs italic text-gray-500 leading-tight">{param.notes}</span>}
+                                                  </div>
+                                                ) : '-'}
+                                              </td>
+                                            )
+                                         })}
+                                       </tr>
+                                     ))}
+                                   </tbody>
+                                 </table>
+                               </div>
+                             ));
+                          })()}
                       </div>
                     </div>
 
@@ -1141,9 +1155,10 @@
                       {project.startImage && (
                           <div className="mb-8 break-inside-avoid">
                               <h3 className="font-bold text-lg mb-4 brand-heading text-slate-700 border-b-2 border-slate-200 pb-1">Initial Reference</h3>
-                              <div className="h-64 w-full md:w-1/2 border rounded overflow-hidden flex items-center justify-center bg-slate-50 shadow-sm">
-                                  <img src={project.startImage} className="h-full object-contain"/>
+                              <div className="h-[300px] w-full flex items-center justify-center">
+                                  <img src={project.startImage} className="max-h-full max-w-full object-contain"/>
                               </div>
+                              <p className="text-sm font-bold mt-2 text-center brand-heading">Picture 1. Day 0 - Initial product quality</p>
                           </div>
                       )}
                       
@@ -1164,9 +1179,9 @@
                                               <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
                                                   {variantPhotos.map((photo, idx) => (
                                                      <div key={idx} className="break-inside-avoid">
-                                                        <div className="h-56 border rounded-lg overflow-hidden flex items-center justify-center bg-slate-50 relative shadow-sm">
-                                                           <img src={photo.url} className="w-full h-full object-contain bg-white"/>
-                                                           <div className="absolute top-0 right-0 bg-white/90 px-3 py-1 text-xs font-bold border-b border-l rounded-bl-lg text-gray-700">{formatDay(photo.day)}</div>
+                                                        <div className="h-56 flex items-center justify-center relative">
+                                                           <img src={photo.url} className="max-w-full max-h-full object-contain"/>
+                                                           <div className="absolute top-0 right-0 bg-white/90 px-3 py-1 text-xs font-bold text-gray-700">{formatDay(photo.day)}</div>
                                                         </div>
                                                         {photo.caption && <div className="text-sm mt-2 text-center brand-body italic text-slate-600">{photo.caption}</div>}
                                                      </div>
