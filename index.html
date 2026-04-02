@@ -65,11 +65,11 @@
         .report-table th { background-color: #007C27; color: white; padding: 8px; text-align: left; font-family: 'League Spartan', sans-serif; }
         .report-table td { border-bottom: 1px solid #E9E9E9; padding: 8px; font-family: 'Inter', sans-serif; font-size: 0.9rem; }
         
-        .pdf-rich-text ul { list-style-type: disc; padding-left: 1.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem; }
-        .pdf-rich-text li { margin-bottom: 0.25rem; }
-        .pdf-rich-text b { font-weight: 700; }
-        .pdf-rich-text i { font-style: italic; }
-        .pdf-rich-text u { text-decoration: underline; }
+        .pdf-rich-text, .pdf-rich-text * { font-family: 'Inter', sans-serif !important; font-size: 0.875rem !important; color: #1e293b !important; line-height: 1.625 !important; }
+        .pdf-rich-text b, .pdf-rich-text strong { font-weight: 700 !important; }
+        .pdf-rich-text i, .pdf-rich-text em { font-style: italic !important; }
+        .pdf-rich-text u { text-decoration: underline !important; }
+        .pdf-rich-text ul { list-style-type: disc !important; padding-left: 1.5rem !important; margin-top: 0.5rem !important; margin-bottom: 0.5rem !important; }
     </style>
 </head>
 <body>
@@ -157,6 +157,13 @@
 
         const formatRange = (start, end, unit) => (start && end && start !== end) ? `${start}-${end}${unit}` : start ? `${start}${unit}` : `-`;
         const formatDay = (day) => `P+${day}`;
+        
+        const formatDateToDDMMYYYY = (dateStr) => {
+          if (!dateStr) return '-';
+          const parts = dateStr.split('-');
+          if (parts.length !== 3) return dateStr;
+          return `${parts[2]}/${parts[1]}/${parts[0]}`;
+        };
 
         // --- COMPONENTS ---
 
@@ -173,7 +180,7 @@
                    <button key={c} type="button" onClick={() => execCmd(c)} className="p-1 hover:bg-slate-200 rounded text-slate-700 w-8 flex justify-center items-center">{i}</button>
                 ))}
               </div>
-              <div ref={editorRef} contentEditable onInput={handleInput} onBlur={handleInput} className="p-3 outline-none flex-1 overflow-y-auto text-sm rich-text-editor" data-placeholder={placeholder} />
+              <div ref={editorRef} contentEditable onInput={handleInput} onBlur={handleInput} className="p-3 outline-none flex-1 overflow-y-auto text-sm rich-text-editor pdf-rich-text" data-placeholder={placeholder} />
             </div>
           );
         };
@@ -181,9 +188,12 @@
         const SupplyChainFlow = ({ chain }) => {
           if (!chain || chain.length === 0) return null;
           let cumMin = 0, cumMax = 0;
+          
           const chunkSize = 6;
           const rows = [];
-          for (let i = 0; i < chain.length; i += chunkSize) rows.push(chain.slice(i, i + chunkSize));
+          for (let i = 0; i < chain.length; i += chunkSize) {
+            rows.push(chain.slice(i, i + chunkSize));
+          }
 
           return (
             <div className="flex flex-col w-full font-sans">
@@ -198,8 +208,8 @@
 
                     return (
                       <React.Fragment key={globalIdx}>
-                        {idx > 0 && <div className="h-20 flex items-center justify-center shrink-0 w-4"><ChevronRight size={16} className="text-gray-300" /></div>}
-                        <div className="flex flex-col items-center w-[15%] shrink-0">
+                        {idx > 0 && <div className="h-20 flex items-center justify-center shrink-0 w-2 lg:w-4"><ChevronRight size={16} className="text-gray-300" /></div>}
+                        <div className="flex flex-col items-center flex-1 min-w-0">
                           <div className="w-full flex flex-col items-center bg-white border border-gray-200 rounded-lg shadow-sm p-1.5 relative min-h-[5.5rem]">
                              <div className="absolute top-0 left-0 w-full h-1" style={{backgroundColor: globalIdx % 2 === 0 ? BRAND.colors.green : BRAND.colors.blue}}></div>
                              <div className="bg-gray-50 p-1.5 rounded-full mb-1 flex-shrink-0 mt-1">{getStageIcon(step.stage || '')}</div>
@@ -225,10 +235,16 @@
           );
         };
 
-        const VariantGasChart = ({ group }) => {
+        const VariantGasChart = ({ group, packedDays }) => {
           if (!group || !group.measurements) return null;
           const width = 350; const height = 200; const padding = 30;
-          const data = group.measurements.sort((a,b) => parseFloat(a.day) - parseFloat(b.day));
+          
+          const pDays = parseFloat(packedDays);
+          const filteredMeasurements = isNaN(pDays) ? group.measurements : group.measurements.filter(m => parseFloat(m.day) <= pDays);
+          const data = filteredMeasurements.sort((a,b) => parseFloat(a.day) - parseFloat(b.day));
+          
+          if(data.length === 0) return <div className="flex-1 border rounded bg-white p-3 font-sans w-full h-full flex flex-col items-center justify-center text-gray-400 text-xs italic">No packed gas data</div>;
+
           const maxDay = Math.max(...data.map(d => parseFloat(d.day) || 0), 5);
           const maxY = 25; 
           const getX = (day) => padding + (parseFloat(day) / maxDay) * (width - 2 * padding);
@@ -238,7 +254,7 @@
 
           return (
             <div className="flex-1 border rounded bg-white p-3 font-sans w-full h-full flex flex-col justify-between">
-              <h5 className="text-center font-bold text-sm mb-2 text-slate-800 border-b pb-1">{group.name || 'Variant'}</h5>
+              <h5 className="text-center font-bold text-sm mb-2 text-slate-800 border-b pb-1">Actual Results: {group.name || 'Variant'}</h5>
               <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
                 {[0, 5, 10, 15, 20, 25].map(val => (
                   <g key={val}>
@@ -300,6 +316,7 @@
                        const meas = g.measurements.find(m => parseFloat(m.day) === day);
                        const day0 = g.measurements.find(m => parseFloat(m.day) === 0);
                        const loss = getWeightLoss(meas?.samples, day0?.samples);
+                       
                        const groupStartX = getX(dayIdx) + (slotWidth - barGroupWidth) / 2;
                        return (
                          <rect 
@@ -319,7 +336,7 @@
               <div className="flex flex-wrap justify-center gap-4 mt-4">
                 {groups.map((g, idx) => (
                   <div key={g.id} className="flex items-center gap-2 text-xs font-bold" style={{fontFamily: BRAND.fonts.heading, color: BRAND.colors.black}}>
-                    <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: CHART_COLORS[idx % CHART_COLORS.length].stroke }}></div>
+                    <svg width="12" height="12" className="shrink-0"><rect width="12" height="12" rx="2" fill={CHART_COLORS[idx % CHART_COLORS.length].stroke} /></svg>
                     {g.name || 'Variant'}
                   </div>
                 ))}
@@ -328,7 +345,7 @@
           );
         };
 
-        const SampleModal = ({ isOpen, onClose, data, onSave, startWeight, projectCriteria, isEvaluationDay, isDayEditable }) => {
+        const SampleModal = ({ isOpen, onClose, data, onSave, startWeight, projectCriteria, isEvaluationDay, isDayEditable, projectTotalDuration }) => {
           if (!isOpen) return null;
           const [samples, setSamples] = useState(data.samples || []);
           const [day, setDay] = useState(data.day === 0 ? 0 : (data.day || ''));
@@ -358,21 +375,32 @@
           
           const avgWeight = getAverage(samples, 'weight');
           const weightLoss = startWeight && avgWeight > 0 ? (((startWeight - avgWeight) / startWeight) * 100).toFixed(2) : 0;
+          
+          const isOpened = projectTotalDuration && parseFloat(day) > parseFloat(projectTotalDuration);
 
           return (
             <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 font-sans backdrop-blur-sm print:hidden">
               <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl overflow-hidden flex flex-col max-h-[90vh]">
                 <div className="p-4 flex justify-between items-center text-white" style={{ background: `linear-gradient(90deg, ${BRAND.colors.black} 0%, #423B3B 50%, ${BRAND.colors.black} 100%)` }}>
                   <h3 className="font-bold flex items-center gap-2" style={{ fontFamily: BRAND.fonts.heading }}><Edit3 size={18}/> Edit Measurement Data ({formatDay(day)})</h3>
-                  <button onClick={onClose}><X size={20}/></button>
+                  <button onClick={onClose} className="hover:text-red-300 transition"><X size={20}/></button>
                 </div>
                 
                 <div className="p-6 overflow-y-auto grid grid-cols-1 lg:grid-cols-2 gap-8">
                   <div>
                     <h4 className="font-bold text-sm text-slate-700 border-b pb-2 mb-4">Atmosphere & Weight</h4>
-                    <div className="flex justify-between items-center mb-4 bg-[#E9E9E9] p-3 rounded-lg text-xs">
-                      <div className="flex items-center gap-2"><label className="font-bold">Day:</label><input type="number" value={day || ''} disabled={!isDayEditable} onChange={e => setDay(e.target.value)} className={`w-16 p-1.5 border rounded text-center font-bold ${!isDayEditable ? 'bg-gray-200 cursor-not-allowed text-gray-500' : 'bg-white'}`} /></div>
-                      <div className="text-right">
+                    <div className="flex flex-wrap justify-between items-center mb-4 bg-[#E9E9E9] p-3 rounded-lg text-xs gap-4">
+                      <div className="flex items-center gap-2">
+                         <label className="font-bold">Day:</label>
+                         <input 
+                           type="number" 
+                           value={day || ''} 
+                           disabled={!isDayEditable} 
+                           onChange={e => setDay(e.target.value)} 
+                           className={`w-16 p-1.5 border rounded text-center font-bold ${!isDayEditable ? 'bg-gray-200 cursor-not-allowed text-gray-500' : 'bg-white'}`} 
+                         />
+                      </div>
+                      <div className="text-right flex gap-4">
                          {parseFloat(day) > 0 && <div style={{ color: weightLoss > 3 ? '#dc2626' : BRAND.colors.green, fontWeight: 'bold' }}>Avg Loss: {weightLoss}%</div>}
                          <div>Avg Weight: <strong>{avgWeight}g</strong></div>
                       </div>
@@ -382,11 +410,15 @@
                       <tbody>
                         {samples.map((s, i) => (
                           <tr key={i} className="border-b border-gray-100 last:border-0">
-                            <td className="py-2 font-medium text-gray-500">{i + 1}</td>
-                            <td className="py-2"><input type="number" className="w-16 md:w-20 p-1.5 border rounded" value={s.o2 || ''} onChange={e => updateSample(i, 'o2', e.target.value)} /></td>
-                            <td className="py-2"><input type="number" className="w-16 md:w-20 p-1.5 border rounded" value={s.co2 || ''} onChange={e => updateSample(i, 'co2', e.target.value)} /></td>
-                            <td className="py-2"><input type="number" className="w-16 md:w-20 p-1.5 border rounded" value={s.weight || ''} onChange={e => updateSample(i, 'weight', e.target.value)} placeholder="g" /></td>
-                            <td className="py-2 text-right"><button onClick={() => removeSample(i)} className="text-red-400 hover:text-red-600"><Trash2 size={14}/></button></td>
+                            <td className="py-2 font-medium text-gray-500">#{i + 1}</td>
+                            <td className="py-2">
+                               {isOpened ? <div className="text-center font-bold text-gray-400 w-16 md:w-20">-</div> : <input type="number" className="w-16 md:w-20 p-1.5 border rounded" value={s.o2 === 0 ? 0 : (s.o2 || '')} onChange={e => updateSample(i, 'o2', e.target.value)} />}
+                            </td>
+                            <td className="py-2">
+                               {isOpened ? <div className="text-center font-bold text-gray-400 w-16 md:w-20">-</div> : <input type="number" className="w-16 md:w-20 p-1.5 border rounded" value={s.co2 === 0 ? 0 : (s.co2 || '')} onChange={e => updateSample(i, 'co2', e.target.value)} />}
+                            </td>
+                            <td className="py-2"><input type="number" className="w-16 md:w-20 p-1.5 border rounded" value={s.weight === 0 ? 0 : (s.weight || '')} onChange={e => updateSample(i, 'weight', e.target.value)} placeholder="g" /></td>
+                            <td className="py-2 text-right"><button onClick={() => removeSample(i)} className="text-red-400 hover:text-red-600"><Trash2 size={16}/></button></td>
                           </tr>
                         ))}
                       </tbody>
@@ -439,7 +471,7 @@
                   </div>
                 </div>
 
-                <div className="bg-gray-50 p-4 border-t flex justify-end gap-3"><button onClick={onClose} className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded font-medium transition">Cancel</button><button onClick={handleSave} className="px-6 py-2 text-white font-bold rounded hover:opacity-90 shadow-lg" style={{ backgroundColor: BRAND.colors.green }}>Save</button></div>
+                <div className="bg-gray-50 p-4 border-t flex justify-end gap-3"><button onClick={onClose} className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded font-medium transition">Cancel</button><button onClick={handleSave} className="px-6 py-2 text-white font-bold rounded hover:opacity-90 shadow-lg transition" style={{ backgroundColor: BRAND.colors.green }}>Save</button></div>
               </div>
             </div>
           );
@@ -475,7 +507,7 @@
                   <button onClick={onClose} className="hover:text-red-300 transition"><X size={20}/></button>
                 </div>
                 <div className="p-6 overflow-y-auto">
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-3">
                     {images.map((img, idx) => (
                       <div key={idx} className="relative group border border-gray-200 rounded-lg overflow-hidden bg-gray-50 flex flex-col">
                         <div className="aspect-square relative">
@@ -517,7 +549,8 @@
           const [project, setProject] = useState({
             reportTitle: 'Quality Report MAP Test', 
             productName: '', processingType: 'Whole', type: '', origin: '', company: '', contactName: '', contactEmail: '', contactRole: '', contactPhone: '', street: '', houseNumber: '', zipCode: '', city: '', country: '', employee: '', trialTarget: '', currentChallenge: '',
-            rrO2: '', rrCO2: '', rrTemp: '', totalDuration: '', 
+            rrO2: '', rrCO2: '', rrTemp: '', 
+            totalDuration: '', retailOpenDays: '', transportMode: '',
             criteria: [...DEFAULT_CRITERIA], 
             date: new Date().toISOString().split('T')[0], packingDate: new Date().toISOString().split('T')[0],
             logo: 'https://cdn.prod.website-files.com/68b594c756c22085ddc6c1ea/68b59ba2f027bfeecd25261b_PerfoTec%20logo.png', clientLogo: null, startImage: null, coverImage: null,
@@ -547,25 +580,65 @@
           const [newStepVariant, setNewStepVariant] = useState('general');
           const [newCriteria, setNewCriteria] = useState('');
 
+          const calcUnpackingDate = () => {
+            const baseDate = project.packingDate || project.date;
+            const duration = parseInt(project.totalDuration) || 0;
+            if (baseDate && duration) {
+               const d = new Date(baseDate);
+               d.setDate(d.getDate() + duration);
+               const day = String(d.getDate()).padStart(2, '0');
+               const month = String(d.getMonth() + 1).padStart(2, '0');
+               const year = d.getFullYear();
+               return `${day}/${month}/${year}`; 
+            }
+            return '-';
+          };
+          
+          const formatDateToDDMMYYYY = (dateStr) => {
+            if (!dateStr) return '-';
+            const parts = dateStr.split('-');
+            if (parts.length !== 3) return dateStr;
+            return `${parts[2]}/${parts[1]}/${parts[0]}`;
+          };
+
           // --- HANDLERS ---
           const handleImgUpload = (e, field, isGroup = false) => { const f = e.target.files[0]; if(f) { const r = new FileReader(); r.onloadend = () => { if(isGroup) setGroups(p => p.map(g => g.id === activeGroupId ? {...g, predictedImage: r.result} : g)); else setProject(p => ({...p, [field]: r.result})); }; r.readAsDataURL(f); }};
           const handleProjectChange = (f, v) => setProject(p => ({...p, [f]: v}));
           
+          const syncMeasurements = (currentGroups, packedStr, openStr) => {
+            const p = parseInt(packedStr) || 0;
+            const o = parseInt(openStr) || 0;
+            return currentGroups.map(g => {
+              const newM = [...g.measurements];
+              const sCount = g.specs.sampleCount || 3;
+              const createMeas = (day, notes) => ({
+                 day, samples: Array.from({length: sCount}, (_, i) => ({ id: Date.now()+i, o2: '', co2: '', weight: '' })), quality: 9, notes: notes, images: [], qualityParams: [], evaluateQuality: true
+              });
+              
+              if (p > 0 && !newM.find(m => parseFloat(m.day) === p)) {
+                 newM.push(createMeas(p, 'End Packing'));
+              }
+              if (p > 0 && o > 0) {
+                 const openDay = p + o;
+                 if (!newM.find(m => parseFloat(m.day) === openDay)) {
+                    newM.push(createMeas(openDay, 'Retail Simulation (Open)'));
+                 }
+              }
+              newM.sort((a,b) => parseFloat(a.day) - parseFloat(b.day));
+              return { ...g, measurements: newM };
+            });
+          };
+
           const handleDurationChange = (e) => {
             const val = e.target.value;
             setProject(p => ({...p, totalDuration: val}));
-            if (val && parseInt(val) > 0) {
-               const endDay = parseInt(val);
-               setGroups(prev => prev.map(g => {
-                 if (!g.measurements.find(m => m.day === endDay)) {
-                    const sCount = g.specs.sampleCount || 3;
-                    const smpls = Array.from({length: sCount}, (_, i) => ({ id: Date.now()+i, o2: '', co2: '', weight: '' }));
-                    const endMeas = { day: endDay, samples: smpls, quality: 9, notes: 'End', images: [], qualityParams: [], evaluateQuality: true };
-                    return { ...g, measurements: [...g.measurements, endMeas].sort((a,b) => a.day - b.day) };
-                 }
-                 return g;
-               }));
-            }
+            setGroups(prev => syncMeasurements(prev, val, project.retailOpenDays));
+          };
+          
+          const handleOpenDaysChange = (e) => {
+            const val = e.target.value;
+            setProject(p => ({...p, retailOpenDays: val}));
+            setGroups(prev => syncMeasurements(prev, project.totalDuration, val));
           };
 
           const handleSampleCountChange = (groupId, num) => {
@@ -609,11 +682,11 @@
                     const d = JSON.parse(ev.target.result); 
                     if(d.isPerfoTecIntake) {
                        const client = d.client || {}; const prod = d.products?.[0] || {};
-                       setProject(p => ({ ...p, company: client.companyName||'', street: client.street||'', houseNumber: client.houseNumber||'', zipCode: client.zipCode||'', city: client.city||'', country: client.country||'', contactName: client.contactName||'', contactRole: client.role||'', contactEmail: client.email||'', contactPhone: client.phone||'', logo: client.logo||p.logo, productName: prod.name||'', processingType: prod.processingType||'Whole', maturityStage: prod.maturityStage||'', postHarvestTreatment: prod.postHarvestTreatment||'', currentChallenge: prod.currentChallenge||'', trialTarget: prod.targetGoal||'', transportModes: prod.transportModes||[], criteria: prod.qualityCriteria||[], startImage: prod.photo||null }));
+                       setProject(p => ({ ...p, company: client.companyName||'', street: client.street||'', houseNumber: client.houseNumber||'', zipCode: client.zipCode||'', city: client.city||'', country: client.country||'', contactName: client.contactName||'', contactRole: client.role||'', contactEmail: client.email||'', contactPhone: client.phone||'', logo: client.logo||p.logo, productName: prod.name||'', processingType: prod.processingType||'Whole', maturityStage: prod.maturityStage||'', postHarvestTreatment: prod.postHarvestTreatment||'', currentChallenge: prod.currentChallenge||'', trialTarget: prod.targetGoal||'', transportMode: prod.transportMode || (prod.transportModes?.[0] || ''), criteria: prod.qualityCriteria||[], startImage: prod.photo||null }));
                        if (prod.supplyChain) setSupplyChain(prod.supplyChain);
                        setGroups(p => { const ug = [...p]; if(ug[0]) { ug[0].specs = { ...ug[0].specs, packaging: prod.packagingType||'Retail', material: prod.material||'', length: prod.length||'', width: prod.width||'', height: prod.height||'', startWeight: prod.weight||'' }; } return ug; });
                     } else {
-                       if(d.project) setProject({...d.project, packingDate: d.project.packingDate || d.project.date || new Date().toISOString().split('T')[0]}); 
+                       if(d.project) setProject({...d.project, packingDate: d.project.packingDate || d.project.date || new Date().toISOString().split('T')[0], transportMode: d.project.transportMode || ''}); 
                        if(d.supplyChain) setSupplyChain(d.supplyChain); 
                        if(d.groups) setGroups(d.groups); 
                        if(d.analysis) setAnalysis({ graphNotes: d.analysis.graphNotes||'', conclusion: d.analysis.conclusion||'', variantConclusions: d.analysis.variantConclusions||{}, recommendation: d.analysis.recommendation||'retest', nextSteps: d.analysis.nextSteps||[], temperatureImage: d.analysis.temperatureImage||null });
@@ -634,7 +707,7 @@
 
           const toggleCriteria = (c) => setProject(p => ({ ...p, criteria: p.criteria.includes(c) ? p.criteria.filter(x => x !== c) : [...p.criteria, c] }));
           const addNewCriteria = () => { if(newCriteria && !project.criteria.includes(newCriteria)) { toggleCriteria(newCriteria); setNewCriteria(''); }};
-          
+
           // Supply Chain
           const addChainStep = () => setSupplyChain([...supplyChain, { stage: '', tempStart: '', tempEnd: '', daysStart: '', daysEnd: '', action: 'none' }]);
           const updateChainStep = (i, f, v) => { const n = [...supplyChain]; n[i][f] = v; setSupplyChain(n); };
@@ -644,13 +717,14 @@
           // Modals
           const openSampleModal = (gId, idx) => { 
             const g = groups.find(x => x.id === gId); 
-            const meas = g.measurements[index];
+            const meas = g.measurements[idx];
             const isEndDay = project.totalDuration && parseFloat(meas.day) === parseInt(project.totalDuration);
-            const isEvaluationDay = parseFloat(meas.day) === 0 || isEndDay;
-            const isDayEditable = parseFloat(meas.day) !== 0 && !isEndDay;
+            const isRetailDay = project.retailOpenDays && parseFloat(meas.day) === (parseInt(project.totalDuration) + parseInt(project.retailOpenDays));
+            const isEvaluationDay = parseFloat(meas.day) === 0 || isEndDay || isRetailDay;
+            const isDayEditable = parseFloat(meas.day) !== 0 && !isEndDay && !isRetailDay;
             const day0 = g.measurements.find(m => parseFloat(m.day) === 0);
             
-            setEditingMeasurement({ groupId: gId, index: idx, data: meas, day0Samples: day0?.samples, isEvaluationDay, isDayEditable, projectCriteria: project.criteria, startWeight: g.specs.startWeight }); 
+            setEditingMeasurement({ groupId: gId, index: idx, data: meas, day0Samples: day0?.samples, isEvaluationDay, isDayEditable, projectCriteria: project.criteria, startWeight: g.specs.startWeight, isOpened: project.totalDuration && parseFloat(meas.day) > parseInt(project.totalDuration) }); 
             setSampleModalOpen(true); 
           };
           
@@ -694,21 +768,16 @@
 
           const addNewVariant = () => {
             const newId = Math.max(...groups.map(g => g.id), 0) + 1;
-            const duration = parseInt(project.totalDuration) || 0;
+            const p = parseInt(project.totalDuration) || 0;
+            const o = parseInt(project.retailOpenDays) || 0;
             const sCount = groups[0]?.specs.sampleCount || 3;
             
-            const generateSamples = (isDay0) => Array.from({length: sCount}, (_, i) => ({
-                id: Date.now() + i, 
-                o2: isDay0 ? '20.9' : '', 
-                co2: isDay0 ? '0.03' : '', 
-                weight: ''
-            }));
+            const genS = (isD0) => Array.from({length: sCount}, (_, i) => ({ id: Date.now()+i, o2: isD0?'20.9':'', co2: isD0?'0.03':'', weight: '' }));
 
-            const day0 = { day: 0, samples: generateSamples(true), quality: 10, notes: 'Start', images: [], qualityParams: [], evaluateQuality: true };
-            const meas = [day0];
-            if (duration > 0) {
-               meas.push({ day: duration, samples: generateSamples(false), quality: 9, notes: 'End', images: [], qualityParams: [], evaluateQuality: true });
-            }
+            const meas = [{ day: 0, samples: genS(true), quality: 10, notes: 'Start', images: [], qualityParams: [], evaluateQuality: true }];
+            if (p > 0) meas.push({ day: p, samples: genS(false), quality: 9, notes: 'End Packing', images: [], qualityParams: [], evaluateQuality: true });
+            if (p > 0 && o > 0) meas.push({ day: p + o, samples: genS(false), quality: 9, notes: 'Retail Simulation (Open)', images: [], qualityParams: [], evaluateQuality: true });
+            
             setGroups([...groups, { id: newId, name: `Variant ${groups.length + 1}`, specs: { ...(groups[0]?.specs||{}), sampleCount: sCount }, measurements: meas, predictedImage: null }]);
             setActiveGroupId(newId);
           };
@@ -744,7 +813,13 @@
           };
 
           if (isPreview) {
-            const totalChainDays = supplyChain.reduce((acc, step) => acc + (parseFloat(step.daysStart) || 0), 0);
+            
+            const temps = supplyChain.map(s => parseFloat(s.tempStart)).filter(t => !isNaN(t));
+            const minTemp = Math.min(...temps);
+            const maxTemp = Math.max(...temps);
+            const tempString = temps.length > 0 ? (minTemp === maxTemp ? `${minTemp}°C` : `${minTemp}°C - ${maxTemp}°C`) : '-°C';
+            const totalDays = project.totalDuration || 0;
+
             const allPhotos = groups.flatMap(g => g.measurements.flatMap(m => (m.images || []).map(img => ({ groupName: g.name, day: m.day, url: typeof img === 'string' ? img : img.url, caption: typeof img === 'string' ? '' : img.caption, category: (typeof img === 'object' && img.category) ? img.category : 'Other' }))));
             const photosByCat = {};
             allPhotos.forEach(p => { if (!photosByCat[p.category]) photosByCat[p.category] = []; photosByCat[p.category].push(p); });
@@ -769,15 +844,19 @@
                      <div>
                         <div className="flex justify-between items-start mb-16 w-full">
                           <div className="flex flex-col">
-                            <img src={project.logo || ''} alt="PerfoTec Logo" className="h-20 object-contain self-start mb-2" />
+                            <img src={project.logo || ''} alt="PerfoTec Logo" className="h-16 max-w-[250px] object-contain self-start mb-2" />
                             <div className="text-sm font-bold tracking-[0.25em] uppercase" style={{ color: BRAND.colors.blue, fontFamily: BRAND.fonts.heading, marginLeft: '4px' }}>Best for Freshness</div>
                           </div>
-                          {project.clientLogo && <img src={project.clientLogo} alt="Client Logo" className="h-16 max-w-[200px] object-contain self-end" />}
+                          {project.clientLogo && (
+                            <div className="flex justify-end items-start h-16 max-w-[250px]">
+                               <img src={project.clientLogo} alt="Client Logo" className="h-full w-auto object-contain" />
+                            </div>
+                          )}
                         </div>
 
                         <h1 className="text-5xl font-bold uppercase mb-4 brand-heading" style={{ color: BRAND.colors.green }}>{project.reportTitle || ''}</h1>
                         <h2 className="text-4xl font-light brand-heading text-slate-600 mb-12">{project.productName || '<Product Name>'}</h2>
-                        <div className="w-full h-[450px] overflow-hidden flex items-center justify-center relative bg-transparent">
+                        <div className="w-full h-[450px] overflow-hidden flex items-center justify-center relative bg-transparent border-none">
                            {project.coverImage ? <img src={project.coverImage} className="w-full h-full object-contain" /> : project.startImage ? <img src={project.startImage} className="w-full h-full object-contain" /> : <span className="text-slate-300 italic">No Cover Photo</span>}
                         </div>
                      </div>
@@ -790,17 +869,17 @@
                   <div className="min-h-[27cm] flex flex-col pt-4">
                     <h3 className="text-3xl font-bold mb-8 brand-heading uppercase" style={{ color: BRAND.colors.green }}>Contents</h3>
                     <ul className="space-y-4 brand-body text-lg mb-12 text-slate-700">
-                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><span className="font-bold">1 Setting</span> <span>3</span></li>
-                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><span className="font-bold">2 Summary and Conclusions</span> <span>4</span></li>
-                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><span className="font-bold">3 Trial set up</span> <span>5</span></li>
-                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><span className="font-bold">4 Trial results</span> <span>6</span></li>
+                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><a href="#sec-1" className="hover:text-blue-600 transition cursor-pointer font-bold">1 Setting</a> <span>3</span></li>
+                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><a href="#sec-2" className="hover:text-blue-600 transition cursor-pointer font-bold">2 Summary and Conclusions</a> <span>4</span></li>
+                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><a href="#sec-3" className="hover:text-blue-600 transition cursor-pointer font-bold">3 Trial set up</a> <span>5</span></li>
+                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><a href="#sec-4" className="hover:text-blue-600 transition cursor-pointer font-bold">4 Trial results</a> <span>6</span></li>
                       <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><span className="pl-6">4.1 Gas Levels</span> <span>6</span></li>
                       {analysis.temperatureImage && <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><span className="pl-6">4.2 Temperature Logger Profile</span> <span>6</span></li>}
                       <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><span className="pl-6">4.{analysis.temperatureImage ? '3' : '2'} Weight Loss Comparison</span> <span>6</span></li>
                       <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><span className="pl-6">4.{analysis.temperatureImage ? '4' : '3'} Visual quality</span> <span>6</span></li>
                       <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><span className="pl-6">4.{analysis.temperatureImage ? '5' : '4'} Detailed Quality Parameters</span> <span>6</span></li>
                       <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><span className="pl-6">4.{analysis.temperatureImage ? '6' : '5'} Score scale</span> <span>6</span></li>
-                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><span className="font-bold">5 Photos</span> <span>7</span></li>
+                      <li className="flex justify-between border-b border-dotted border-slate-300 pb-2"><a href="#sec-5" className="hover:text-blue-600 transition cursor-pointer font-bold">5 Photos</a> <span>7</span></li>
                     </ul>
                   </div>
 
@@ -834,6 +913,7 @@
                        {project.employee && <><div className="font-bold">PerfoTec Employee :</div> <div>{project.employee}</div></>}
                        <div className="font-bold">Technology :</div> <div>PerfoTec Laser Perforation</div>
                        {project.trialTarget && <><div className="font-bold">Trial Target :</div> <div>{project.trialTarget}</div></>}
+                       <div className="font-bold">Transport Mode :</div> <div>{project.transportMode || '-'}</div>
                        
                        <div className="font-bold col-span-2 mt-4 border-t border-slate-300 pt-2 text-lg" style={{color: BRAND.colors.green}}>Product Supply Chain :</div> 
                        <div className="col-span-2 w-full mt-1"><SupplyChainFlow chain={supplyChain} /></div>
@@ -894,20 +974,23 @@
                        </div>
 
                        {project.currentChallenge && (
-                         <div className="bg-orange-50 border border-orange-200 p-3 rounded text-orange-900">
+                         <div className="bg-orange-50 border border-orange-200 p-3 rounded text-orange-900 mt-4 mb-4">
                            <strong>Current Challenge:</strong> {project.currentChallenge}
                          </div>
                        )}
 
-                       <p>The Fast Respiration Meter System 2.0 was used to measure the product respiration rate (RR O₂: {project.rrO2 || '-'}, RR CO₂: {project.rrCO2 || '-'}) at {project.rrTemp || '-'}°C. This allowed PerfoTec to calculate the optimal micro perforation pattern.</p>
+                       <p>The Fast Respiration Meter System was used to measure the product respiration rate (RR O₂: {project.rrO2 || '-'}, RR CO₂: {project.rrCO2 || '-'}) at {project.rrTemp || '-'}°C. This allowed PerfoTec to calculate the optimal micro perforation pattern.</p>
                        
                        {groups[0]?.specs?.startWeight && <p>The product weight tested was approx. <strong>{groups[0].specs.startWeight}g</strong> per unit.</p>}
                        {(project.maturityStage && project.maturityStage !== 'N/A' && project.maturityStage !== '-') && <p>Maturity stage at packing: <strong>{project.maturityStage}</strong>.</p>}
                        {(project.postHarvestTreatment && project.postHarvestTreatment !== 'N/A' && project.postHarvestTreatment !== '-') && <p>Post-harvest treatment: <strong>{project.postHarvestTreatment}</strong>.</p>}
                        
-                       <p>Stored at {supplyChain.map(s => `${s.tempStart}°C`).join(' / ')} for {totalChainDays} days total.</p>
-                       <p>The product was packed on <strong>{project.packingDate || project.date}</strong>.</p>
-                       <p>Unpacking moments were planned for {formatDay(groups[0].measurements[groups[0].measurements.length-1].day)}. Per packing moment, samples per treatment were unpacked.</p>
+                       <p>Stored at {tempString} for {totalDays} days total.</p>
+                       <p>The product was packed on <strong>{formatDateToDDMMYYYY(project.packingDate || project.date)}</strong>.</p>
+                       <p>Unpacking moments were planned for <strong>{calcUnpackingDate()}</strong> (Day {project.totalDuration || 0}). Per packing moment, samples per treatment were unpacked.</p>
+                       {project.retailOpenDays && parseInt(project.retailOpenDays) > 0 && (
+                          <p>After opening, the product was kept in retail simulation for an additional {project.retailOpenDays} days and evaluated again.</p>
+                       )}
                        
                        <p>Product quality was evaluated at the start and at the unpacking moment. The following attributes are evaluated according to the score scale listed below. Scores of 7 and higher are considered to be within specification and of acceptable quality.</p>
                        <ul className="list-disc pl-6 grid grid-cols-2 gap-2">
@@ -945,7 +1028,7 @@
                                   </div>
                                </div>
                                <div className="w-1/2 flex flex-col">
-                                  <VariantGasChart group={g} />
+                                  <VariantGasChart group={g} packedDays={project.totalDuration} />
                                </div>
                             </div>
                           ))}
@@ -955,8 +1038,8 @@
                     {analysis.temperatureImage && (
                        <div className="break-inside-avoid mb-10">
                          <h3 className="font-bold text-xl mb-2 mt-8 brand-heading text-slate-700">4.2 Temperature Logger Profile</h3>
-                         <div className="w-full border rounded p-2 bg-white flex justify-center items-center h-[250px]">
-                             <img src={analysis.temperatureImage} className="max-w-full max-h-full object-contain" />
+                         <div className="w-full border rounded p-2 bg-white flex justify-center items-center">
+                             <img src={analysis.temperatureImage} className="w-full h-auto object-contain" />
                          </div>
                        </div>
                     )}
@@ -978,7 +1061,7 @@
                               const last = g.measurements[g.measurements.length - 1];
                               const day0 = g.measurements.find(m => parseFloat(m.day) === 0);
                               const loss = getWeightLoss(last?.samples, day0?.samples);
-                              return (<tr key={i}><td>{g.name || ''}</td><td>Day {last?.day || ''}</td><td className="font-bold text-lg">{last?.quality || ''}</td><td>{loss}%</td><td>{last?.notes || '-'}</td></tr>)
+                              return (<tr key={i}><td>{g.name}</td><td>Day {last.day}</td><td className="font-bold text-lg">{last.quality}</td><td>{loss}%</td><td>{last.notes || '-'}</td></tr>)
                             })}
                           </tbody>
                         </table>
@@ -997,40 +1080,49 @@
                              return <p className="text-base italic text-gray-500">No specific criteria were evaluated during this test.</p>;
                            }
 
-                           return allEvalDays.map(dayVal => (
-                             <div key={dayVal} className="mb-8 break-inside-avoid">
-                               <h4 className="font-bold text-lg mb-3 text-slate-600">Evaluation: Day {dayVal}</h4>
-                               <table className="report-table w-full text-sm shadow-sm">
-                                 <thead>
-                                   <tr>
-                                     <th>Criterion</th>
-                                     {groups.map(g => <th key={g.id} className="text-center">{g.name || 'Variant'}</th>)}
-                                   </tr>
-                                 </thead>
-                                 <tbody>
-                                   {project.criteria.map((crit, i) => (
-                                     <tr key={i}>
-                                       <td className="font-semibold text-base">{crit}</td>
-                                       {groups.map(g => {
-                                          const meas = g.measurements.find(m => parseFloat(m.day) === dayVal);
-                                          const param = (meas?.evaluateQuality || meas?.qualityParams?.length > 0) ? meas.qualityParams?.find(p => p.name === crit) : null;
-                                          return (
-                                            <td key={g.id} className="text-center align-top">
-                                              {param && param.score ? (
-                                                <div className="flex flex-col items-center">
-                                                  <span className="font-bold text-xl leading-none mb-1" style={{color: BRAND.colors.green}}>{param.score}</span>
-                                                  {param.notes && <span className="text-xs italic text-gray-500 leading-tight">{param.notes}</span>}
-                                                </div>
-                                              ) : '-'}
-                                            </td>
-                                          )
-                                       })}
+                           return allEvalDays.map(dayVal => {
+                             const pDays = parseInt(project.totalDuration) || 0;
+                             let dayContext = "";
+                             if (pDays > 0) {
+                               if (dayVal < pDays) dayContext = " (Before opening)";
+                               else if (dayVal === pDays) dayContext = " (Moment of opening)";
+                               else dayContext = ` (${dayVal - pDays} days after opening)`;
+                             }
+                             return (
+                               <div key={dayVal} className="mb-8 break-inside-avoid">
+                                 <h4 className="font-bold text-lg mb-3 text-slate-600">Evaluation: Day {dayVal}{dayContext}</h4>
+                                 <table className="report-table w-full text-sm shadow-sm">
+                                   <thead>
+                                     <tr>
+                                       <th>Criterion</th>
+                                       {groups.map(g => <th key={g.id} className="text-center">{g.name}</th>)}
                                      </tr>
-                                   ))}
-                                 </tbody>
-                               </table>
-                             </div>
-                           ));
+                                   </thead>
+                                   <tbody>
+                                     {project.criteria.map((crit, i) => (
+                                       <tr key={i}>
+                                         <td className="font-semibold text-base">{crit}</td>
+                                         {groups.map(g => {
+                                            const meas = g.measurements.find(m => parseFloat(m.day) === dayVal);
+                                            const param = (meas?.evaluateQuality || meas?.qualityParams?.length > 0) ? meas.qualityParams?.find(p => p.name === crit) : null;
+                                            return (
+                                              <td key={g.id} className="text-center align-top">
+                                                {param && param.score ? (
+                                                  <div className="flex flex-col items-center">
+                                                    <span className="font-bold text-xl leading-none mb-1" style={{color: BRAND.colors.green}}>{param.score}</span>
+                                                    {param.notes && <span className="text-xs italic text-gray-500 leading-tight">{param.notes}</span>}
+                                                  </div>
+                                                ) : '-'}
+                                              </td>
+                                            )
+                                         })}
+                                       </tr>
+                                     ))}
+                                   </tbody>
+                                 </table>
+                               </div>
+                             );
+                           });
                         })()}
                     </div>
 
@@ -1050,11 +1142,11 @@
                     <div className="grid grid-cols-2 gap-8">
                        {/* Reference Start Photo */}
                        {project.startImage && (
-                         <div className="col-span-2 mb-4 break-inside-avoid flex items-center justify-center gap-6 border-b pb-6">
-                            <div style={{ width: '70mm', height: '70mm' }} className="flex items-center justify-center shrink-0">
-                                <img src={project.startImage} className="max-w-full max-h-full object-contain"/>
+                         <div className="col-span-2 mb-4 break-inside-avoid border-b pb-6">
+                            <div className="w-full flex items-center justify-center bg-transparent border-none mb-4">
+                                <img src={project.startImage} className="max-w-full h-auto object-contain"/>
                             </div>
-                            <div>
+                            <div className="text-center">
                               <h3 className="font-bold text-2xl brand-heading" style={{ color: BRAND.colors.green }}>{project.productName}</h3>
                               <p className="text-base font-bold mt-2 text-slate-600 brand-heading">Picture 1. P+0 - Initial product quality</p>
                             </div>
@@ -1078,7 +1170,7 @@
                                                <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
                                                    {variantPhotos.map((photo, idx) => (
                                                       <div key={idx} className="break-inside-avoid">
-                                                         <div className="h-56 flex items-center justify-center relative bg-white border border-gray-100 rounded">
+                                                         <div className="h-56 flex items-center justify-center relative bg-transparent border-none rounded">
                                                             <img src={photo.url} className="max-w-full max-h-full object-contain"/>
                                                             <div className="absolute top-0 right-0 bg-white/90 px-3 py-1 text-xs font-bold text-gray-700 border-b border-l rounded-bl">{formatDay(photo.day)}</div>
                                                          </div>
@@ -1102,7 +1194,22 @@
           // --- EDITOR VIEW ---
           return (
             <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-20">
-              <SampleModal isOpen={sampleModalOpen} onClose={() => setSampleModalOpen(false)} data={editingMeasurement ? editingMeasurement.data : {}} onSave={saveSampleData} day0Samples={editingMeasurement ? editingMeasurement.day0Samples : null} projectCriteria={project.criteria || []} isEvaluationDay={editingMeasurement ? editingMeasurement.isEvaluationDay : false} isDayEditable={editingMeasurement ? editingMeasurement.isDayEditable : false} startWeight={editingMeasurement ? editingMeasurement.startWeight : 0} />
+              <style dangerouslySetInnerHTML={{ __html: `
+                .label { display: block; font-size: 0.75rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.35rem; font-family: 'Inter', sans-serif; } 
+                .input { width: 100%; padding: 0.6rem; border: 1px solid #e2e8f0; border-radius: 0.5rem; outline: none; transition: 0.2s; font-size: 0.9rem; font-family: 'Inter', sans-serif; } 
+                .input:focus { border-color: ${BRAND.colors.green}; box-shadow: 0 0 0 3px rgba(0, 124, 39, 0.1); }
+                
+                /* Rich Text Editor Editor Styles */
+                .rich-text-editor { min-height: 120px; }
+                .rich-text-editor ul { list-style-type: disc; padding-left: 1.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem; }
+                .rich-text-editor li { margin-bottom: 0.25rem; }
+                .rich-text-editor b { font-weight: 700; }
+                .rich-text-editor i { font-style: italic; }
+                .rich-text-editor u { text-decoration: underline; }
+                [contenteditable]:empty:before { content: attr(data-placeholder); color: #94a3b8; pointer-events: none; display: block; }
+              `}} />
+              
+              <SampleModal isOpen={sampleModalOpen} onClose={() => setSampleModalOpen(false)} data={editingMeasurement ? editingMeasurement.data : {}} onSave={saveSampleData} day0Samples={editingMeasurement ? editingMeasurement.day0Samples : null} projectCriteria={project.criteria || []} isEvaluationDay={editingMeasurement ? editingMeasurement.isEvaluationDay : false} isDayEditable={editingMeasurement ? editingMeasurement.isDayEditable : false} startWeight={editingMeasurement ? editingMeasurement.startWeight : 0} projectTotalDuration={project.totalDuration} />
               <DetailsModal isOpen={detailsModalOpen} onClose={() => setDetailsModalOpen(false)} data={editingMeasurement ? editingMeasurement.data : {}} onSave={saveDetailsData} />
 
               <nav className="bg-white border-b sticky top-0 z-20 px-4 md:px-6 py-4 flex justify-between items-center shadow-sm">
@@ -1137,9 +1244,10 @@
                          <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                            <div className="sm:col-span-2"><label className="label">Report Title</label><input type="text" className="input text-lg font-bold" value={project.reportTitle || ''} onChange={e => handleProjectChange('reportTitle', e.target.value)} /></div>
                            <div className="sm:col-span-2"><label className="label">Product Name</label><input type="text" className="input text-lg font-bold" value={project.productName || ''} onChange={e => handleProjectChange('productName', e.target.value)} /></div>
-                           <div><label className="label">Report Datum</label><input type="date" className="input" value={project.date || ''} onChange={e => handleProjectChange('date', e.target.value)} /></div>
-                           <div><label className="label">Packing Datum</label><input type="date" className="input bg-yellow-50" value={project.packingDate || ''} onChange={e => handleProjectChange('packingDate', e.target.value)} /></div>
-                           <div><label className="label">Total Duration (Days)</label><input type="number" className="input bg-yellow-50" value={project.totalDuration || ''} onChange={handleDurationChange} placeholder="e.g. 10" /></div>
+                           <div><label className="label">Report Date</label><input type="date" className="input" value={project.date || ''} onChange={e => handleProjectChange('date', e.target.value)} /></div>
+                           <div><label className="label">Packing Date</label><input type="date" className="input bg-yellow-50" value={project.packingDate || ''} onChange={e => handleProjectChange('packingDate', e.target.value)} /></div>
+                           <div><label className="label">Total Days Packed</label><input type="number" className="input bg-yellow-50" value={project.totalDuration || ''} onChange={handleDurationChange} placeholder="e.g. 10" /></div>
+                           <div><label className="label">Retail Simulation (after opening)</label><input type="number" className="input bg-blue-50" value={project.retailOpenDays || ''} onChange={handleOpenDaysChange} placeholder="e.g. 7" /></div>
                            
                            <div>
                               <label className="label">Processing Type</label>
@@ -1162,18 +1270,22 @@
                          </div>
                          
                          <div className="space-y-4">
+                            {/* Logo Upload */}
                             <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center bg-slate-50 relative group min-h-[100px]">
                                 <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => handleImgUpload(e, 'logo')} />
-                                {project.logo ? <img src={project.logo} className="h-full object-contain" /> : <><Upload size={24} color={BRAND.colors.blue} className="mb-2"/><span className="font-bold text-xs text-slate-600">Upload Logo (PNG)</span></>}
+                                {project.logo ? <img src={project.logo} className="h-full object-contain" /> : <><Upload size={24} color={BRAND.colors.blue} className="mb-2"/><span className="font-bold text-xs text-slate-600">Upload PerfoTec Logo (PNG)</span></>}
                             </div>
+                            {/* Client Logo Upload */}
                             <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center bg-slate-50 relative group min-h-[100px]">
                                 <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => handleImgUpload(e, 'clientLogo')} />
                                 {project.clientLogo ? <img src={project.clientLogo} className="h-full object-contain" /> : <><Upload size={24} color={BRAND.colors.green} className="mb-2"/><span className="font-bold text-xs text-slate-600">Upload Client Logo</span></>}
                             </div>
+                            {/* Cover Image Upload */}
                             <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center bg-slate-50 relative group min-h-[150px]">
                                 <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => handleImgUpload(e, 'coverImage')} />
                                 {project.coverImage ? <img src={project.coverImage} className="w-full h-full object-cover rounded" /> : <><ImageIcon size={24} color={BRAND.colors.green} className="mb-2"/><span className="font-bold text-xs text-slate-600">Cover Photo (Page 1)</span></>}
                             </div>
+                            {/* Start Image Upload */}
                             <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center bg-slate-50 relative group min-h-[150px]">
                                 <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => handleImgUpload(e, 'startImage')} />
                                 {project.startImage ? <img src={project.startImage} className="w-full h-full object-cover rounded" /> : <><ImageIcon size={24} color={BRAND.colors.green} className="mb-2"/><span className="font-bold text-xs text-slate-600">Ref Photo (P+0)</span></>}
@@ -1182,16 +1294,19 @@
                        </div>
                     </div>
 
-                    <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-100">
+                    <div className="bg-white p-4 sm:p-8 rounded-xl shadow-sm border border-slate-100">
                        <h2 className="font-bold text-lg mb-6 text-[#211A1A] border-b pb-2">2. Company & Contact</h2>
                        <div className="grid grid-cols-4 gap-6">
                          <div className="col-span-4 sm:col-span-2"><label className="label">Company Name</label><input type="text" className="input font-bold" value={project.company || ''} onChange={e => handleProjectChange('company', e.target.value)} /></div>
                          <div className="col-span-4 sm:col-span-2"><label className="label">PerfoTec Employee</label><input type="text" className="input" value={project.employee || ''} onChange={e => handleProjectChange('employee', e.target.value)} /></div>
+                         
                          <div className="col-span-4 sm:col-span-3"><label className="label">Street</label><input type="text" className="input" value={project.street || ''} onChange={e => handleProjectChange('street', e.target.value)} /></div>
                          <div className="col-span-4 sm:col-span-1"><label className="label">House No.</label><input type="text" className="input" value={project.houseNumber || ''} onChange={e => handleProjectChange('houseNumber', e.target.value)} /></div>
+                         
                          <div className="col-span-4 sm:col-span-1"><label className="label">Zip Code</label><input type="text" className="input" value={project.zipCode || ''} onChange={e => handleProjectChange('zipCode', e.target.value)} /></div>
                          <div className="col-span-4 sm:col-span-1"><label className="label">City</label><input type="text" className="input" value={project.city || ''} onChange={e => handleProjectChange('city', e.target.value)} /></div>
                          <div className="col-span-4 sm:col-span-2"><label className="label">Country</label><input type="text" className="input" value={project.country || ''} onChange={e => handleProjectChange('country', e.target.value)} /></div>
+
                          <div className="col-span-4 sm:col-span-1"><label className="label">Contact Person</label><input type="text" className="input" value={project.contactName || ''} onChange={e => handleProjectChange('contactName', e.target.value)} /></div>
                          <div className="col-span-4 sm:col-span-1"><label className="label">Role</label><input type="text" className="input" value={project.contactRole || ''} onChange={e => handleProjectChange('contactRole', e.target.value)} /></div>
                          <div className="col-span-4 sm:col-span-1"><label className="label">Email</label><input type="email" className="input" value={project.contactEmail || ''} onChange={e => handleProjectChange('contactEmail', e.target.value)} /></div>
@@ -1199,7 +1314,7 @@
                        </div>
                     </div>
 
-                    <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-100">
+                    <div className="bg-white p-4 sm:p-8 rounded-xl shadow-sm border border-slate-100">
                        <h2 className="font-bold text-lg mb-6 text-[#211A1A] border-b pb-2">3. Goals & Challenges</h2>
                        <div className="grid grid-cols-2 gap-6">
                          <div>
@@ -1210,63 +1325,55 @@
                            <label className="label text-green-600">Trial Target / Goal</label>
                            <textarea rows="3" className="input bg-green-50 border-green-200" value={project.trialTarget || ''} onChange={e => handleProjectChange('trialTarget', e.target.value)} />
                          </div>
-                         <div className="col-span-2">
-                           <label className="label mb-2">Transport & Storage Modes</label>
-                           <div className="flex flex-wrap gap-2">
-                             {['Air Freight', 'Sea Freight', 'Road Transport', 'Storage'].map(mode => (
-                               <button 
-                                 key={mode} 
-                                 onClick={() => handleTransportModeToggle(mode)}
-                                 className={`px-3 py-1.5 rounded-full text-xs font-bold border transition ${project.transportModes?.includes(mode) ? 'bg-blue-100 border-blue-300 text-blue-800' : 'bg-white border-slate-300 text-slate-500'}`}
-                               >
-                                 {mode} {project.transportModes?.includes(mode) && <CheckCircle size={12} className="inline ml-1"/>}
-                               </button>
-                             ))}
-                           </div>
-                         </div>
                        </div>
                     </div>
 
                     {/* Supply Chain Editor */}
-                    <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-100">
+                    <div className="bg-white p-4 sm:p-8 rounded-xl shadow-sm border border-slate-100">
                       <h2 className="font-bold text-lg mb-6 text-[#211A1A] border-b pb-2 flex items-center gap-2"><Truck size={20}/> Product Supply Chain</h2>
-                      <div className="space-y-4">
+                      <div className="mb-6">
+                        <label className="label mb-2">Transport Mode</label>
+                        <div className="flex flex-wrap gap-2">
+                          {['Air Freight', 'Sea Freight', 'Road Transport', 'Storage'].map(mode => (
+                            <button 
+                              key={mode} 
+                              onClick={() => handleProjectChange('transportMode', mode)}
+                              className={`px-3 py-1.5 rounded-full text-xs font-bold border transition ${project.transportMode === mode ? 'bg-blue-100 border-blue-300 text-blue-800' : 'bg-white border-slate-300 text-slate-500'}`}
+                            >
+                              {mode} {project.transportMode === mode && <CheckCircle size={12} className="inline ml-1"/>}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="space-y-4 overflow-hidden">
                         {supplyChain.map((step, idx) => (
-                           <div key={idx} className="flex gap-4 items-end bg-slate-50 p-4 rounded-lg border border-slate-200">
-                              <div className="flex flex-col gap-1 pt-6">
-                                 <button onClick={() => moveChainStep(idx, 'up')} disabled={idx === 0} className="p-1.5 hover:bg-slate-200 rounded disabled:opacity-30"><ChevronUp size={16}/></button>
-                                 <button onClick={() => moveChainStep(idx, 'down')} disabled={idx === supplyChain.length - 1} className="p-1.5 hover:bg-slate-200 rounded disabled:opacity-30"><ChevronDown size={16}/></button>
+                           <div key={idx} className="flex gap-4 items-end bg-slate-50 p-4 rounded-lg border border-slate-200 relative group">
+                              <div className="flex flex-col gap-1 shrink-0 w-full sm:w-auto flex-row xl:flex-col justify-end xl:justify-start">
+                                 <button onClick={() => moveChainStep(idx, 'up')} disabled={idx === 0} className="p-2 sm:p-1 hover:bg-slate-200 rounded disabled:opacity-30"><ChevronUp size={16}/></button>
+                                 <button onClick={() => moveChainStep(idx, 'down')} disabled={idx === supplyChain.length - 1} className="p-2 sm:p-1 hover:bg-slate-200 rounded disabled:opacity-30"><ChevronDown size={16}/></button>
                               </div>
-                              <div className="flex-1">
-                                <label className="label">Fase (Activiteit)</label>
-                                {idx === 2 ? (
-                                  <select className="input" value={step.stage || ''} onChange={e => updateChainStep(idx, 'stage', e.target.value)}>
-                                    <option>Transport by road</option><option>Seafreight</option><option>Airfreight</option><option>Storage</option>
-                                  </select>
-                                ) : (
-                                  <input type="text" className="input" value={step.stage || ''} onChange={e => updateChainStep(idx, 'stage', e.target.value)} />
-                                )}
+                              <div className="flex-1 min-w-[200px] w-full">
+                                <label className="label">Fase (Activiteit) *</label>
+                                <input type="text" className="input py-2.5 text-sm font-bold" value={step.stage} onChange={e => updateChainStep(idx, 'stage', e.target.value)} />
                               </div>
                               <div className="w-48 flex gap-2">
-                                 <div className="w-1/2"><label className="label">Temp Min</label><input type="number" className="input font-bold" value={step.tempStart || ''} onChange={e => updateChainStep(idx, 'tempStart', e.target.value)} /></div>
-                                 <div className="w-1/2"><label className="label">Max</label><input type="number" className="input" value={step.tempEnd || ''} onChange={e => updateChainStep(idx, 'tempEnd', e.target.value)} placeholder="-" /></div>
+                                 <div className="w-1/2"><label className="label">Temp Min</label><input type="number" className="input py-2.5 text-sm text-center" value={step.tempStart} onChange={e => updateChainStep(idx, 'tempStart', e.target.value)} /></div>
+                                 <div className="w-1/2"><label className="label">Max</label><input type="number" className="input py-2.5 text-sm text-center" value={step.tempEnd} placeholder="-" onChange={e => updateChainStep(idx, 'tempEnd', e.target.value)} /></div>
                               </div>
                               <div className="w-48 flex gap-2">
-                                 <div className="w-1/2"><label className="label">Dagen Min</label><input type="number" className="input" value={step.daysStart || ''} onChange={e => updateChainStep(idx, 'daysStart', e.target.value)} /></div>
-                                 <div className="w-1/2"><label className="label">Max</label><input type="number" className="input" value={step.daysEnd || ''} onChange={e => updateChainStep(idx, 'daysEnd', e.target.value)} placeholder="-" /></div>
+                                 <div className="w-1/2"><label className="label">Dagen Min</label><input type="number" className="input py-2.5 text-sm text-center" value={step.daysStart} onChange={e => updateChainStep(idx, 'daysStart', e.target.value)} /></div>
+                                 <div className="w-1/2"><label className="label">Max</label><input type="number" className="input py-2.5 text-sm text-center" value={step.daysEnd} placeholder="-" onChange={e => updateChainStep(idx, 'daysEnd', e.target.value)} /></div>
                               </div>
                               <div className="w-32">
-                                <label className="label">Actie</label>
-                                <select className="input py-2.5 px-1 sm:px-2 text-xs sm:text-sm font-bold text-slate-700 w-full" value={step.action || 'none'} onChange={e => updateChainStep(idx, 'action', e.target.value)}>
-                                  <option value="none">-</option><option value="pack" className="text-green-700">Inpakken</option><option value="unpack" className="text-red-700">Uitpakken</option>
-                                </select>
+                                 <label className="label">Actie</label>
+                                 <select className="input py-2.5 px-2 text-sm font-bold text-slate-700 w-full" value={step.action} onChange={e => updateChainStep(idx, 'action', e.target.value)}>
+                                   <option value="none">-</option><option value="pack" className="text-green-700">Inpakken</option><option value="unpack" className="text-red-700">Uitpakken</option>
+                                 </select>
                               </div>
-                              <div className="pt-6">
-                                <button onClick={() => removeChainStep(idx)} className="p-2.5 bg-red-50 text-red-500 rounded border border-red-100 hover:bg-red-100 h-[38px] flex items-center justify-center"><Trash2 size={18}/></button>
-                              </div>
+                              <div className="pb-1"><button onClick={() => removeChainStep(idx)} className="h-[42px] w-[42px] bg-red-50 text-red-500 rounded border border-red-100 hover:bg-red-100 flex items-center justify-center shrink-0"><Trash2 size={18}/></button></div>
                            </div>
                         ))}
-                        <button onClick={addChainStep} className="flex items-center gap-2 text-sm font-bold text-green-700 hover:text-green-800"><Plus size={16}/> Add Step</button>
+                        <button onClick={addChainStep} className="flex items-center gap-2 text-sm font-bold text-blue-700 hover:text-blue-900 mt-4 px-2 py-1"><Plus size={16}/> Add Step</button>
                       </div>
                     </div>
                   </div>
@@ -1275,7 +1382,8 @@
                 {/* 2. GROUPS (Inputs) */}
                 {activeTab === 'groups' && (
                   <>
-                    <div className="col-span-3 space-y-4">
+                    <div className="col-span-1 md:col-span-3 space-y-4">
+                       {/* Global Criteria Config */}
                        <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm mb-4">
                           <label className="label mb-2 text-slate-700">Global Assessment Criteria</label>
                           <div className="flex flex-wrap gap-2 mb-3">
@@ -1284,12 +1392,12 @@
                               <span key={c} className="bg-slate-50 border border-slate-300 text-slate-700 text-xs px-2 py-1 rounded flex items-center gap-1">{c} <button onClick={() => toggleCriteria(c)} className="text-red-400 hover:text-red-600 font-bold ml-1">×</button></span>
                             ))}
                           </div>
-                          <div className="flex gap-2">
+                          <div className="flex flex-col gap-2">
                             <select className="input w-full" value={newCriteria || ''} onChange={e => setNewCriteria(e.target.value)}>
                                <option value="">Select standard criterion...</option>
                                {DEFAULT_CRITERIA.filter(c => !project.criteria?.includes(c)).map(c => <option key={c}>{c}</option>)}
                             </select>
-                            <button onClick={addNewCriteria} className="bg-slate-800 text-white px-3 rounded hover:bg-black"><Plus size={16}/></button>
+                            <button onClick={addNewCriteria} className="bg-slate-800 text-white px-3 py-2 rounded hover:bg-black flex justify-center items-center"><Plus size={16}/></button>
                           </div>
                        </div>
 
@@ -1304,27 +1412,27 @@
                          </div>
                        ))}
                     </div>
-                    <div className="col-span-9 bg-white p-8 rounded-xl shadow-sm border border-slate-100 space-y-8 overflow-hidden">
+                    <div className="col-span-1 md:col-span-9 bg-white p-4 sm:p-8 rounded-xl shadow-sm border border-slate-100 space-y-8 overflow-hidden">
                        {groups.find(g => g.id === activeGroupId) && (
                          <>
                            <div>
                              <h3 className="font-bold text-lg mb-4 text-[#211A1A]">Trial Samples Config</h3>
-                             <div className="grid grid-cols-2 gap-6 mb-4">
+                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-4">
                                <div><label className="label">Name</label><input type="text" className="input font-bold" value={groups.find(g => g.id === activeGroupId).name || ''} onChange={(e) => handleGroupChange(activeGroupId, 'name', null, e.target.value)} /></div>
                                <div><label className="label">Packaging Type</label><select className="input" value={groups.find(g => g.id === activeGroupId).specs.packaging || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'packaging', e.target.value)}>{PACKAGING_TYPES.map(t => <option key={t}>{t}</option>)}</select></div>
                              </div>
                              
                              <label className="label text-blue-800 mb-2 border-b border-blue-200 pb-1 w-full block mt-4">Packaging Dimensions & Samples</label>
-                             <div className="grid grid-cols-3 gap-4 bg-slate-50 p-4 rounded-t-lg border-x border-t border-slate-100">
+                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-t-lg border-x border-t border-slate-100">
                                 <div><label className="label">Length (mm)</label><input type="number" className="input" value={groups.find(g => g.id === activeGroupId).specs.length || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'length', e.target.value)} /></div>
                                 <div><label className="label">Width (mm)</label><input type="number" className="input" value={groups.find(g => g.id === activeGroupId).specs.width || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'width', e.target.value)} /></div>
                                 <div><label className="label">Height (mm)</label><input type="number" className="input" value={groups.find(g => g.id === activeGroupId).specs.height || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'height', e.target.value)} /></div>
                              </div>
-                             <div className="grid grid-cols-3 gap-4 bg-slate-50 p-4 rounded-b-lg border border-slate-100 mb-6">
+                             <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-b-lg border border-slate-100 mb-6">
                                <div><label className="label">Material</label><input className="input" value={groups.find(g => g.id === activeGroupId).specs.material || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'material', e.target.value)} /></div>
                                <div><label className="label">Transmission Value (TV)</label><input type="number" className="input" value={groups.find(g => g.id === activeGroupId).specs.holes || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'holes', e.target.value)} /></div>
                                <div><label className="label">Start Weight (g)</label><input type="number" className="input font-bold text-blue-900" value={groups.find(g => g.id === activeGroupId).specs.startWeight || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'startWeight', e.target.value)} /></div>
-                               <div className="col-span-3 mt-2"><label className="label">Aantal Samples / Meting</label><input type="number" min="1" className="input w-1/3 bg-white border-blue-200 font-bold text-blue-900" value={groups.find(g => g.id === activeGroupId).specs.sampleCount || 3} onChange={(e) => handleSampleCountChange(activeGroupId, parseInt(e.target.value))} /></div>
+                               <div className="col-span-1 sm:col-span-3 mt-2"><label className="label">Aantal Samples / Meting</label><input type="number" min="1" className="input sm:w-1/3 bg-white border-blue-200 font-bold text-blue-900" value={groups.find(g => g.id === activeGroupId).specs.sampleCount || 3} onChange={(e) => handleSampleCountChange(activeGroupId, parseInt(e.target.value))} /></div>
                              </div>
                              
                              <div className="border-2 border-dashed border-blue-200 bg-blue-50 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -1385,7 +1493,7 @@
                 {/* 3. ANALYSIS */}
                 {activeTab === 'analysis' && (
                   <div className="col-span-12 space-y-6">
-                    <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="bg-white p-4 sm:p-8 rounded-xl shadow-sm border border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-8">
                        <div className="md:col-span-2"><h2 className="font-bold text-lg border-b pb-2 mb-2 text-[#211A1A]">2 Summary and Conclusions</h2></div>
                        
                        <div className="md:col-span-2">
@@ -1450,21 +1558,13 @@
                        <div className="md:col-span-2">
                          <label className="label mb-2">Temperature Logger Profile (Optional)</label>
                          <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center bg-slate-50 relative group min-h-[150px]">
-                            <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => {
-                                const file = e.target.files[0];
-                                if (file) {
-                                  const reader = new FileReader();
-                                  reader.onloadend = () => setAnalysis(prev => ({...prev, temperatureImage: reader.result}));
-                                  reader.readAsDataURL(file);
-                                }
-                            }} />
+                            <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => handleImgUpload(e, 'temperatureImage')} />
                             {analysis.temperatureImage ? <img src={analysis.temperatureImage} className="max-w-full h-full max-h-64 object-contain rounded" /> : <><Upload size={24} color={BRAND.colors.blue} className="mb-2"/><span className="font-bold text-xs text-slate-600">Upload Temperature Graph</span></>}
                          </div>
                        </div>
                     </div>
                   </div>
                 )}
-
               </main>
             </div>
           );
