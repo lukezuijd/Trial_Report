@@ -336,7 +336,7 @@
               <div className="flex flex-wrap justify-center gap-4 mt-4">
                 {groups.map((g, idx) => (
                   <div key={g.id} className="flex items-center gap-2 text-xs font-bold" style={{fontFamily: BRAND.fonts.heading, color: BRAND.colors.black}}>
-                    <svg width="12" height="12" className="shrink-0"><rect width="12" height="12" rx="2" fill={CHART_COLORS[idx % CHART_COLORS.length].stroke} /></svg>
+                    <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: CHART_COLORS[idx % CHART_COLORS.length].stroke }}></div>
                     {g.name || 'Variant'}
                   </div>
                 ))}
@@ -394,7 +394,7 @@
                          <label className="font-bold">Day:</label>
                          <input 
                            type="number" 
-                           value={day || ''} 
+                           value={day} 
                            disabled={!isDayEditable} 
                            onChange={e => setDay(e.target.value)} 
                            className={`w-16 p-1.5 border rounded text-center font-bold ${!isDayEditable ? 'bg-gray-200 cursor-not-allowed text-gray-500' : 'bg-white'}`} 
@@ -527,7 +527,7 @@
                     </label>
                   </div>
                 </div>
-                <div className="bg-gray-50 p-4 border-t flex justify-end gap-3"><button onClick={onClose} className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded font-medium">Done</button><button onClick={handleSave} className="px-6 py-2 text-white font-bold rounded hover:opacity-90 shadow-lg" style={{ backgroundColor: BRAND.colors.green }}>Save</button></div>
+                <div className="bg-gray-50 p-4 border-t flex justify-end gap-3"><button onClick={onClose} className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded font-medium transition">Done</button><button onClick={handleSave} className="px-6 py-2 text-white font-bold rounded hover:opacity-90 shadow-lg" style={{ backgroundColor: BRAND.colors.green }}>Save</button></div>
               </div>
             </div>
           );
@@ -707,6 +707,10 @@
 
           const toggleCriteria = (c) => setProject(p => ({ ...p, criteria: p.criteria.includes(c) ? p.criteria.filter(x => x !== c) : [...p.criteria, c] }));
           const addNewCriteria = () => { if(newCriteria && !project.criteria.includes(newCriteria)) { toggleCriteria(newCriteria); setNewCriteria(''); }};
+          
+          const handleTransportModeToggle = (mode) => {
+            setProject(p => ({ ...p, transportModes: p.transportModes?.includes(mode) ? p.transportModes.filter(m => m !== mode) : [...(p.transportModes||[]), mode] }));
+          };
 
           // Supply Chain
           const addChainStep = () => setSupplyChain([...supplyChain, { stage: '', tempStart: '', tempEnd: '', daysStart: '', daysEnd: '', action: 'none' }]);
@@ -730,7 +734,7 @@
           
           const openDetailsModal = (gId, idx) => { 
             const g = groups.find(x => x.id === gId); 
-            setEditingMeasurement({ groupId: gId, index: idx, data: g.measurements[index] }); 
+            setEditingMeasurement({ groupId: gId, index: idx, data: g.measurements[idx] }); 
             setDetailsModalOpen(true); 
           };
 
@@ -967,7 +971,7 @@
                          <ul className="list-disc pl-6 space-y-1">
                            {groups.map((g,i) => {
                              return (
-                               <li key={i}><span className="font-bold">{g.name}</span> – {g.specs.packaging}, {g.specs.material}</li>
+                               <li key={i}><span className="font-bold">{g.name || 'Variant'}</span> – {g.specs.packaging || ''}, {g.specs.material || ''}</li>
                              )
                            })}
                          </ul>
@@ -994,7 +998,7 @@
                        
                        <p>Product quality was evaluated at the start and at the unpacking moment. The following attributes are evaluated according to the score scale listed below. Scores of 7 and higher are considered to be within specification and of acceptable quality.</p>
                        <ul className="list-disc pl-6 grid grid-cols-2 gap-2">
-                         {project.criteria.length > 0 ? project.criteria.map((c, i) => <li key={i}>{c}</li>) : <li>General Quality</li>}
+                         {project.criteria && project.criteria.length > 0 ? project.criteria.map((c, i) => <li key={i}>{c}</li>) : <li>General Quality</li>}
                        </ul>
                     </div>
                   </div>
@@ -1005,7 +1009,7 @@
                   <div className="pt-4">
                     <h2 className="report-section-title">4 Trial results</h2>
                     
-                    <div className="break-inside-avoid mb-10">
+                    <div className="mb-10">
                         <h3 id="sec-4-1" className="font-bold text-xl mb-2 brand-heading text-slate-700">4.1 Gas Levels</h3>
                         <div className="text-base mb-6 italic brand-body text-slate-600 pdf-rich-text" dangerouslySetInnerHTML={{ __html: analysis.graphNotes || 'Gas levels were monitored throughout the shelf life period.' }}></div>
                         
@@ -1018,7 +1022,7 @@
                           {groups.map((g, idx) => (
                             <div key={idx} className="flex flex-row gap-6 break-inside-avoid items-stretch">
                                <div className="w-1/2 flex flex-col border rounded bg-white p-3 font-sans">
-                                  <h5 className="text-center font-bold text-sm mb-2 text-slate-800 border-b pb-1">{g.name}</h5>
+                                  <h5 className="text-center font-bold text-sm mb-2 text-slate-800 border-b pb-1">{g.name || 'Variant'}</h5>
                                   <div className="flex-1 flex items-center justify-center p-2">
                                      {g.predictedImage ? (
                                        <img src={g.predictedImage} className="w-full h-auto max-h-[220px] object-contain" />
@@ -1052,7 +1056,7 @@
                     <div className="break-inside-avoid mb-10">
                         <h3 className="font-bold text-xl mb-4 mt-12 brand-heading text-slate-700">4.{analysis.temperatureImage ? '4' : '3'} Visual quality Overview</h3>
                         <p className="text-base mb-4 brand-body text-slate-800">
-                           On Day {groups[0].measurements[groups[0].measurements.length-1].day}, the visual quality was assessed.
+                           On Day {groups[0]?.measurements[groups[0].measurements.length-1]?.day || ''}, the visual quality was assessed.
                         </p>
                         <table className="report-table w-full text-base shadow-sm">
                           <thead><tr><th>Variant</th><th>Final Day</th><th>Visual Score</th><th>Weight Loss</th><th>Key Observation</th></tr></thead>
@@ -1061,7 +1065,7 @@
                               const last = g.measurements[g.measurements.length - 1];
                               const day0 = g.measurements.find(m => parseFloat(m.day) === 0);
                               const loss = getWeightLoss(last?.samples, day0?.samples);
-                              return (<tr key={i}><td>{g.name}</td><td>Day {last.day}</td><td className="font-bold text-lg">{last.quality}</td><td>{loss}%</td><td>{last.notes || '-'}</td></tr>)
+                              return (<tr key={i}><td>{g.name || ''}</td><td>Day {last?.day || ''}</td><td className="font-bold text-lg">{last?.quality || ''}</td><td>{loss}%</td><td>{last?.notes || '-'}</td></tr>)
                             })}
                           </tbody>
                         </table>
@@ -1076,7 +1080,7 @@
                              )
                            )).sort((a, b) => a - b);
 
-                           if (allEvalDays.length === 0 || project.criteria.length === 0) {
+                           if (allEvalDays.length === 0 || !project.criteria || project.criteria.length === 0) {
                              return <p className="text-base italic text-gray-500">No specific criteria were evaluated during this test.</p>;
                            }
 
@@ -1095,7 +1099,7 @@
                                    <thead>
                                      <tr>
                                        <th>Criterion</th>
-                                       {groups.map(g => <th key={g.id} className="text-center">{g.name}</th>)}
+                                       {groups.map(g => <th key={g.id} className="text-center">{g.name || 'Variant'}</th>)}
                                      </tr>
                                    </thead>
                                    <tbody>
@@ -1325,6 +1329,21 @@
                            <label className="label text-green-600">Trial Target / Goal</label>
                            <textarea rows="3" className="input bg-green-50 border-green-200" value={project.trialTarget || ''} onChange={e => handleProjectChange('trialTarget', e.target.value)} />
                          </div>
+                         
+                         <div className="col-span-2">
+                           <label className="label mb-2">Transport & Storage Modes</label>
+                           <div className="flex flex-wrap gap-2">
+                             {['Air Freight', 'Sea Freight', 'Road Transport', 'Storage'].map(mode => (
+                               <button 
+                                 key={mode} 
+                                 onClick={() => handleTransportModeToggle(mode)}
+                                 className={`px-3 py-1.5 rounded-full text-xs font-bold border transition ${project.transportModes?.includes(mode) ? 'bg-blue-100 border-blue-300 text-blue-800' : 'bg-white border-slate-300 text-slate-500'}`}
+                               >
+                                 {mode} {project.transportModes?.includes(mode) && <CheckCircle size={12} className="inline ml-1"/>}
+                               </button>
+                             ))}
+                           </div>
+                         </div>
                        </div>
                     </div>
 
@@ -1352,25 +1371,34 @@
                                  <button onClick={() => moveChainStep(idx, 'up')} disabled={idx === 0} className="p-2 sm:p-1 hover:bg-slate-200 rounded disabled:opacity-30"><ChevronUp size={16}/></button>
                                  <button onClick={() => moveChainStep(idx, 'down')} disabled={idx === supplyChain.length - 1} className="p-2 sm:p-1 hover:bg-slate-200 rounded disabled:opacity-30"><ChevronDown size={16}/></button>
                               </div>
+                              
                               <div className="flex-1 min-w-[200px] w-full">
                                 <label className="label">Fase (Activiteit) *</label>
                                 <input type="text" className="input py-2.5 text-sm font-bold" value={step.stage} onChange={e => updateChainStep(idx, 'stage', e.target.value)} />
                               </div>
+                              
                               <div className="w-48 flex gap-2">
                                  <div className="w-1/2"><label className="label">Temp Min</label><input type="number" className="input py-2.5 text-sm text-center" value={step.tempStart} onChange={e => updateChainStep(idx, 'tempStart', e.target.value)} /></div>
                                  <div className="w-1/2"><label className="label">Max</label><input type="number" className="input py-2.5 text-sm text-center" value={step.tempEnd} placeholder="-" onChange={e => updateChainStep(idx, 'tempEnd', e.target.value)} /></div>
                               </div>
+                              
                               <div className="w-48 flex gap-2">
                                  <div className="w-1/2"><label className="label">Dagen Min</label><input type="number" className="input py-2.5 text-sm text-center" value={step.daysStart} onChange={e => updateChainStep(idx, 'daysStart', e.target.value)} /></div>
                                  <div className="w-1/2"><label className="label">Max</label><input type="number" className="input py-2.5 text-sm text-center" value={step.daysEnd} placeholder="-" onChange={e => updateChainStep(idx, 'daysEnd', e.target.value)} /></div>
                               </div>
+                              
                               <div className="w-32">
-                                 <label className="label">Actie</label>
-                                 <select className="input py-2.5 px-2 text-sm font-bold text-slate-700 w-full" value={step.action} onChange={e => updateChainStep(idx, 'action', e.target.value)}>
-                                   <option value="none">-</option><option value="pack" className="text-green-700">Inpakken</option><option value="unpack" className="text-red-700">Uitpakken</option>
-                                 </select>
+                                <label className="label">Actie</label>
+                                <select className="input py-2.5 px-1 sm:px-2 text-xs sm:text-sm font-bold text-slate-700 w-full" value={step.action || 'none'} onChange={e => updateChainStep(idx, 'action', e.target.value)}>
+                                  <option value="none">-</option>
+                                  <option value="pack" className="text-green-700">Inpakken</option>
+                                  <option value="unpack" className="text-red-700">Uitpakken</option>
+                                </select>
                               </div>
-                              <div className="pb-1"><button onClick={() => removeChainStep(idx)} className="h-[42px] w-[42px] bg-red-50 text-red-500 rounded border border-red-100 hover:bg-red-100 flex items-center justify-center shrink-0"><Trash2 size={18}/></button></div>
+                              
+                              <div className="pt-6">
+                                <button onClick={() => removeChainStep(idx)} className="p-2.5 bg-red-50 text-red-500 rounded border border-red-100 hover:bg-red-100 h-[38px] flex items-center justify-center"><Trash2 size={18}/></button>
+                              </div>
                            </div>
                         ))}
                         <button onClick={addChainStep} className="flex items-center gap-2 text-sm font-bold text-blue-700 hover:text-blue-900 mt-4 px-2 py-1"><Plus size={16}/> Add Step</button>
@@ -1445,7 +1473,7 @@
                                 </div>
                                 <label className="cursor-pointer bg-white border border-blue-200 text-blue-700 px-4 py-2 rounded font-bold text-xs hover:bg-blue-50 transition shrink-0 whitespace-nowrap">
                                    Upload Image
-                                   <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImgUpload(e, 'predictedImage', true)} />
+                                   <input type="file" accept="image/*" className="hidden" onChange={(e) => handlePredictedImageUpload(e, activeGroupId)} />
                                 </label>
                              </div>
                              {groups.find(g => g.id === activeGroupId).predictedImage && <div className="mt-2 border rounded p-2 bg-white inline-block max-w-full"><img src={groups.find(g => g.id === activeGroupId).predictedImage} className="h-32 max-w-full object-contain" /></div>}
@@ -1558,7 +1586,14 @@
                        <div className="md:col-span-2">
                          <label className="label mb-2">Temperature Logger Profile (Optional)</label>
                          <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center bg-slate-50 relative group min-h-[150px]">
-                            <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => handleImgUpload(e, 'temperatureImage')} />
+                            <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => {
+                                const file = e.target.files[0];
+                                if (file) {
+                                  const reader = new FileReader();
+                                  reader.onloadend = () => setAnalysis(prev => ({...prev, temperatureImage: reader.result}));
+                                  reader.readAsDataURL(file);
+                                }
+                            }} />
                             {analysis.temperatureImage ? <img src={analysis.temperatureImage} className="max-w-full h-full max-h-64 object-contain rounded" /> : <><Upload size={24} color={BRAND.colors.blue} className="mb-2"/><span className="font-bold text-xs text-slate-600">Upload Temperature Graph</span></>}
                          </div>
                        </div>
