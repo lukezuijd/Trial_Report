@@ -410,7 +410,7 @@
                       <tbody>
                         {samples.map((s, i) => (
                           <tr key={i} className="border-b border-gray-100 last:border-0">
-                            <td className="py-2 font-medium text-gray-500">{i + 1}</td>
+                            <td className="py-2 font-medium text-gray-500">#{i + 1}</td>
                             <td className="py-2">
                                {isOpened ? <div className="text-center font-bold text-gray-400 w-16 md:w-20">-</div> : <input type="number" className="w-16 md:w-20 p-1.5 border rounded" value={s.o2 === 0 ? 0 : (s.o2 || '')} onChange={e => updateSample(i, 'o2', e.target.value)} />}
                             </td>
@@ -508,7 +508,7 @@
                   <button onClick={onClose} className="hover:text-red-300 transition"><X size={20}/></button>
                 </div>
                 <div className="p-6 overflow-y-auto">
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 mb-3">
                     {images.map((img, idx) => (
                       <div key={idx} className="relative group border border-gray-200 rounded-lg overflow-hidden bg-gray-50 flex flex-col">
                         <div className="aspect-square relative">
@@ -528,7 +528,7 @@
                     </label>
                   </div>
                 </div>
-                <div className="bg-gray-50 p-4 border-t flex justify-end gap-3"><button onClick={onClose} className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded font-medium">Done</button><button onClick={handleSave} className="px-6 py-2 text-white font-bold rounded hover:opacity-90 shadow-lg" style={{ backgroundColor: BRAND.colors.green }}>Save</button></div>
+                <div className="bg-gray-50 p-4 border-t flex justify-end gap-3"><button onClick={onClose} className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded font-medium transition">Done</button><button onClick={handleSave} className="px-6 py-2 text-white font-bold rounded hover:opacity-90 shadow-lg transition" style={{ backgroundColor: BRAND.colors.green }}>Save</button></div>
               </div>
             </div>
           );
@@ -698,7 +698,7 @@
                     const d = JSON.parse(ev.target.result); 
                     if(d.isPerfoTecIntake) {
                        const client = d.client || {}; const prod = d.products?.[0] || {};
-                       setProject(p => ({ ...p, company: client.companyName||'', street: client.street||'', houseNumber: client.houseNumber||'', zipCode: client.zipCode||'', city: client.city||'', country: client.country||'', contactName: client.contactName||'', contactRole: client.role||'', contactEmail: client.email||'', contactPhone: client.phone||'', logo: client.logo||p.logo, productName: prod.name||'', processingType: prod.processingType||'Whole', maturityStage: prod.maturityStage||'', postHarvestTreatment: prod.postHarvestTreatment||'', currentChallenge: prod.currentChallenge||'', trialTarget: prod.targetGoal||'', transportModes: prod.transportModes||[], criteria: prod.qualityCriteria||[], startImage: prod.photo||null }));
+                       setProject(p => ({ ...p, company: client.companyName||'', street: client.street||'', houseNumber: client.houseNumber||'', zipCode: client.zipCode||'', city: client.city||'', country: client.country||'', contactName: client.contactName||'', contactRole: client.role||'', contactEmail: client.email||'', contactPhone: client.phone||'', logo: client.logo||p.logo, productName: prod.name||'', processingType: prod.processingType||'Whole', maturityStage: prod.maturityStage||'', postHarvestTreatment: prod.postHarvestTreatment||'', currentChallenge: prod.currentChallenge||'', trialTarget: prod.targetGoal||'', transportMode: prod.transportMode || (prod.transportModes?.[0] || ''), criteria: prod.qualityCriteria||[], startImage: prod.photo||null }));
                        if (prod.supplyChain) setSupplyChain(prod.supplyChain);
                        setGroups(p => { const ug = [...p]; if(ug[0]) { ug[0].specs = { ...ug[0].specs, packaging: prod.packagingType||'Retail', material: prod.material||'', length: prod.length||'', width: prod.width||'', height: prod.height||'', startWeight: prod.weight||'' }; } return ug; });
                     } else {
@@ -735,8 +735,8 @@
           const moveChainStep = (i, dir) => { const n = [...supplyChain]; if(dir==='up' && i>0){ [n[i], n[i-1]] = [n[i-1], n[i]]; } else if(dir==='down' && i<n.length-1){ [n[i], n[i+1]] = [n[i+1], n[i]]; } setSupplyChain(n); };
 
           // Modals
-          const openSampleModal = (groupId, index) => { 
-            const g = groups.find(x => x.id === groupId); 
+          const openSampleModal = (gId, idx) => { 
+            const g = groups.find(x => x.id === gId); 
             const meas = g.measurements[index];
             const isEndDay = project.totalDuration && parseFloat(meas.day) === parseInt(project.totalDuration);
             const isRetailDay = project.retailOpenDays && parseFloat(meas.day) === (parseInt(project.totalDuration) + parseInt(project.retailOpenDays));
@@ -744,13 +744,13 @@
             const isDayEditable = parseFloat(meas.day) !== 0 && !isEndDay && !isRetailDay;
             const day0 = g.measurements.find(m => parseFloat(m.day) === 0);
             
-            setEditingMeasurement({ groupId, index, data: meas, day0Samples: day0?.samples, isEvaluationDay, isDayEditable, projectCriteria: project.criteria, startWeight: g.specs.startWeight, isOpened: project.totalDuration && parseFloat(meas.day) > parseInt(project.totalDuration) }); 
+            setEditingMeasurement({ groupId: gId, index: idx, data: meas, day0Samples: day0?.samples, isEvaluationDay, isDayEditable, projectCriteria: project.criteria, startWeight: g.specs.startWeight, isOpened: project.totalDuration && parseFloat(meas.day) > parseInt(project.totalDuration) }); 
             setSampleModalOpen(true); 
           };
           
-          const openDetailsModal = (groupId, index) => { 
-            const g = groups.find(x => x.id === groupId); 
-            setEditingMeasurement({ groupId, index, data: g.measurements[index] }); 
+          const openDetailsModal = (gId, idx) => { 
+            const g = groups.find(x => x.id === gId); 
+            setEditingMeasurement({ groupId: gId, index: idx, data: g.measurements[index] }); 
             setDetailsModalOpen(true); 
           };
 
@@ -908,7 +908,7 @@
                   {/* SETTING */}
                   <div className="pt-4" id="sec-1">
                     <h2 className="report-section-title">1 Setting</h2>
-                    <div className="grid grid-cols-[180px_1fr] gap-y-3 text-sm brand-body text-slate-800">
+                    <div className="grid grid-cols-[180px_1fr] gap-y-3 text-base brand-body text-slate-800">
                        <div className="font-bold">Product :</div> <div>{project.productName || '-'}</div>
                        {project.type && <><div className="font-bold">Type :</div> <div>{project.type}</div></>}
                        {project.processingType && <><div className="font-bold">State of product :</div> <div>{project.processingType === 'Whole' ? 'Whole' : 'Processed / Fresh-cut'}</div></>}
@@ -935,7 +935,7 @@
                        {project.trialTarget && <><div className="font-bold">Trial Target :</div> <div>{project.trialTarget}</div></>}
                        <div className="font-bold">Transport Mode :</div> <div>{project.transportMode || '-'}</div>
                        
-                       {/* Visual Supply Chain - Full Row Below, BREAK AVOID */}
+                       {/* Visual Supply Chain - Full Row Below */}
                        <div className="col-span-2 w-full mt-4 break-inside-avoid">
                          <div className="font-bold border-t border-slate-300 pt-2 text-lg" style={{color: BRAND.colors.green}}>Product Supply Chain :</div> 
                          <div className="w-full mt-1">
@@ -950,9 +950,9 @@
                   {/* SUMMARY */}
                   <div className="pt-4" id="sec-2">
                     <h2 className="report-section-title">2 Summary and Conclusions</h2>
-                    <div className="brand-body text-sm leading-relaxed text-justify text-slate-800">
+                    <div className="brand-body text-base leading-relaxed text-justify text-slate-800">
                        <h4 className="font-bold mb-3 text-xl" style={{color: BRAND.colors.black}}>Main Conclusion:</h4>
-                       <div className="mb-4 whitespace-pre-wrap pdf-rich-text" dangerouslySetInnerHTML={{ __html: analysis.conclusion || 'No conclusion entered.' }}></div>
+                       <div className="mb-8 whitespace-pre-wrap pdf-rich-text" dangerouslySetInnerHTML={{ __html: analysis.conclusion || 'No conclusion entered.' }}></div>
                        
                        {groups.map(g => analysis.variantConclusions && analysis.variantConclusions[g.id] ? (
                          <div key={`vc-${g.id}`} className="mb-6 break-inside-avoid">
@@ -986,7 +986,7 @@
                   {/* TRIAL SET UP */}
                   <div className="pt-4" id="sec-3">
                     <h2 className="report-section-title">3 Trial set up</h2>
-                    <div className="brand-body text-sm space-y-5 text-slate-800">
+                    <div className="brand-body text-base space-y-5 text-slate-800">
                        <div className="break-inside-avoid">
                          <h4 className="font-bold mb-2">Trial samples:</h4>
                          <ul className="list-disc pl-6 space-y-1">
@@ -1032,7 +1032,7 @@
                     
                     <div className="mb-10">
                         <h3 id="sec-4-1" className="font-bold text-xl mb-2 brand-heading text-slate-700" style={{ pageBreakAfter: 'avoid' }}>4.1 Gas Levels</h3>
-                        <div className="text-sm mb-6 italic brand-body text-slate-600 pdf-rich-text" dangerouslySetInnerHTML={{ __html: analysis.graphNotes || 'Gas levels were monitored throughout the shelf life period.' }}></div>
+                        <div className="text-base mb-6 italic brand-body text-slate-600 pdf-rich-text" dangerouslySetInnerHTML={{ __html: analysis.graphNotes || 'Gas levels were monitored throughout the shelf life period.' }}></div>
                         
                         <div className="flex gap-6 mb-2 px-2">
                            <div className="w-1/2 font-bold text-sm text-slate-500 text-center border-b pb-1">Prediction (Hub)</div>
@@ -1079,14 +1079,14 @@
                         <p className="text-base mb-4 brand-body text-slate-800">
                            On Day {groups[0]?.measurements[groups[0].measurements.length-1]?.day || ''}, the visual quality was assessed.
                         </p>
-                        <table className="report-table w-full text-base shadow-sm">
+                        <table className="report-table w-full mb-6">
                           <thead><tr><th>Variant</th><th>Final Day</th><th>Visual Score</th><th>Weight Loss</th><th>Key Observation</th></tr></thead>
                           <tbody>
                             {groups.map((g,i) => {
                               const last = g.measurements[g.measurements.length - 1];
                               const day0 = g.measurements.find(m => parseFloat(m.day) === 0);
                               const loss = getWeightLoss(last?.samples, day0?.samples);
-                              return (<tr key={i}><td>{g.name || ''}</td><td>Day {last?.day || ''}</td><td className="font-bold text-lg">{last?.quality || ''}</td><td>{loss}%</td><td>{last?.notes || '-'}</td></tr>)
+                              return (<tr key={i}><td>{g.name || ''}</td><td>Day {last?.day || ''}</td><td className="font-bold text-lg">{last?.evaluateQuality ? last?.quality : '-'}</td><td>{loss}%</td><td>{last?.notes || '-'}</td></tr>)
                             })}
                           </tbody>
                         </table>
@@ -1097,7 +1097,7 @@
                         {(() => {
                            const allEvalDays = Array.from(new Set(
                              groups.flatMap(g => 
-                               g.measurements.filter(m => m.evaluateQuality || m.qualityParams?.length > 0).map(m => parseFloat(m.day))
+                               g.measurements.filter(m => m.evaluateQuality).map(m => parseFloat(m.day))
                              )
                            )).sort((a, b) => a - b);
 
@@ -1113,6 +1113,14 @@
                                else if (dayVal === pDays) dayContext = " (Moment of opening)";
                                else dayContext = ` (${dayVal - pDays} days after opening)`;
                              }
+                             
+                             const evaluatedGroups = groups.filter(g => {
+                                const meas = g.measurements.find(m => parseFloat(m.day) === dayVal);
+                                return meas && meas.evaluateQuality;
+                             });
+
+                             if (evaluatedGroups.length === 0) return null;
+
                              return (
                                <div key={dayVal} className="mb-8 break-inside-avoid">
                                  <h4 className="font-bold text-lg mb-3 text-slate-600">Evaluation: Day {dayVal}{dayContext}</h4>
@@ -1120,16 +1128,16 @@
                                    <thead>
                                      <tr>
                                        <th>Criterion</th>
-                                       {groups.map(g => <th key={g.id} className="text-center">{g.name || 'Variant'}</th>)}
+                                       {evaluatedGroups.map(g => <th key={g.id} className="text-center">{g.name || 'Variant'}</th>)}
                                      </tr>
                                    </thead>
                                    <tbody>
                                      {project.criteria.map((crit, i) => (
                                        <tr key={i}>
                                          <td className="font-semibold text-base">{crit}</td>
-                                         {groups.map(g => {
+                                         {evaluatedGroups.map(g => {
                                             const meas = g.measurements.find(m => parseFloat(m.day) === dayVal);
-                                            const param = (meas?.evaluateQuality || meas?.qualityParams?.length > 0) ? meas.qualityParams?.find(p => p.name === crit) : null;
+                                            const param = meas?.qualityParams?.find(p => p.name === crit);
                                             return (
                                               <td key={g.id} className="text-center align-top">
                                                 {param && param.score ? (
@@ -1299,7 +1307,7 @@
                          
                          <div className="space-y-4">
                             {/* Logo Upload */}
-                            <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center bg-slate-50 relative group min-h-[100px]">
+                            <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center bg-slate-50 relative group h-24">
                                 <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => handleImgUpload(e, 'logo')} />
                                 {project.logo ? <img src={project.logo} className="h-full object-contain" /> : <><Upload size={24} color={BRAND.colors.blue} className="mb-2"/><span className="font-bold text-xs text-slate-600">Upload PerfoTec Logo (PNG)</span></>}
                             </div>
