@@ -483,7 +483,8 @@
           const [images, setImages] = useState(initialImages);
 
           const handleImageUpload = (e) => {
-            Array.from(e.target.files).forEach(file => {
+            const files = Array.from(e.target.files);
+            files.forEach(file => {
               const reader = new FileReader();
               reader.onloadend = () => setImages(prev => [...prev, { url: reader.result, caption: '', category: 'External Quality' }]);
               reader.readAsDataURL(file);
@@ -586,6 +587,21 @@
             if (baseDate && duration) {
                const d = new Date(baseDate);
                d.setDate(d.getDate() + duration);
+               const day = String(d.getDate()).padStart(2, '0');
+               const month = String(d.getMonth() + 1).padStart(2, '0');
+               const year = d.getFullYear();
+               return `${day}/${month}/${year}`; 
+            }
+            return '-';
+          };
+          
+          const calcRetailDate = () => {
+            const baseDate = project.packingDate || project.date;
+            const duration = parseInt(project.totalDuration) || 0;
+            const retailDays = parseInt(project.retailOpenDays) || 0;
+            if (baseDate && (duration || retailDays)) {
+               const d = new Date(baseDate);
+               d.setDate(d.getDate() + duration + retailDays);
                const day = String(d.getDate()).padStart(2, '0');
                const month = String(d.getMonth() + 1).padStart(2, '0');
                const year = d.getFullYear();
@@ -890,9 +906,9 @@
                   <div className="page-break"></div>
 
                   {/* SETTING */}
-                  <div className="pt-4">
+                  <div className="pt-4" id="sec-1">
                     <h2 className="report-section-title">1 Setting</h2>
-                    <div className="grid grid-cols-[180px_1fr] gap-y-3 text-base brand-body text-slate-800">
+                    <div className="grid grid-cols-[180px_1fr] gap-y-3 text-sm brand-body text-slate-800">
                        <div className="font-bold">Product :</div> <div>{project.productName || '-'}</div>
                        {project.type && <><div className="font-bold">Type :</div> <div>{project.type}</div></>}
                        {project.processingType && <><div className="font-bold">State of product :</div> <div>{project.processingType === 'Whole' ? 'Whole' : 'Processed / Fresh-cut'}</div></>}
@@ -932,11 +948,11 @@
                   <div className="page-break"></div>
 
                   {/* SUMMARY */}
-                  <div className="pt-4">
+                  <div className="pt-4" id="sec-2">
                     <h2 className="report-section-title">2 Summary and Conclusions</h2>
-                    <div className="brand-body text-base leading-relaxed text-justify text-slate-800">
+                    <div className="brand-body text-sm leading-relaxed text-justify text-slate-800">
                        <h4 className="font-bold mb-3 text-xl" style={{color: BRAND.colors.black}}>Main Conclusion:</h4>
-                       <div className="mb-8 whitespace-pre-wrap pdf-rich-text" dangerouslySetInnerHTML={{ __html: analysis.conclusion || 'No conclusion entered.' }}></div>
+                       <div className="mb-4 whitespace-pre-wrap pdf-rich-text" dangerouslySetInnerHTML={{ __html: analysis.conclusion || 'No conclusion entered.' }}></div>
                        
                        {groups.map(g => analysis.variantConclusions && analysis.variantConclusions[g.id] ? (
                          <div key={`vc-${g.id}`} className="mb-6 break-inside-avoid">
@@ -968,9 +984,9 @@
                   <div className="page-break"></div>
 
                   {/* TRIAL SET UP */}
-                  <div className="pt-4">
+                  <div className="pt-4" id="sec-3">
                     <h2 className="report-section-title">3 Trial set up</h2>
-                    <div className="brand-body text-base space-y-5 text-slate-800">
+                    <div className="brand-body text-sm space-y-5 text-slate-800">
                        <div className="break-inside-avoid">
                          <h4 className="font-bold mb-2">Trial samples:</h4>
                          <ul className="list-disc pl-6 space-y-1">
@@ -998,7 +1014,7 @@
                        <p>The product was packed on <strong>{formatDateToDDMMYYYY(project.packingDate || project.date)}</strong>.</p>
                        <p>Unpacking moments were planned for <strong>{calcUnpackingDate()}</strong> (Day {project.totalDuration || 0}). Per packing moment, samples per treatment were unpacked.</p>
                        {project.retailOpenDays && parseInt(project.retailOpenDays) > 0 && (
-                          <p>After opening, the product was kept in retail simulation for an additional {project.retailOpenDays} days and evaluated again.</p>
+                          <p>After opening, the product was kept in retail simulation for an additional <strong>{project.retailOpenDays}</strong> days and evaluated again on <strong>{calcRetailDate()}</strong>.</p>
                        )}
                        
                        <p>Product quality was evaluated at the start and at the unpacking moment. The following attributes are evaluated according to the score scale listed below. Scores of 7 and higher are considered to be within specification and of acceptable quality.</p>
@@ -1011,12 +1027,12 @@
                   <div className="page-break"></div>
 
                   {/* RESULTS */}
-                  <div className="pt-4">
+                  <div className="pt-4" id="sec-4">
                     <h2 className="report-section-title">4 Trial results</h2>
                     
-                    <div className="break-inside-avoid mb-10">
-                        <h3 id="sec-4-1" className="font-bold text-xl mb-2 brand-heading text-slate-700">4.1 Gas Levels</h3>
-                        <div className="text-base mb-6 italic brand-body text-slate-600 pdf-rich-text" dangerouslySetInnerHTML={{ __html: analysis.graphNotes || 'Gas levels were monitored throughout the shelf life period.' }}></div>
+                    <div className="mb-10">
+                        <h3 id="sec-4-1" className="font-bold text-xl mb-2 brand-heading text-slate-700" style={{ pageBreakAfter: 'avoid' }}>4.1 Gas Levels</h3>
+                        <div className="text-sm mb-6 italic brand-body text-slate-600 pdf-rich-text" dangerouslySetInnerHTML={{ __html: analysis.graphNotes || 'Gas levels were monitored throughout the shelf life period.' }}></div>
                         
                         <div className="flex gap-6 mb-2 px-2">
                            <div className="w-1/2 font-bold text-sm text-slate-500 text-center border-b pb-1">Prediction (Hub)</div>
@@ -1145,19 +1161,19 @@
 
                   <div className="page-break"></div>
 
-                  {/* PHOTOS */}
-                  <div className="pt-4">
+                  {/* --- PAGE 5: PHOTOS --- */}
+                  <div className="pt-4" id="sec-5">
                     <h2 className="report-section-title">5. Photos</h2>
                     <div className="grid grid-cols-2 gap-8">
                        {/* Reference Start Photo */}
                        {project.startImage && (
-                         <div className="col-span-2 mb-4 break-inside-avoid flex items-center justify-center gap-6 border-b pb-6">
-                            <div className="flex items-center justify-center shrink-0 border-none bg-transparent">
-                                <img src={project.startImage} className="max-w-full h-auto object-contain"/>
-                            </div>
-                            <div>
+                         <div className="col-span-2 mb-8 break-inside-avoid border-b pb-6">
+                            <div className="text-center mb-4">
                               <h3 className="font-bold text-2xl brand-heading" style={{ color: BRAND.colors.green }}>{project.productName}</h3>
-                              <p className="text-base font-bold mt-2 text-slate-600 brand-heading">Picture 1. P+0 - Initial product quality</p>
+                              <p className="text-base font-bold mt-1 text-slate-600 brand-heading">Picture 1. P+0 - Initial product quality</p>
+                            </div>
+                            <div className="flex items-center justify-center shrink-0 border-none bg-transparent">
+                                <img src={project.startImage} className="max-w-full h-auto max-h-[400px] w-auto object-contain"/>
                             </div>
                          </div>
                        )}
@@ -1179,11 +1195,14 @@
                                                <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
                                                    {variantPhotos.map((photo, idx) => (
                                                       <div key={idx} className="break-inside-avoid">
-                                                         <div className="h-56 flex items-center justify-center relative bg-white border border-gray-100 rounded">
+                                                         <div className="text-sm mb-2 text-center brand-body px-2">
+                                                           <span className="font-bold">Picture {idx + 2}.</span> {gName} at Day {photo.day}. <br/>
+                                                           {photo.caption && <span className="italic font-normal text-xs text-slate-500">{photo.caption}</span>}
+                                                         </div>
+                                                         <div className="h-56 flex items-center justify-center relative bg-transparent border-none rounded">
                                                             <img src={photo.url} className="max-w-full max-h-full object-contain"/>
                                                             <div className="absolute top-0 right-0 bg-white/90 px-3 py-1 text-xs font-bold text-gray-700 border-b border-l rounded-bl">{formatDay(photo.day)}</div>
                                                          </div>
-                                                         {photo.caption && <div className="text-sm mt-2 text-center brand-body italic text-slate-600">{photo.caption}</div>}
                                                       </div>
                                                    ))}
                                                </div>
@@ -1400,7 +1419,7 @@
                               </div>
                            </div>
                         ))}
-                        <button onClick={addChainStep} className="flex items-center gap-2 text-sm font-bold text-blue-700 hover:text-blue-900 mt-4 px-2 py-1"><Plus size={16}/> Add Step</button>
+                        <button onClick={addChainStep} className="flex items-center gap-2 text-sm font-bold text-green-700 hover:text-green-800"><Plus size={16}/> Add Step</button>
                       </div>
                     </div>
                   </div>
@@ -1419,7 +1438,7 @@
                               <span key={c} className="bg-slate-50 border border-slate-300 text-slate-700 text-xs px-2 py-1 rounded flex items-center gap-1">{c} <button onClick={() => toggleCriteria(c)} className="text-red-400 hover:text-red-600 font-bold ml-1">×</button></span>
                             ))}
                           </div>
-                          <div className="flex flex-col gap-2">
+                          <div className="flex gap-2">
                             <select className="input w-full" value={newCriteria || ''} onChange={e => setNewCriteria(e.target.value)}>
                                <option value="">Select standard criterion...</option>
                                {DEFAULT_CRITERIA.filter(c => !project.criteria?.includes(c)).map(c => <option key={c}>{c}</option>)}
