@@ -405,26 +405,28 @@
                          <div>Avg Weight: <strong>{avgWeight}g</strong></div>
                       </div>
                     </div>
-                    <table className="w-full text-sm mb-4">
-                      <thead><tr className="text-left text-[#211A1A] border-b border-gray-200"><th className="pb-2 font-bold">#</th><th className="pb-2" style={{color: BRAND.colors.blue}}>O₂</th><th className="pb-2" style={{color: BRAND.colors.green}}>CO₂</th><th className="pb-2">Weight {parseFloat(day)===0 && '(Start)'}</th><th className="pb-2"></th></tr></thead>
-                      <tbody>
-                        {samples.map((s, i) => (
-                          <tr key={i} className="border-b border-gray-100 last:border-0">
-                            <td className="py-2 font-medium text-gray-500">{i + 1}</td>
-                            <td className="py-2">
-                               {isOpened ? <div className="text-center font-bold text-gray-400 w-16 md:w-20">-</div> : <input type="number" className="w-16 md:w-20 p-1.5 border rounded" value={s.o2 === 0 ? 0 : (s.o2 || '')} onChange={e => updateSample(i, 'o2', e.target.value)} />}
-                            </td>
-                            <td className="py-2">
-                               {isOpened ? <div className="text-center font-bold text-gray-400 w-16 md:w-20">-</div> : <input type="number" className="w-16 md:w-20 p-1.5 border rounded" value={s.co2 === 0 ? 0 : (s.co2 || '')} onChange={e => updateSample(i, 'co2', e.target.value)} />}
-                            </td>
-                            <td className="py-2"><input type="number" className="w-16 md:w-20 p-1.5 border rounded" value={s.weight === 0 ? 0 : (s.weight || '')} onChange={e => updateSample(i, 'weight', e.target.value)} placeholder="g" /></td>
-                            <td className="py-2 text-right"><button onClick={() => removeSample(i)} className="text-red-400 hover:text-red-600"><Trash2 size={16}/></button></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    <div className="overflow-x-auto w-full">
+                      <table className="w-full text-sm mb-4">
+                        <thead><tr className="text-left text-[#211A1A] border-b border-gray-200"><th className="pb-2 font-bold">#</th><th className="pb-2" style={{color: BRAND.colors.blue}}>O₂</th><th className="pb-2" style={{color: BRAND.colors.green}}>CO₂</th><th className="pb-2">Weight {parseFloat(day)===0 && '(Start)'}</th><th className="pb-2"></th></tr></thead>
+                        <tbody>
+                          {samples.map((s, i) => (
+                            <tr key={i} className="border-b border-gray-100 last:border-0">
+                              <td className="py-2 font-medium text-gray-500">#{i + 1}</td>
+                              <td className="py-2">
+                                 {isOpened ? <div className="text-center font-bold text-gray-400 w-16 md:w-20">-</div> : <input type="number" className="w-16 md:w-20 p-1.5 border rounded" value={s.o2 === 0 ? 0 : (s.o2 || '')} onChange={e => updateSample(i, 'o2', e.target.value)} />}
+                              </td>
+                              <td className="py-2">
+                                 {isOpened ? <div className="text-center font-bold text-gray-400 w-16 md:w-20">-</div> : <input type="number" className="w-16 md:w-20 p-1.5 border rounded" value={s.co2 === 0 ? 0 : (s.co2 || '')} onChange={e => updateSample(i, 'co2', e.target.value)} />}
+                              </td>
+                              <td className="py-2"><input type="number" className="w-16 md:w-20 p-1.5 border rounded" value={s.weight === 0 ? 0 : (s.weight || '')} onChange={e => updateSample(i, 'weight', e.target.value)} placeholder="g" /></td>
+                              <td className="py-2 text-right"><button onClick={() => removeSample(i)} className="text-red-400 hover:text-red-600"><Trash2 size={16}/></button></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                     <button onClick={addSample} className="text-xs flex items-center gap-1 font-bold hover:underline mb-4" style={{ color: BRAND.colors.green }}><Plus size={14}/> Add Sample</button>
-                    <textarea className="w-full p-2 border rounded text-sm h-20 outline-none focus:ring-green-600" value={notes || ''} onChange={e => setNotes(e.target.value)} placeholder="General observations..." />
+                    <textarea className="w-full p-2 border rounded text-sm h-20 outline-none focus:ring-2 focus:ring-green-600" value={notes || ''} onChange={e => setNotes(e.target.value)} placeholder="General observations..." />
                   </div>
 
                   <div className="bg-slate-50 p-4 rounded-lg border flex flex-col h-full overflow-hidden">
@@ -446,8 +448,8 @@
                                {qualityParams.map((param, i) => (
                                  <tr key={i} className="border-b border-slate-200 last:border-0">
                                    <td className="py-2 text-slate-700 font-medium">{param.name}</td>
-                                   <td className="py-2"><input type="number" min="1" max="10" className="w-full p-1.5 border rounded text-center font-bold outline-none focus:ring-blue-500" value={param.score || ''} onChange={e => updateParam(i, 'score', e.target.value)} placeholder="-" /></td>
-                                   <td className="py-2"><input type="text" className="w-full p-1.5 border rounded outline-none focus:ring-blue-500" value={param.notes || ''} onChange={e => updateParam(i, 'notes', e.target.value)} placeholder="..." /></td>
+                                   <td className="py-2"><input type="number" min="1" max="10" className="w-full p-1.5 border rounded text-center font-bold outline-none focus:ring-2 focus:ring-blue-500" value={param.score || ''} onChange={e => updateParam(i, 'score', e.target.value)} placeholder="-" /></td>
+                                   <td className="py-2"><input type="text" className="w-full p-1.5 border rounded outline-none focus:ring-2 focus:ring-blue-500" value={param.notes || ''} onChange={e => updateParam(i, 'notes', e.target.value)} placeholder="..." /></td>
                                  </tr>
                                ))}
                              </tbody>
@@ -465,13 +467,13 @@
                      ) : (
                        <div className="flex flex-col items-center justify-center flex-1 text-center text-gray-400">
                          <AlertTriangle size={32} className="mb-2 opacity-50"/>
-                         <p className="text-sm">Quality scoring is only enabled<br/>for Start (P+0) and End (P+X) days.</p>
+                         <p className="text-sm">Quality scoring is currently disabled.<br/>Check 'Evaluate' to fill in.</p>
                        </div>
                      )}
                   </div>
                 </div>
 
-                <div className="bg-gray-50 p-4 border-t flex justify-end gap-3"><button onClick={onClose} className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded font-medium transition">Cancel</button><button onClick={handleSave} className="px-6 py-2 text-white font-bold rounded shadow-lg transition bg-green-600">Save</button></div>
+                <div className="bg-gray-50 p-4 border-t flex justify-end gap-3"><button onClick={onClose} className="px-4 py-2 text-gray-600 hover:bg-gray-200 rounded font-medium transition">Cancel</button><button onClick={handleSave} className="px-6 py-2 text-white font-bold rounded hover:opacity-90 shadow-lg transition" style={{ backgroundColor: BRAND.colors.green }}>Save</button></div>
               </div>
             </div>
           );
@@ -483,7 +485,8 @@
           const [images, setImages] = useState(initialImages);
 
           const handleImageUpload = (e) => {
-            Array.from(e.target.files).forEach(file => {
+            const files = Array.from(e.target.files);
+            files.forEach(file => {
               const reader = new FileReader();
               reader.onloadend = () => setImages(prev => [...prev, { url: reader.result, caption: '', category: 'External Quality' }]);
               reader.readAsDataURL(file);
@@ -515,7 +518,7 @@
                            <button onClick={() => removeImage(idx)} className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition shadow-lg"><X size={12}/></button>
                         </div>
                         <select className="w-full p-2 text-xs border-t outline-none bg-white" value={img.category || 'External Quality'} onChange={e => updateImageField(idx, 'category', e.target.value)}>
-                            {['External Quality', 'Internal Quality', 'Loose Produce', 'Box/Crate', 'Weight measurement', 'Gas measurement', 'Other'].map(c => <option key={c} value={c}>{c}</option>)}
+                            {PHOTO_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                         <input type="text" className="w-full p-2 text-xs border-t outline-none focus:bg-blue-50 transition" placeholder="Caption / Description..." value={img.caption || ''} onChange={e => updateImageField(idx, 'caption', e.target.value)} />
                       </div>
@@ -560,8 +563,8 @@
           const [supplyChain, setSupplyChain] = useState([
             { stage: 'Farm / Harvest', tempStart: '15', tempEnd: '', daysStart: '0.5', daysEnd: '', action: 'none' },
             { stage: 'Packing House', tempStart: '12', tempEnd: '', daysStart: '1', daysEnd: '', action: 'pack' },
-            { stage: 'Transport by road', tempStart: '6', tempEnd: '', daysStart: '2', daysEnd: '', action: 'none' },
-            { stage: 'Importer / Processor', tempStart: '8', tempEnd: '', daysStart: '1', daysEnd: '', action: 'none' },
+            { stage: 'Transport', tempStart: '6', tempEnd: '', daysStart: '2', daysEnd: '', action: 'none' },
+            { stage: 'Distribution Center', tempStart: '4', tempEnd: '', daysStart: '1', daysEnd: '', action: 'none' },
             { stage: 'Retail Store', tempStart: '18', tempEnd: '', daysStart: '4', daysEnd: '', action: 'none' },
             { stage: 'Consumer (Open Pack)', tempStart: '20', tempEnd: '', daysStart: '2', daysEnd: '', action: 'unpack' }
           ]);
@@ -697,11 +700,11 @@
                     const d = JSON.parse(ev.target.result); 
                     if(d.isPerfoTecIntake) {
                        const client = d.client || {}; const prod = d.products?.[0] || {};
-                       setProject(p => ({ ...p, company: client.companyName||'', street: client.street||'', houseNumber: client.houseNumber||'', zipCode: client.zipCode||'', city: client.city||'', country: client.country||'', contactName: client.contactName||'', contactRole: client.role||'', contactEmail: client.email||'', contactPhone: client.phone||'', logo: client.logo||p.logo, productName: prod.name||'', processingType: prod.processingType||'Whole', maturityStage: prod.maturityStage||'', postHarvestTreatment: prod.postHarvestTreatment||'', currentChallenge: prod.currentChallenge||'', trialTarget: prod.targetGoal||'', transportMode: prod.transportMode || (prod.transportModes?.[0] || ''), criteria: prod.qualityCriteria||[], startImage: prod.photo||null }));
+                       setProject(p => ({ ...p, company: client.companyName||'', street: client.street||'', houseNumber: client.houseNumber||'', zipCode: client.zipCode||'', city: client.city||'', country: client.country||'', contactName: client.contactName||'', contactRole: client.role||'', contactEmail: client.email||'', contactPhone: client.phone||'', logo: client.logo||p.logo, productName: prod.name||'', processingType: prod.processingType||'Whole', maturityStage: prod.maturityStage||'', postHarvestTreatment: prod.postHarvestTreatment||'', currentChallenge: prod.currentChallenge||'', trialTarget: prod.targetGoal||'', transportModes: prod.transportModes||[], criteria: prod.qualityCriteria||[], startImage: prod.photo||null }));
                        if (prod.supplyChain) setSupplyChain(prod.supplyChain);
                        setGroups(p => { const ug = [...p]; if(ug[0]) { ug[0].specs = { ...ug[0].specs, packaging: prod.packagingType||'Retail', material: prod.material||'', length: prod.length||'', width: prod.width||'', height: prod.height||'', startWeight: prod.weight||'' }; } return ug; });
                     } else {
-                       if(d.project) setProject({...d.project, packingDate: d.project.packingDate || d.project.date || new Date().toISOString().split('T')[0], transportMode: d.project.transportMode || ''}); 
+                       if(d.project) setProject({...d.project, packingDate: d.project.packingDate || d.project.date || new Date().toISOString().split('T')[0]}); 
                        if(d.supplyChain) setSupplyChain(d.supplyChain); 
                        if(d.groups) setGroups(d.groups); 
                        if(d.analysis) setAnalysis({ graphNotes: d.analysis.graphNotes||'', conclusion: d.analysis.conclusion||'', variantConclusions: d.analysis.variantConclusions||{}, recommendation: d.analysis.recommendation||'retest', nextSteps: d.analysis.nextSteps||[], temperatureImage: d.analysis.temperatureImage||null });
@@ -734,22 +737,22 @@
           const moveChainStep = (i, dir) => { const n = [...supplyChain]; if(dir==='up' && i>0){ [n[i], n[i-1]] = [n[i-1], n[i]]; } else if(dir==='down' && i<n.length-1){ [n[i], n[i+1]] = [n[i+1], n[i]]; } setSupplyChain(n); };
 
           // Modals
-          const openSampleModal = (groupId, index) => { 
-            const g = groups.find(x => x.id === groupId); 
-            const meas = g.measurements[index];
+          const openSampleModal = (gId, idx) => { 
+            const g = groups.find(x => x.id === gId); 
+            const meas = g.measurements[idx];
             const isEndDay = project.totalDuration && parseFloat(meas.day) === parseInt(project.totalDuration);
             const isRetailDay = project.retailOpenDays && parseFloat(meas.day) === (parseInt(project.totalDuration) + parseInt(project.retailOpenDays));
             const isEvaluationDay = parseFloat(meas.day) === 0 || isEndDay || isRetailDay;
             const isDayEditable = parseFloat(meas.day) !== 0 && !isEndDay && !isRetailDay;
             const day0 = g.measurements.find(m => parseFloat(m.day) === 0);
             
-            setEditingMeasurement({ groupId, index, data: meas, day0Samples: day0?.samples, isEvaluationDay, isDayEditable, projectCriteria: project.criteria, startWeight: g.specs.startWeight, projectTotalDuration: project.totalDuration }); 
+            setEditingMeasurement({ groupId: gId, index: idx, data: meas, day0Samples: day0?.samples, isEvaluationDay, isDayEditable, projectCriteria: project.criteria, startWeight: g.specs.startWeight, projectTotalDuration: project.totalDuration }); 
             setSampleModalOpen(true); 
           };
           
-          const openDetailsModal = (groupId, index) => { 
-            const g = groups.find(x => x.id === groupId); 
-            setEditingMeasurement({ groupId, index, data: g.measurements[index] }); 
+          const openDetailsModal = (gId, idx) => { 
+            const g = groups.find(x => x.id === gId); 
+            setEditingMeasurement({ groupId: gId, index: idx, data: g.measurements[idx] }); 
             setDetailsModalOpen(true); 
           };
 
@@ -907,7 +910,7 @@
                   {/* SETTING */}
                   <div className="pt-4" id="sec-1">
                     <h2 className="report-section-title">1 Setting</h2>
-                    <div className="grid grid-cols-[180px_1fr] gap-y-3 text-base brand-body text-slate-800">
+                    <div className="grid grid-cols-[180px_1fr] gap-y-3 text-sm brand-body text-slate-800">
                        <div className="font-bold">Product :</div> <div>{project.productName || '-'}</div>
                        {project.type && <><div className="font-bold">Type :</div> <div>{project.type}</div></>}
                        {project.processingType && <><div className="font-bold">State of product :</div> <div>{project.processingType === 'Whole' ? 'Whole' : 'Processed / Fresh-cut'}</div></>}
@@ -932,15 +935,9 @@
                        {project.employee && <><div className="font-bold">PerfoTec Employee :</div> <div>{project.employee}</div></>}
                        <div className="font-bold">Technology :</div> <div>PerfoTec Laser Perforation</div>
                        {project.trialTarget && <><div className="font-bold">Trial Target :</div> <div>{project.trialTarget}</div></>}
-                       <div className="font-bold">Transport Mode :</div> <div>{project.transportMode || '-'}</div>
                        
-                       {/* Visual Supply Chain - Full Row Below */}
-                       <div className="col-span-2 w-full mt-4 break-inside-avoid">
-                         <div className="font-bold border-t border-slate-300 pt-2 text-lg" style={{color: BRAND.colors.green}}>Product Supply Chain :</div> 
-                         <div className="w-full mt-1">
-                           <SupplyChainFlow chain={supplyChain} />
-                         </div>
-                       </div>
+                       <div className="font-bold col-span-2 mt-4 border-t border-slate-300 pt-2 text-lg" style={{color: BRAND.colors.green}}>Product Supply Chain :</div> 
+                       <div className="col-span-2 w-full mt-1 break-inside-avoid"><SupplyChainFlow chain={supplyChain} /></div>
                     </div>
                   </div>
 
@@ -949,7 +946,7 @@
                   {/* SUMMARY */}
                   <div className="pt-4" id="sec-2">
                     <h2 className="report-section-title">2 Summary and Conclusions</h2>
-                    <div className="brand-body text-base leading-relaxed text-justify text-slate-800">
+                    <div className="brand-body text-sm leading-relaxed text-justify text-slate-800">
                        <h4 className="font-bold mb-3 text-xl" style={{color: BRAND.colors.black}}>Main Conclusion:</h4>
                        <div className="mb-8 whitespace-pre-wrap pdf-rich-text" dangerouslySetInnerHTML={{ __html: analysis.conclusion || 'No conclusion entered.' }}></div>
                        
@@ -985,10 +982,10 @@
                   {/* TRIAL SET UP */}
                   <div className="pt-4" id="sec-3">
                     <h2 className="report-section-title">3 Trial set up</h2>
-                    <div className="brand-body text-base space-y-5 text-slate-800">
+                    <div className="brand-body text-sm space-y-5 text-slate-800">
                        <div className="break-inside-avoid">
-                         <h4 className="font-bold mb-2">Trial samples:</h4>
-                         <ul className="list-disc pl-6 space-y-1">
+                         <h4 className="font-bold mb-1">Trial samples:</h4>
+                         <ul className="list-disc pl-5">
                            {groups.map((g,i) => {
                              return (
                                <li key={i}><span className="font-bold">{g.name || 'Variant'}</span> – {g.specs.packaging || ''}, {g.specs.material || ''}</li>
@@ -1029,9 +1026,9 @@
                   <div className="pt-4" id="sec-4">
                     <h2 className="report-section-title">4 Trial results</h2>
                     
-                    <div className="break-inside-avoid mb-10">
+                    <div className="mb-10">
                         <h3 id="sec-4-1" className="font-bold text-xl mb-2 brand-heading text-slate-700" style={{ pageBreakAfter: 'avoid' }}>4.1 Gas Levels</h3>
-                        <div className="text-base mb-6 italic brand-body text-slate-600 pdf-rich-text" dangerouslySetInnerHTML={{ __html: analysis.graphNotes || 'Gas levels were monitored throughout the shelf life period.' }}></div>
+                        <div className="text-sm mb-6 italic brand-body text-slate-600 pdf-rich-text" dangerouslySetInnerHTML={{ __html: analysis.graphNotes || 'Gas levels were monitored throughout the shelf life period.' }}></div>
                         
                         <div className="flex gap-6 mb-2 px-2">
                            <div className="w-1/2 font-bold text-sm text-slate-500 text-center border-b pb-1">Prediction (Hub)</div>
@@ -1085,7 +1082,7 @@
                               const last = g.measurements[g.measurements.length - 1];
                               const day0 = g.measurements.find(m => parseFloat(m.day) === 0);
                               const loss = getWeightLoss(last?.samples, day0?.samples);
-                              return (<tr key={i}><td>{g.name || ''}</td><td>Day {last?.day || ''}</td><td className="font-bold text-lg">{last?.quality || ''}</td><td>{loss}%</td><td>{last?.notes || '-'}</td></tr>)
+                              return (<tr key={i}><td>{g.name || ''}</td><td>Day {last?.day || ''}</td><td className="font-bold text-lg">{last?.evaluateQuality ? last?.quality : '-'}</td><td>{loss}%</td><td>{last?.notes || '-'}</td></tr>)
                             })}
                           </tbody>
                         </table>
@@ -1101,7 +1098,7 @@
                            )).sort((a, b) => a - b);
 
                            if (allEvalDays.length === 0 || !project.criteria || project.criteria.length === 0) {
-                             return <p className="text-base italic text-gray-500">No specific criteria were evaluated during this test.</p>;
+                             return <p className="text-sm italic text-gray-500">No specific criteria were evaluated during this test.</p>;
                            }
 
                            return allEvalDays.map(dayVal => {
@@ -1233,15 +1230,6 @@
                 .label { display: block; font-size: 0.75rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.35rem; font-family: 'Inter', sans-serif; } 
                 .input { width: 100%; padding: 0.6rem; border: 1px solid #e2e8f0; border-radius: 0.5rem; outline: none; transition: 0.2s; font-size: 0.9rem; font-family: 'Inter', sans-serif; } 
                 .input:focus { border-color: ${BRAND.colors.green}; box-shadow: 0 0 0 3px rgba(0, 124, 39, 0.1); }
-                
-                /* Rich Text Editor Editor Styles */
-                .rich-text-editor { min-height: 120px; }
-                .rich-text-editor ul { list-style-type: disc; padding-left: 1.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem; }
-                .rich-text-editor li { margin-bottom: 0.25rem; }
-                .rich-text-editor b { font-weight: 700; }
-                .rich-text-editor i { font-style: italic; }
-                .rich-text-editor u { text-decoration: underline; }
-                [contenteditable]:empty:before { content: attr(data-placeholder); color: #94a3b8; pointer-events: none; display: block; }
               `}} />
               
               <SampleModal isOpen={sampleModalOpen} onClose={() => setSampleModalOpen(false)} data={editingMeasurement ? editingMeasurement.data : {}} onSave={saveSampleData} day0Samples={editingMeasurement ? editingMeasurement.day0Samples : null} projectCriteria={project.criteria || []} isEvaluationDay={editingMeasurement ? editingMeasurement.isEvaluationDay : false} isDayEditable={editingMeasurement ? editingMeasurement.isDayEditable : false} startWeight={editingMeasurement ? editingMeasurement.startWeight : 0} projectTotalDuration={project.totalDuration} />
@@ -1359,21 +1347,6 @@
                          <div>
                            <label className="label text-green-600">Trial Target / Goal</label>
                            <textarea rows="3" className="input bg-green-50 border-green-200" value={project.trialTarget || ''} onChange={e => handleProjectChange('trialTarget', e.target.value)} />
-                         </div>
-                         
-                         <div className="col-span-2">
-                           <label className="label mb-2">Transport & Storage Modes</label>
-                           <div className="flex flex-wrap gap-2">
-                             {['Air Freight', 'Sea Freight', 'Road Transport', 'Storage'].map(mode => (
-                               <button 
-                                 key={mode} 
-                                 onClick={() => handleTransportModeToggle(mode)}
-                                 className={`px-3 py-1.5 rounded-full text-xs font-bold border transition ${project.transportModes?.includes(mode) ? 'bg-blue-100 border-blue-300 text-blue-800' : 'bg-white border-slate-300 text-slate-500'}`}
-                               >
-                                 {mode} {project.transportModes?.includes(mode) && <CheckCircle size={12} className="inline ml-1"/>}
-                               </button>
-                             ))}
-                           </div>
                          </div>
                        </div>
                     </div>
@@ -1513,7 +1486,7 @@
                                 </div>
                                 <label className="cursor-pointer bg-white border border-blue-200 text-blue-700 px-4 py-2 rounded font-bold text-xs hover:bg-blue-50 transition shrink-0 whitespace-nowrap">
                                    Upload Image
-                                   <input type="file" accept="image/*" className="hidden" onChange={(e) => handlePredictedImageUpload(e, activeGroupId)} />
+                                   <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImgUpload(e, 'predictedImage', true)} />
                                 </label>
                              </div>
                              {groups.find(g => g.id === activeGroupId).predictedImage && <div className="mt-2 border rounded p-2 bg-white inline-block max-w-full"><img src={groups.find(g => g.id === activeGroupId).predictedImage} className="h-32 max-w-full object-contain" /></div>}
