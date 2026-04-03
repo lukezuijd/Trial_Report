@@ -209,7 +209,7 @@
                     return (
                       <React.Fragment key={globalIdx}>
                         {idx > 0 && <div className="h-20 flex items-center justify-center shrink-0 w-2 lg:w-4"><ChevronRight size={16} className="text-gray-300" /></div>}
-                        <div className="flex flex-col items-center flex-1 min-w-0">
+                        <div className="flex flex-col items-center w-[15%] shrink-0">
                           <div className="w-full flex flex-col items-center bg-white border border-gray-200 rounded-lg shadow-sm p-1.5 relative min-h-[5.5rem]">
                              <div className="absolute top-0 left-0 w-full h-1" style={{backgroundColor: globalIdx % 2 === 0 ? BRAND.colors.green : BRAND.colors.blue}}></div>
                              <div className="bg-gray-50 p-1.5 rounded-full mb-1 flex-shrink-0 mt-1">{getStageIcon(step.stage || '')}</div>
@@ -336,7 +336,7 @@
               <div className="flex flex-wrap justify-center gap-4 mt-4">
                 {groups.map((g, idx) => (
                   <div key={g.id} className="flex items-center gap-2 text-xs font-bold" style={{fontFamily: BRAND.fonts.heading, color: BRAND.colors.black}}>
-                    <svg width="12" height="12" className="shrink-0"><rect width="12" height="12" rx="2" fill={CHART_COLORS[idx % CHART_COLORS.length].stroke} /></svg>
+                    <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: CHART_COLORS[idx % CHART_COLORS.length].stroke }}></div>
                     {g.name || 'Variant'}
                   </div>
                 ))}
@@ -345,7 +345,7 @@
           );
         };
 
-        const SampleModal = ({ isOpen, onClose, data, onSave, day0Samples, projectCriteria, isEvaluationDay, isDayEditable, startWeight, projectTotalDuration }) => {
+        const SampleModal = ({ isOpen, onClose, data, onSave, startWeight, projectCriteria, isEvaluationDay, isDayEditable, projectTotalDuration }) => {
           if (!isOpen) return null;
           const [samples, setSamples] = useState(data.samples || []);
           const [day, setDay] = useState(data.day === 0 ? 0 : (data.day || ''));
@@ -467,7 +467,7 @@
                      ) : (
                        <div className="flex flex-col items-center justify-center flex-1 text-center text-gray-400">
                          <AlertTriangle size={32} className="mb-2 opacity-50"/>
-                         <p className="text-sm">Quality scoring is currently disabled.<br/>Check 'Evaluate' to fill in.</p>
+                         <p className="text-sm">Quality scoring is only enabled<br/>for Start (P+0) and End (P+X) days.</p>
                        </div>
                      )}
                   </div>
@@ -518,7 +518,7 @@
                            <button onClick={() => removeImage(idx)} className="absolute top-2 right-2 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition shadow-lg"><X size={12}/></button>
                         </div>
                         <select className="w-full p-2 text-xs border-t outline-none bg-white" value={img.category || 'External Quality'} onChange={e => updateImageField(idx, 'category', e.target.value)}>
-                            {PHOTO_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                            {['External Quality', 'Internal Quality', 'Loose Produce', 'Box/Crate', 'Weight measurement', 'Gas measurement', 'Other'].map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                         <input type="text" className="w-full p-2 text-xs border-t outline-none focus:bg-blue-50 transition" placeholder="Caption / Description..." value={img.caption || ''} onChange={e => updateImageField(idx, 'caption', e.target.value)} />
                       </div>
@@ -566,7 +566,7 @@
             { stage: 'Transport', tempStart: '6', tempEnd: '', daysStart: '2', daysEnd: '', action: 'none' },
             { stage: 'Distribution Center', tempStart: '4', tempEnd: '', daysStart: '1', daysEnd: '', action: 'none' },
             { stage: 'Retail Store', tempStart: '18', tempEnd: '', daysStart: '4', daysEnd: '', action: 'none' },
-            { stage: 'Consumer (Open Pack)', tempStart: '20', tempEnd: '', daysStart: '2', daysEnd: '', action: 'unpack' }
+            { stage: 'Consumer', tempStart: '20', tempEnd: '', daysStart: '2', daysEnd: '', action: 'unpack' }
           ]);
 
           const [groups, setGroups] = useState([
@@ -700,11 +700,11 @@
                     const d = JSON.parse(ev.target.result); 
                     if(d.isPerfoTecIntake) {
                        const client = d.client || {}; const prod = d.products?.[0] || {};
-                       setProject(p => ({ ...p, company: client.companyName||'', street: client.street||'', houseNumber: client.houseNumber||'', zipCode: client.zipCode||'', city: client.city||'', country: client.country||'', contactName: client.contactName||'', contactRole: client.role||'', contactEmail: client.email||'', contactPhone: client.phone||'', logo: client.logo||p.logo, productName: prod.name||'', processingType: prod.processingType||'Whole', maturityStage: prod.maturityStage||'', postHarvestTreatment: prod.postHarvestTreatment||'', currentChallenge: prod.currentChallenge||'', trialTarget: prod.targetGoal||'', transportModes: prod.transportModes||[], criteria: prod.qualityCriteria||[], startImage: prod.photo||null }));
+                       setProject(p => ({ ...p, company: client.companyName||'', street: client.street||'', houseNumber: client.houseNumber||'', zipCode: client.zipCode||'', city: client.city||'', country: client.country||'', contactName: client.contactName||'', contactRole: client.role||'', contactEmail: client.email||'', contactPhone: client.phone||'', logo: client.logo||p.logo, productName: prod.name||'', processingType: prod.processingType||'Whole', maturityStage: prod.maturityStage||'', postHarvestTreatment: prod.postHarvestTreatment||'', currentChallenge: prod.currentChallenge||'', trialTarget: prod.targetGoal||'', transportMode: prod.transportMode || (prod.transportModes?.[0] || ''), criteria: prod.qualityCriteria||[], startImage: prod.photo||null }));
                        if (prod.supplyChain) setSupplyChain(prod.supplyChain);
                        setGroups(p => { const ug = [...p]; if(ug[0]) { ug[0].specs = { ...ug[0].specs, packaging: prod.packagingType||'Retail', material: prod.material||'', length: prod.length||'', width: prod.width||'', height: prod.height||'', startWeight: prod.weight||'' }; } return ug; });
                     } else {
-                       if(d.project) setProject({...d.project, packingDate: d.project.packingDate || d.project.date || new Date().toISOString().split('T')[0]}); 
+                       if(d.project) setProject({...d.project, packingDate: d.project.packingDate || d.project.date || new Date().toISOString().split('T')[0], transportMode: d.project.transportMode || ''}); 
                        if(d.supplyChain) setSupplyChain(d.supplyChain); 
                        if(d.groups) setGroups(d.groups); 
                        if(d.analysis) setAnalysis({ graphNotes: d.analysis.graphNotes||'', conclusion: d.analysis.conclusion||'', variantConclusions: d.analysis.variantConclusions||{}, recommendation: d.analysis.recommendation||'retest', nextSteps: d.analysis.nextSteps||[], temperatureImage: d.analysis.temperatureImage||null });
@@ -836,10 +836,16 @@
 
           if (isPreview) {
             
-            const temps = supplyChain.map(s => parseFloat(s.tempStart)).filter(t => !isNaN(t));
-            const minTemp = Math.min(...temps);
-            const maxTemp = Math.max(...temps);
-            const tempString = temps.length > 0 ? (minTemp === maxTemp ? `${minTemp}°C` : `${minTemp}°C - ${maxTemp}°C`) : '-°C';
+            let allTemps = [];
+            supplyChain.forEach(s => {
+                const ts = parseFloat(s.tempStart);
+                if(!isNaN(ts)) allTemps.push(ts);
+                const te = parseFloat(s.tempEnd);
+                if(!isNaN(te)) allTemps.push(te);
+            });
+            const minTemp = allTemps.length > 0 ? Math.min(...allTemps) : null;
+            const maxTemp = allTemps.length > 0 ? Math.max(...allTemps) : null;
+            const tempString = allTemps.length > 0 ? (minTemp === maxTemp ? `${minTemp}°C` : `${minTemp}°C - ${maxTemp}°C`) : '-°C';
             const totalDays = project.totalDuration || 0;
 
             const allPhotos = groups.flatMap(g => g.measurements.flatMap(m => (m.images || []).map(img => ({ groupName: g.name, day: m.day, url: typeof img === 'string' ? img : img.url, caption: typeof img === 'string' ? '' : img.caption, category: (typeof img === 'object' && img.category) ? img.category : 'Other' }))));
@@ -910,7 +916,7 @@
                   {/* SETTING */}
                   <div className="pt-4" id="sec-1">
                     <h2 className="report-section-title">1 Setting</h2>
-                    <div className="grid grid-cols-[180px_1fr] gap-y-3 text-sm brand-body text-slate-800">
+                    <div className="grid grid-cols-[180px_1fr] gap-y-3 text-base brand-body text-slate-800">
                        <div className="font-bold">Product :</div> <div>{project.productName || '-'}</div>
                        {project.type && <><div className="font-bold">Type :</div> <div>{project.type}</div></>}
                        {project.processingType && <><div className="font-bold">State of product :</div> <div>{project.processingType === 'Whole' ? 'Whole' : 'Processed / Fresh-cut'}</div></>}
@@ -935,9 +941,15 @@
                        {project.employee && <><div className="font-bold">PerfoTec Employee :</div> <div>{project.employee}</div></>}
                        <div className="font-bold">Technology :</div> <div>PerfoTec Laser Perforation</div>
                        {project.trialTarget && <><div className="font-bold">Trial Target :</div> <div>{project.trialTarget}</div></>}
+                       <div className="font-bold">Transport Mode :</div> <div>{project.transportMode || '-'}</div>
                        
-                       <div className="font-bold col-span-2 mt-4 border-t border-slate-300 pt-2 text-lg" style={{color: BRAND.colors.green}}>Product Supply Chain :</div> 
-                       <div className="col-span-2 w-full mt-1 break-inside-avoid"><SupplyChainFlow chain={supplyChain} /></div>
+                       {/* Visual Supply Chain - Full Row Below */}
+                       <div className="col-span-2 w-full mt-4 break-inside-avoid">
+                         <div className="font-bold border-t border-slate-300 pt-2 text-lg" style={{color: BRAND.colors.green}}>Product Supply Chain :</div> 
+                         <div className="w-full mt-1">
+                           <SupplyChainFlow chain={supplyChain} />
+                         </div>
+                       </div>
                     </div>
                   </div>
 
@@ -946,7 +958,7 @@
                   {/* SUMMARY */}
                   <div className="pt-4" id="sec-2">
                     <h2 className="report-section-title">2 Summary and Conclusions</h2>
-                    <div className="brand-body text-sm leading-relaxed text-justify text-slate-800">
+                    <div className="brand-body text-base leading-relaxed text-justify text-slate-800">
                        <h4 className="font-bold mb-3 text-xl" style={{color: BRAND.colors.black}}>Main Conclusion:</h4>
                        <div className="mb-8 whitespace-pre-wrap pdf-rich-text" dangerouslySetInnerHTML={{ __html: analysis.conclusion || 'No conclusion entered.' }}></div>
                        
@@ -982,10 +994,10 @@
                   {/* TRIAL SET UP */}
                   <div className="pt-4" id="sec-3">
                     <h2 className="report-section-title">3 Trial set up</h2>
-                    <div className="brand-body text-sm space-y-5 text-slate-800">
+                    <div className="brand-body text-base space-y-5 text-slate-800">
                        <div className="break-inside-avoid">
-                         <h4 className="font-bold mb-1">Trial samples:</h4>
-                         <ul className="list-disc pl-5">
+                         <h4 className="font-bold mb-2">Trial samples:</h4>
+                         <ul className="list-disc pl-6 space-y-1">
                            {groups.map((g,i) => {
                              return (
                                <li key={i}><span className="font-bold">{g.name || 'Variant'}</span> – {g.specs.packaging || ''}, {g.specs.material || ''}</li>
@@ -1026,9 +1038,9 @@
                   <div className="pt-4" id="sec-4">
                     <h2 className="report-section-title">4 Trial results</h2>
                     
-                    <div className="mb-10">
-                        <h3 id="sec-4-1" className="font-bold text-xl mb-2 brand-heading text-slate-700" style={{ pageBreakAfter: 'avoid' }}>4.1 Gas Levels</h3>
-                        <div className="text-sm mb-6 italic brand-body text-slate-600 pdf-rich-text" dangerouslySetInnerHTML={{ __html: analysis.graphNotes || 'Gas levels were monitored throughout the shelf life period.' }}></div>
+                    <div>
+                        <h3 id="sec-4-1" className="font-bold text-xl mb-2 brand-heading text-slate-700">4.1 Gas Levels</h3>
+                        <div className="text-base mb-6 italic brand-body text-slate-600 pdf-rich-text" dangerouslySetInnerHTML={{ __html: analysis.graphNotes || 'Gas levels were monitored throughout the shelf life period.' }}></div>
                         
                         <div className="flex gap-6 mb-2 px-2">
                            <div className="w-1/2 font-bold text-sm text-slate-500 text-center border-b pb-1">Prediction (Hub)</div>
@@ -1098,7 +1110,7 @@
                            )).sort((a, b) => a - b);
 
                            if (allEvalDays.length === 0 || !project.criteria || project.criteria.length === 0) {
-                             return <p className="text-sm italic text-gray-500">No specific criteria were evaluated during this test.</p>;
+                             return <p className="text-base italic text-gray-500">No specific criteria were evaluated during this test.</p>;
                            }
 
                            return allEvalDays.map(dayVal => {
@@ -1171,11 +1183,9 @@
                     <div className="grid grid-cols-2 gap-8">
                        {/* Reference Start Photo */}
                        {project.startImage && (
-                         <div className="col-span-2 mb-8 break-inside-avoid border-b pb-6">
-                            <div className="text-center mb-4">
-                              <h3 className="font-bold text-2xl brand-heading" style={{ color: BRAND.colors.green }}>{project.productName}</h3>
-                              <p className="text-base font-bold mt-1 text-slate-600 brand-heading">Picture 1. P+0 - Initial product quality</p>
-                            </div>
+                         <div className="col-span-2 mb-8 break-inside-avoid border-b pb-6 flex flex-col items-center">
+                            <h3 className="font-bold text-2xl brand-heading" style={{ color: BRAND.colors.green }}>{project.productName}</h3>
+                            <p className="text-base font-bold mt-1 mb-4 text-slate-600 brand-heading">Picture 1. P+0 - Initial product quality</p>
                             <div className="flex items-center justify-center shrink-0 border-none bg-transparent">
                                 <img src={project.startImage} className="max-w-full h-auto max-h-[400px] w-auto object-contain"/>
                             </div>
@@ -1194,18 +1204,18 @@
                                    {groupsInCat.map(gName => {
                                        const variantPhotos = catPhotos.filter(p => p.groupName === gName).sort((a,b) => parseFloat(a.day) - parseFloat(b.day));
                                        return (
-                                           <div key={gName} className="mb-8">
+                                           <div key={gName} className="mb-8 break-inside-avoid">
                                                <h4 className="font-bold text-md text-slate-600 mb-3">{gName}</h4>
                                                <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
                                                    {variantPhotos.map((photo, idx) => (
-                                                      <div key={idx} className="break-inside-avoid">
-                                                         <div className="text-sm mb-2 text-center brand-body px-2">
-                                                           <span className="font-bold">Picture {idx + 2}.</span> {gName} at Day {photo.day}. <br/>
-                                                           {photo.caption && <span className="italic font-normal text-xs text-slate-500">{photo.caption}</span>}
-                                                         </div>
-                                                         <div className="h-56 flex items-center justify-center relative bg-transparent border-none rounded">
+                                                      <div key={idx} className="break-inside-avoid flex flex-col">
+                                                         <div className="h-56 flex items-center justify-center relative bg-transparent border-none rounded mb-2">
                                                             <img src={photo.url} className="max-w-full max-h-full object-contain"/>
                                                             <div className="absolute top-0 right-0 bg-white/90 px-3 py-1 text-xs font-bold text-gray-700 border-b border-l rounded-bl">{formatDay(photo.day)}</div>
+                                                         </div>
+                                                         <div className="text-sm text-center brand-body px-2">
+                                                           <span className="font-bold">Picture {idx + 2}.</span> {gName} at Day {photo.day}. <br/>
+                                                           {photo.caption && <span className="italic font-normal text-xs text-slate-500">{photo.caption}</span>}
                                                          </div>
                                                       </div>
                                                    ))}
@@ -1230,6 +1240,15 @@
                 .label { display: block; font-size: 0.75rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.35rem; font-family: 'Inter', sans-serif; } 
                 .input { width: 100%; padding: 0.6rem; border: 1px solid #e2e8f0; border-radius: 0.5rem; outline: none; transition: 0.2s; font-size: 0.9rem; font-family: 'Inter', sans-serif; } 
                 .input:focus { border-color: ${BRAND.colors.green}; box-shadow: 0 0 0 3px rgba(0, 124, 39, 0.1); }
+                
+                /* Rich Text Editor Editor Styles */
+                .rich-text-editor { min-height: 120px; }
+                .rich-text-editor ul { list-style-type: disc; padding-left: 1.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem; }
+                .rich-text-editor li { margin-bottom: 0.25rem; }
+                .rich-text-editor b { font-weight: 700; }
+                .rich-text-editor i { font-style: italic; }
+                .rich-text-editor u { text-decoration: underline; }
+                [contenteditable]:empty:before { content: attr(data-placeholder); color: #94a3b8; pointer-events: none; display: block; }
               `}} />
               
               <SampleModal isOpen={sampleModalOpen} onClose={() => setSampleModalOpen(false)} data={editingMeasurement ? editingMeasurement.data : {}} onSave={saveSampleData} day0Samples={editingMeasurement ? editingMeasurement.day0Samples : null} projectCriteria={project.criteria || []} isEvaluationDay={editingMeasurement ? editingMeasurement.isEvaluationDay : false} isDayEditable={editingMeasurement ? editingMeasurement.isDayEditable : false} startWeight={editingMeasurement ? editingMeasurement.startWeight : 0} projectTotalDuration={project.totalDuration} />
@@ -1294,12 +1313,12 @@
                          
                          <div className="space-y-4">
                             {/* Logo Upload */}
-                            <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center bg-slate-50 relative group min-h-[100px]">
+                            <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center bg-slate-50 relative group h-24">
                                 <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => handleImgUpload(e, 'logo')} />
                                 {project.logo ? <img src={project.logo} className="h-full object-contain" /> : <><Upload size={24} color={BRAND.colors.blue} className="mb-2"/><span className="font-bold text-xs text-slate-600">Upload PerfoTec Logo (PNG)</span></>}
                             </div>
                             {/* Client Logo Upload */}
-                            <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center bg-slate-50 relative group min-h-[100px]">
+                            <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center bg-slate-50 relative group h-24">
                                 <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer" onChange={(e) => handleImgUpload(e, 'clientLogo')} />
                                 {project.clientLogo ? <img src={project.clientLogo} className="h-full object-contain" /> : <><Upload size={24} color={BRAND.colors.green} className="mb-2"/><span className="font-bold text-xs text-slate-600">Upload Client Logo</span></>}
                             </div>
@@ -1348,6 +1367,21 @@
                            <label className="label text-green-600">Trial Target / Goal</label>
                            <textarea rows="3" className="input bg-green-50 border-green-200" value={project.trialTarget || ''} onChange={e => handleProjectChange('trialTarget', e.target.value)} />
                          </div>
+                         
+                         <div className="col-span-2">
+                           <label className="label mb-2">Transport & Storage Modes</label>
+                           <div className="flex flex-wrap gap-2">
+                             {['Air Freight', 'Sea Freight', 'Road Transport', 'Storage'].map(mode => (
+                               <button 
+                                 key={mode} 
+                                 onClick={() => handleTransportModeToggle(mode)}
+                                 className={`px-3 py-1.5 rounded-full text-xs font-bold border transition ${project.transportModes?.includes(mode) ? 'bg-blue-100 border-blue-300 text-blue-800' : 'bg-white border-slate-300 text-slate-500'}`}
+                               >
+                                 {mode} {project.transportModes?.includes(mode) && <CheckCircle size={12} className="inline ml-1"/>}
+                               </button>
+                             ))}
+                           </div>
+                         </div>
                        </div>
                     </div>
 
@@ -1370,7 +1404,7 @@
                       </div>
                       <div className="space-y-4 overflow-hidden">
                         {supplyChain.map((step, idx) => (
-                           <div key={idx} className="flex gap-4 items-end bg-slate-50 p-4 rounded-lg border border-slate-200">
+                           <div key={idx} className="flex gap-4 items-end bg-slate-50 p-4 rounded-lg border border-slate-200 relative group">
                               <div className="flex flex-col gap-1 pt-6">
                                  <button onClick={() => moveChainStep(idx, 'up')} disabled={idx === 0} className="p-1.5 hover:bg-slate-200 rounded disabled:opacity-30"><ChevronUp size={16}/></button>
                                  <button onClick={() => moveChainStep(idx, 'down')} disabled={idx === supplyChain.length - 1} className="p-1.5 hover:bg-slate-200 rounded disabled:opacity-30"><ChevronDown size={16}/></button>
@@ -1486,7 +1520,7 @@
                                 </div>
                                 <label className="cursor-pointer bg-white border border-blue-200 text-blue-700 px-4 py-2 rounded font-bold text-xs hover:bg-blue-50 transition shrink-0 whitespace-nowrap">
                                    Upload Image
-                                   <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImgUpload(e, 'predictedImage', true)} />
+                                   <input type="file" accept="image/*" className="hidden" onChange={(e) => handlePredictedImageUpload(e, activeGroupId)} />
                                 </label>
                              </div>
                              {groups.find(g => g.id === activeGroupId).predictedImage && <div className="mt-2 border rounded p-2 bg-white inline-block max-w-full"><img src={groups.find(g => g.id === activeGroupId).predictedImage} className="h-32 max-w-full object-contain" /></div>}
