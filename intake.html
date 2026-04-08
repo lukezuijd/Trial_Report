@@ -10,7 +10,6 @@
         html { scroll-behavior: smooth; }
         body { background-color: #f8fafc; }
         
-        /* Styling voor invulvelden */
         .label { 
             display: block; font-size: 0.75rem; font-weight: 700; color: #64748b; 
             text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; 
@@ -77,7 +76,7 @@
             contactName: "Naam Contactpersoon", role: "Functie", email: "E-mailadres", phone: "Telefoonnummer",
             logoUpload: "Bedrijfslogo", clickUpload: "Klik om te uploaden",
             sec2Title: "2. Product(en) voor de Test", prodDetails: "Product Details", delProd: "Verwijder Product",
-            secATitle: "A. Product & Verpakking", prodName: "Productnaam", prodPhoto: "Product Foto", processingType: "Staat van het product",
+            secATitle: "A. Product & Verpakking", prodName: "Productnaam", prodType: "Variëteit / Type", origin: "Herkomst", prodPhoto: "Product Foto", processingType: "Staat van het product",
             whole: "Heel (Whole)", processed: "Verwerkt / Gesneden (Processed)",
             maturity: "Rijpheidsstadium (Maturity stage)", treatment: "Standaard Behandeling (Post-harvest)",
             packType: "Type Verpakking", material: "Huidig Verpakkingsmateriaal",
@@ -85,7 +84,7 @@
             weight: "Netto Gewicht (gram)",
             qualityCrit: "Kwaliteitscriteria", qualityCritDesc: "Selecteer de aspecten die u wilt laten beoordelen:",
             secBTitle: "B. Uitdaging & Doelstelling", challenge: "Huidige Uitdaging", goal: "Beoogd Doel met PerfoTec",
-            secCTitle: "C. Huidige Supply Chain", transportModes: "Transport & Opslag typen",
+            secCTitle: "C. Huidige Supply Chain", transportMode: "Transport & Opslag", transportModeErr: "Transportmodus",
             airFreight: "Lucht", seaFreight: "Zee", roadTransport: "Weg", storage: "Opslag",
             step: "Stap", phase: "Fase (Omschrijving)", temp: "Temp (°C)", to: "Tot", days: "Dagen", action: "Actie",
             actNone: "- Geen -", actPack: "Inpakken", actUnpack: "Uitpakken", addStep: "Extra Stap", addProd: "Extra product toevoegen",
@@ -97,7 +96,7 @@
             successStep3: "BELANGRIJK: Sleep het gedownloade bestand in de geopende e-mail als bijlage en klik op verzenden! Gebruik eventueel de 'Print als PDF' functie om het overzicht op te slaan.",
             fallbackMailText: "Opent de e-mail niet automatisch?",
             fallbackMailBtn: "Open E-mail Handmatig",
-            closeBtn: "Ik begrijp het, sluiten"
+            closeBtn: "Ik begrijp het, sluiten", submitBtn: "Afronden & Verzenden"
           },
           en: {
             title: "Client Intake Form", subtitle: "Test Request Preparation",
@@ -108,8 +107,8 @@
             companyName: "Company Name", street: "Street", houseNumber: "Number", zipCode: "Zip / Postal", city: "City", country: "Country",
             contactName: "Contact Name", role: "Job Title", email: "Email", phone: "Phone",
             logoUpload: "Company Logo", clickUpload: "Click to upload",
-            sec2Title: "2. Product(s) for Testing", prodDetails: "Product Details", delProd: "Remove Product",
-            secATitle: "A. Product & Packaging", prodName: "Product Name", prodPhoto: "Product Photo", processingType: "State of product",
+            sec2Title: "2. Product(s) for Testing", prodDetails: "Details", delProd: "Remove Product",
+            secATitle: "A. Product & Packaging", prodName: "Product Name", prodType: "Variety / Type", origin: "Origin", prodPhoto: "Photo", processingType: "State of product",
             whole: "Whole", processed: "Processed / Fresh-cut",
             maturity: "Maturity stage", treatment: "Post-harvest treatment",
             packType: "Packaging Type", material: "Current Material",
@@ -117,7 +116,7 @@
             weight: "Net Weight (grams)",
             qualityCrit: "Quality criteria", qualityCritDesc: "Select the aspects to evaluate:",
             secBTitle: "B. Challenge & Objectives", challenge: "Current Challenge", goal: "Target Goal",
-            secCTitle: "C. Current Supply Chain", transportModes: "Transport & Storage",
+            secCTitle: "C. Current Supply Chain", transportMode: "Transport & Storage", transportModeErr: "Transport mode",
             airFreight: "Air", seaFreight: "Sea", roadTransport: "Road", storage: "Storage",
             step: "Step", phase: "Phase (Description)", temp: "Temp (°C)", to: "To", days: "Days", action: "Action",
             actNone: "- None -", actPack: "Pack", actUnpack: "Unpack", addStep: "Add Step", addProd: "Add another product",
@@ -129,7 +128,7 @@
             successStep3: "IMPORTANT: Please attach the downloaded file to the opened email and click send! You can also use the 'Print to PDF' function to save the summary.",
             fallbackMailText: "Did the email not open automatically?",
             fallbackMailBtn: "Open Email Manually",
-            closeBtn: "I understand, close"
+            closeBtn: "I understand, close", submitBtn: "Finish & Send"
           },
           es: {
             title: "Formulario de Ingreso", subtitle: "Preparación de Solicitud",
@@ -141,7 +140,7 @@
             contactName: "Persona Contacto", role: "Cargo", email: "Email", phone: "Teléfono",
             logoUpload: "Logo Empresa", clickUpload: "Clic para subir",
             sec2Title: "2. Producto(s) para Prueba", prodDetails: "Detalles", delProd: "Eliminar Producto",
-            secATitle: "A. Producto y Empaque", prodName: "Nombre", prodPhoto: "Foto", processingType: "Estado",
+            secATitle: "A. Producto y Empaque", prodName: "Nombre", prodType: "Variedad / Tipo", origin: "Origen", prodPhoto: "Foto", processingType: "Estado",
             whole: "Entero", processed: "Procesado / Cortado",
             maturity: "Madurez", treatment: "Tratamiento poscosecha",
             packType: "Tipo Empaque", material: "Material Actual",
@@ -149,7 +148,7 @@
             weight: "Peso Neto (g)",
             qualityCrit: "Criterios", qualityCritDesc: "Seleccione los aspectos a evaluar:",
             secBTitle: "B. Desafío y Objetivos", challenge: "Desafío Actual", goal: "Objetivo",
-            secCTitle: "C. Cadena de Suministro", transportModes: "Transporte y Almacenamiento",
+            secCTitle: "C. Cadena de Suministro", transportMode: "Transporte y Almacenamiento", transportModeErr: "Modo de transporte",
             airFreight: "Aéreo", seaFreight: "Marítimo", roadTransport: "Carretera", storage: "Almacenamiento",
             step: "Paso", phase: "Fase (Descripción)", temp: "Temp (°C)", to: "A", days: "Días", action: "Acción",
             actNone: "- Ninguna -", actPack: "Empacar", actUnpack: "Desempacar", addStep: "Añadir Paso", addProd: "Añadir producto",
@@ -161,7 +160,7 @@
             successStep3: "IMPORTANTE: ¡Por favor, adjunte el archivo descargado al correo electrónico abierto y envíelo! También puede usar la función 'Imprimir como PDF' para guardar el resumen.",
             fallbackMailText: "¿El correo electrónico no se abrió automáticamente?",
             fallbackMailBtn: "Abrir Correo Manualmente",
-            closeBtn: "Entiendo, cerrar"
+            closeBtn: "Entiendo, cerrar", submitBtn: "Terminar y Enviar"
           }
         };
 
@@ -184,7 +183,7 @@
         };
 
         const getStageIcon = (name) => {
-          const n = name.toLowerCase();
+          const n = name?.toLowerCase() || '';
           if (n.includes('farm') || n.includes('harvest') || n.includes('oogst')) return <Tractor size={14} color={BRAND.colors.black} />;
           if (n.includes('sea') || n.includes('zee')) return <Ship size={14} color={BRAND.colors.black} />;
           if (n.includes('air') || n.includes('lucht')) return <Plane size={14} color={BRAND.colors.black} />;
@@ -193,6 +192,12 @@
           if (n.includes('consumer') || n.includes('eat') || n.includes('consument')) return <Utensils size={14} color={BRAND.colors.black} />;
           if (n.includes('pack') && !n.includes('transport')) return <Factory size={14} color={BRAND.colors.black} />;
           return <Truck size={14} color={BRAND.colors.black} />;
+        };
+
+        const formatRange = (start, end, unit) => {
+          if (start && end && start !== end) return `${start}-${end}${unit}`;
+          if (start) return `${start}${unit}`;
+          return `-`;
         };
 
         // --- COMPONENT: PRODUCT SUPPLY CHAIN FLOW (Visualizer for PDF) ---
@@ -209,8 +214,6 @@
                 cumulativeMin += minD;
                 cumulativeMax += maxD;
                 
-                const tempStr = step.tempEnd ? `${step.tempStart}-${step.tempEnd}` : step.tempStart;
-                const daysStr = step.daysEnd ? `${step.daysStart}-${step.daysEnd}` : step.daysStart;
                 const cumStr = cumulativeMin === cumulativeMax ? `${cumulativeMin}` : `${cumulativeMin}-${cumulativeMax}`;
 
                 return (
@@ -235,11 +238,11 @@
                          <div className="flex flex-col justify-center w-full text-[8px] gap-0.5 pb-0.5">
                             {/* Row 2: Temp */}
                             <span className="flex items-center justify-center gap-0.5 font-bold text-gray-700 whitespace-nowrap">
-                              <Thermometer size={8} className="text-red-500"/> {tempStr}°C
+                              <Thermometer size={8} className="text-red-500"/> {formatRange(step.tempStart, step.tempEnd, '°C')}
                             </span>
                             {/* Row 3: Days */}
                             <span className="flex items-center justify-center gap-0.5 text-gray-500 whitespace-nowrap">
-                              <Clock size={8}/> {daysStr}d
+                              <Clock size={8}/> {formatRange(step.daysStart, step.daysEnd, 'd')}
                             </span>
                          </div>
                          
@@ -315,7 +318,6 @@
                      {products.map((p, idx) => {
                        return (
                          <div key={p.id} className="border border-slate-200 rounded-xl p-6 mb-8 break-inside-avoid bg-white">
-                            
                             <div className="flex justify-between items-start border-b-2 border-slate-100 pb-4 mb-6">
                                <div className="pr-4">
                                   <h2 className="text-3xl font-bold brand-heading" style={{ color: BRAND.colors.green }}>{p.name}</h2>
@@ -340,7 +342,9 @@
                                   <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4 border-b border-slate-100 pb-1">{t.secATitle}</h3>
                                   <table className="w-full text-sm text-slate-700">
                                      <tbody>
-                                        <tr className="border-b border-slate-50"><td className="py-2 text-slate-500 font-medium w-1/2">{t.packType}</td><td className="py-2 font-bold">{p.packagingType}</td></tr>
+                                        <tr className="border-b border-slate-50"><td className="py-2 text-slate-500 font-medium w-1/2">{t.prodType}</td><td className="py-2 font-bold">{p.type || '-'}</td></tr>
+                                        <tr className="border-b border-slate-50"><td className="py-2 text-slate-500 font-medium">{t.origin}</td><td className="py-2 font-bold">{p.origin || '-'}</td></tr>
+                                        <tr className="border-b border-slate-50"><td className="py-2 text-slate-500 font-medium">{t.packType}</td><td className="py-2 font-bold">{p.packagingType}</td></tr>
                                         <tr className="border-b border-slate-50"><td className="py-2 text-slate-500 font-medium">{t.material}</td><td className="py-2 font-bold">{p.material}</td></tr>
                                         <tr className="border-b border-slate-50"><td className="py-2 text-slate-500 font-medium">Dimensions</td><td className="py-2 font-bold">{p.length} x {p.width} {p.packagingType !== 'Pillow Bag' && `x ${p.height}`} mm</td></tr>
                                         <tr className="border-b border-slate-50"><td className="py-2 text-slate-500 font-medium">{t.weight}</td><td className="py-2 font-bold">{p.weight} g</td></tr>
@@ -355,18 +359,18 @@
                                   <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4 border-b border-slate-100 pb-1">{t.secBTitle}</h3>
                                   <div className="mb-4">
                                      <strong className="text-orange-600 block text-xs uppercase mb-1">{t.challenge}</strong>
-                                     <p className="italic text-slate-700 leading-tight">{p.currentChallenge}</p>
+                                     <p className="text-sm text-slate-700 leading-relaxed bg-orange-50 p-3 rounded border border-orange-100">{p.currentChallenge}</p>
                                   </div>
                                   <div>
                                      <strong className="text-green-600 block text-xs uppercase mb-1">{t.goal}</strong>
-                                     <p className="font-medium text-slate-800 leading-tight">{p.targetGoal}</p>
+                                     <p className="text-sm text-slate-700 leading-relaxed font-medium bg-green-50 p-3 rounded border border-green-100">{p.targetGoal}</p>
                                   </div>
                                </div>
                             </div>
 
                             {/* Chain Summary Visual */}
                             <div className="mt-4 pt-3 border-t border-slate-200">
-                               <strong className="text-slate-500 block text-[10px] uppercase mb-2">{t.secCTitle} ({p.transportModes.join(', ') || '-'})</strong>
+                               <strong className="text-slate-500 block text-[10px] uppercase mb-2">{t.secCTitle} ({p.transportMode || '-'})</strong>
                                <ProductSupplyChainFlow chain={p.supplyChain} t={t} />
                             </div>
 
@@ -393,7 +397,6 @@
         const App = () => {
           const [lang, setLang] = useState(getInitialLang());
           const t = T[lang];
-          const fileInputRef = useRef(null);
 
           const [clientInfo, setClientInfo] = useState({
             companyName: '', street: '', houseNumber: '', zipCode: '', city: '', country: '',
@@ -404,6 +407,8 @@
             {
               id: Date.now(),
               name: '', 
+              type: '', 
+              origin: '', 
               processingType: 'Whole',
               packagingType: 'Punnets', 
               length: '', width: '', height: '', 
@@ -412,7 +417,7 @@
               maturityStage: '',
               postHarvestTreatment: '',
               qualityCriteria: [],
-              transportModes: [],
+              transportMode: '', 
               supplyChain: JSON.parse(JSON.stringify(DEFAULT_SUPPLY_CHAIN)),
               currentChallenge: '', 
               targetGoal: '', 
@@ -443,8 +448,8 @@
           // --- HANDLERS PRODUCTS ---
           const addProduct = () => {
             setProducts([...products, {
-              id: Date.now(), name: '', processingType: 'Whole', packagingType: 'Punnets', length: '', width: '', height: '', weight: '', material: '',
-              maturityStage: '', postHarvestTreatment: '', qualityCriteria: [], transportModes: [],
+              id: Date.now(), name: '', type: '', origin: '', processingType: 'Whole', packagingType: 'Punnets', length: '', width: '', height: '', weight: '', material: '',
+              maturityStage: '', postHarvestTreatment: '', qualityCriteria: [], transportMode: '',
               supplyChain: JSON.parse(JSON.stringify(DEFAULT_SUPPLY_CHAIN)),
               currentChallenge: '', targetGoal: '', photo: null
             }]);
@@ -527,8 +532,8 @@
             setProducts(prev => prev.map(p => {
               if (p.id === productId) {
                 const newChain = [...p.supplyChain];
-                if (direction === 'up' && index > 0) [newChain[index], newChain[index - 1]] = [newChain[index - 1], newChain[index]];
-                else if (direction === 'down' && index < newChain.length - 1) [newChain[index], newChain[index + 1]] = [newChain[index + 1], newChain[index]];
+                if (direction === 'up' && index > 0) { [newChain[index], newChain[index - 1]] = [newChain[index - 1], newChain[index]]; }
+                else if (direction === 'down' && index < newChain.length - 1) { [newChain[index], newChain[index + 1]] = [newChain[index + 1], newChain[index]]; }
                 return { ...p, supplyChain: newChain };
               }
               return p;
@@ -558,7 +563,7 @@
               if (!p.weight.toString().trim()) newErrors.push(`${prefix}${t.weight} ${t.reqField}`);
               if (!p.currentChallenge.trim()) newErrors.push(`${prefix}${t.challenge} ${t.reqField}`);
               if (!p.targetGoal.trim()) newErrors.push(`${prefix}${t.goal} ${t.reqField}`);
-              if (p.transportModes.length === 0) newErrors.push(`${prefix}${t.transportModes} ${t.reqField}`);
+              if (!p.transportMode) newErrors.push(`${prefix}${t.transportModeErr} ${t.reqField}`);
 
               p.supplyChain.forEach((step, sIdx) => {
                  if (!step.stage.trim()) newErrors.push(`${prefix}${t.step} ${sIdx + 1} - ${t.phase} ${t.reqField}`);
@@ -786,7 +791,7 @@
                             <input type="text" className="input" value={clientInfo.contactName} onChange={e => handleClientChange('contactName', e.target.value)} />
                           </div>
                           <div>
-                            <label className="label">{t.role} ({t.optional})</label>
+                            <label className="label">{t.role}</label>
                             <input type="text" className="input" value={clientInfo.role} onChange={e => handleClientChange('role', e.target.value)} />
                           </div>
                           <div>
@@ -794,14 +799,14 @@
                             <input type="email" className="input" value={clientInfo.email} onChange={e => handleClientChange('email', e.target.value)} />
                           </div>
                           <div>
-                            <label className="label">{t.phone} ({t.optional})</label>
+                            <label className="label">{t.phone}</label>
                             <input type="tel" className="input" value={clientInfo.phone} onChange={e => handleClientChange('phone', e.target.value)} />
                           </div>
                       </div>
                     </div>
 
                     <div className="flex flex-col gap-2 md:items-center">
-                       <label className="label w-full">{t.logoUpload} ({t.optional})</label>
+                       <label className="label w-full">{t.logoUpload}</label>
                        <label className="border-2 border-dashed border-slate-300 rounded-xl w-full max-w-[200px] aspect-square flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-slate-100 transition cursor-pointer relative overflow-hidden mt-1">
                           <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={handleLogoUpload} />
                           {clientInfo.logo ? (
@@ -864,6 +869,15 @@
                                     )}
                                  </div>
                               </div>
+                              
+                              <div className="md:col-span-1">
+                                <label className="label">{t.prodType}</label>
+                                <input type="text" className="input" value={product.type} onChange={e => handleProductChange(product.id, 'type', e.target.value)} />
+                              </div>
+                              <div className="md:col-span-1">
+                                <label className="label">{t.origin}</label>
+                                <input type="text" className="input" value={product.origin} onChange={e => handleProductChange(product.id, 'origin', e.target.value)} />
+                              </div>
 
                               <div className="md:col-span-2">
                                 <label className="label">{t.processingType} *</label>
@@ -882,12 +896,12 @@
                               </div>
 
                               <div className="md:col-span-1">
-                                <label className="label">{t.maturity} ({t.optional})</label>
+                                <label className="label">{t.maturity}</label>
                                 <input type="text" className="input" value={product.maturityStage} onChange={e => handleProductChange(product.id, 'maturityStage', e.target.value)} />
                               </div>
                               
                               <div className="md:col-span-1">
-                                <label className="label">{t.treatment} ({t.optional})</label>
+                                <label className="label">{t.treatment}</label>
                                 <input type="text" className="input" value={product.postHarvestTreatment} onChange={e => handleProductChange(product.id, 'postHarvestTreatment', e.target.value)} />
                               </div>
 
@@ -928,7 +942,7 @@
                               </div>
 
                               <div className="md:col-span-3 mt-2">
-                                <label className="label mb-2 flex items-center gap-2"><Beaker size={16} className="text-blue-600"/> {t.qualityCrit} ({t.optional})</label>
+                                <label className="label mb-2 flex items-center gap-2"><Beaker size={16} className="text-blue-600"/> {t.qualityCrit}</label>
                                 <p className="text-xs text-slate-500 mb-3">{t.qualityCritDesc}</p>
                                 <div className="flex flex-wrap gap-2">
                                    {DEFAULT_CRITERIA.map(crit => {
@@ -969,19 +983,16 @@
                             <h4 className="font-bold text-slate-700 mb-4 border-b pb-2 flex items-center gap-2"><Truck size={18} color={BRAND.colors.blue}/> {t.secCTitle}</h4>
                             
                             <div className="mb-6 bg-blue-50 p-4 rounded-xl border border-blue-100">
-                              <label className="label mb-2 flex items-center gap-2">{t.transportModes} *</label>
+                              <label className="label mb-2 flex items-center gap-2">{t.transportMode} *</label>
                               <div className="flex flex-wrap gap-3">
                                  {TRANSPORT_MODES.map(mode => {
                                     const modeKeys = { 'Air Freight': 'airFreight', 'Sea Freight': 'seaFreight', 'Road Transport': 'roadTransport', 'Storage': 'storage' };
-                                    const isSelected = product.transportModes.includes(mode);
+                                    const isSelected = product.transportMode === mode;
                                     return (
                                       <button 
                                         key={mode}
                                         type="button"
-                                        onClick={() => {
-                                           const newModes = isSelected ? product.transportModes.filter(m => m !== mode) : [...product.transportModes, mode];
-                                           handleProductChange(product.id, 'transportModes', newModes);
-                                        }}
+                                        onClick={() => handleProductChange(product.id, 'transportMode', isSelected ? '' : mode)}
                                         className={`px-4 py-2 rounded-full text-sm font-bold transition-all border shadow-sm ${isSelected ? 'bg-blue-600 text-white border-blue-700 ring-2 ring-blue-300' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}
                                       >
                                         {t[modeKeys[mode]]} {isSelected && <CheckCircle size={16} className="inline ml-1" />}
@@ -990,85 +1001,62 @@
                                  })}
                               </div>
                             </div>
-
-                            <p className="text-sm text-slate-500 mb-4">{t.chainDesc}</p>
                             
-                            {/* Aangepaste Flex Layout voor de Supply Chain velden */}
+                            {/* Aangepaste Layout voor de Supply Chain velden - ALTIJD NETJES UITGELIJND */}
                             <div className="space-y-3 bg-slate-50 p-2 sm:p-4 rounded-xl border border-slate-200">
-                              
-                              {/* Header for Desktop */}
-                              <div className="hidden lg:flex gap-3 text-xs font-bold text-slate-500 uppercase px-2 mb-1">
-                                <div className="w-[30%]">{t.phase} *</div>
-                                <div className="w-[22%]">{t.temp}</div>
-                                <div className="w-[22%]">{t.days} *</div>
-                                <div className="w-[18%]">{t.action}</div>
-                                <div className="w-[8%]"></div>
-                              </div>
-
                               {product.supplyChain.map((step, idx) => (
-                                 <div key={idx} className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm relative">
+                                 <div key={idx} className="flex flex-wrap xl:flex-nowrap gap-4 items-end bg-white p-4 rounded-lg border border-slate-200">
+                                    {/* Up/Down */}
+                                    <div className="flex flex-col gap-1 pb-1 shrink-0">
+                                       <button type="button" onClick={() => moveChainStep(product.id, idx, 'up')} disabled={idx === 0} className="p-1.5 hover:bg-slate-200 rounded disabled:opacity-30"><ChevronUp size={16}/></button>
+                                       <button type="button" onClick={() => moveChainStep(product.id, idx, 'down')} disabled={idx === product.supplyChain.length - 1} className="p-1.5 hover:bg-slate-200 rounded disabled:opacity-30"><ChevronDown size={16}/></button>
+                                    </div>
                                     
-                                    {/* Mobile Header */}
-                                    <div className="flex justify-between lg:hidden mb-2 border-b pb-1">
-                                      <span className="font-bold text-sm text-slate-600">{t.step} {idx+1}</span>
-                                      <div className="flex gap-1">
-                                         <button type="button" onClick={() => moveChainStep(product.id, idx, 'up')} disabled={idx === 0} className="p-1 bg-slate-100 rounded"><ChevronUp size={14}/></button>
-                                         <button type="button" onClick={() => moveChainStep(product.id, idx, 'down')} disabled={idx === product.supplyChain.length - 1} className="p-1 bg-slate-100 rounded"><ChevronDown size={14}/></button>
-                                         <button type="button" onClick={() => removeChainStep(product.id, idx)} className="p-1 bg-red-50 text-red-500 rounded ml-2"><Trash2 size={14}/></button>
-                                      </div>
+                                    {/* Stage */}
+                                    <div className="flex-1 min-w-[200px] w-full">
+                                       <label className="label whitespace-nowrap">Fase (Activiteit) *</label>
+                                       <input type="text" className="input py-2.5 text-sm font-bold w-full" value={step.stage} onChange={e => updateChainStep(product.id, idx, 'stage', e.target.value)} />
+                                    </div>
+                                    
+                                    {/* Temp */}
+                                    <div className="w-full sm:w-56 flex gap-2 items-end shrink-0">
+                                       <div className="w-1/2">
+                                          <label className="label whitespace-nowrap">Temp Min</label>
+                                          <input type="number" className="input py-2.5 text-sm text-center w-full" value={step.tempStart} onChange={e => updateChainStep(product.id, idx, 'tempStart', e.target.value)} />
+                                       </div>
+                                       <div className="w-1/2">
+                                          <label className="label whitespace-nowrap">Max</label>
+                                          <input type="number" className="input py-2.5 text-sm text-center w-full" value={step.tempEnd} placeholder="-" onChange={e => updateChainStep(product.id, idx, 'tempEnd', e.target.value)} />
+                                       </div>
                                     </div>
 
-                                    {/* Flex Row Inputs */}
-                                    <div className="flex flex-col lg:flex-row gap-3 items-end">
-                                        
-                                        {/* Phase */}
-                                        <div className="w-full lg:w-[30%]">
-                                          <label className="label lg:hidden text-[10px]">{t.phase} *</label>
-                                          <input type="text" className="input py-2 text-sm" value={step.stage} onChange={e => updateChainStep(product.id, idx, 'stage', e.target.value)} />
-                                        </div>
-                                        
-                                        {/* Temp */}
-                                        <div className="w-full lg:w-[22%] flex gap-2">
-                                          <div className="w-1/2">
-                                            <label className="label lg:hidden text-[10px]">{t.temp} *</label>
-                                            <input type="number" className="input py-2 text-sm text-center" value={step.tempStart} onChange={e => updateChainStep(product.id, idx, 'tempStart', e.target.value)} />
-                                          </div>
-                                          <div className="w-1/2">
-                                            <label className="label lg:hidden text-[10px]">{t.to}</label>
-                                            <input type="number" className="input py-2 text-sm text-center" value={step.tempEnd} placeholder="-" onChange={e => updateChainStep(product.id, idx, 'tempEnd', e.target.value)} />
-                                          </div>
-                                        </div>
+                                    {/* Days */}
+                                    <div className="w-full sm:w-56 flex gap-2 items-end shrink-0">
+                                       <div className="w-1/2">
+                                          <label className="label whitespace-nowrap">Dagen Min</label>
+                                          <input type="number" className="input py-2.5 text-sm text-center w-full" value={step.daysStart} onChange={e => updateChainStep(product.id, idx, 'daysStart', e.target.value)} />
+                                       </div>
+                                       <div className="w-1/2">
+                                          <label className="label whitespace-nowrap">Max</label>
+                                          <input type="number" className="input py-2.5 text-sm text-center w-full" value={step.daysEnd} placeholder="-" onChange={e => updateChainStep(product.id, idx, 'daysEnd', e.target.value)} />
+                                       </div>
+                                    </div>
 
-                                        {/* Days */}
-                                        <div className="w-full lg:w-[22%] flex gap-2">
-                                          <div className="w-1/2">
-                                            <label className="label lg:hidden text-[10px]">{t.days} *</label>
-                                            <input type="number" className="input py-2 text-sm text-center" value={step.daysStart} onChange={e => updateChainStep(product.id, idx, 'daysStart', e.target.value)} />
-                                          </div>
-                                          <div className="w-1/2">
-                                            <label className="label lg:hidden text-[10px]">{t.to}</label>
-                                            <input type="number" className="input py-2 text-sm text-center" value={step.daysEnd} placeholder="-" onChange={e => updateChainStep(product.id, idx, 'daysEnd', e.target.value)} />
-                                          </div>
-                                        </div>
-
-                                        {/* Action */}
-                                        <div className="w-full lg:w-[18%]">
-                                          <label className="label lg:hidden text-[10px]">{t.action}</label>
-                                          <select className="input py-2 px-2 text-sm font-bold text-slate-700 w-full" value={step.action} onChange={e => updateChainStep(product.id, idx, 'action', e.target.value)}>
-                                            <option value="none">{t.actNone}</option>
-                                            <option value="pack" className="text-green-700">{t.actPack}</option>
-                                            <option value="unpack" className="text-red-700">{t.actUnpack}</option>
-                                          </select>
-                                        </div>
-                                        
-                                        {/* Buttons (Desktop) */}
-                                        <div className="hidden lg:flex w-full lg:w-[8%] items-center justify-end gap-1 shrink-0">
-                                          <div className="flex flex-col gap-1 shrink-0">
-                                            <button type="button" onClick={() => moveChainStep(product.id, idx, 'up')} disabled={idx === 0} className="p-0.5 hover:bg-slate-200 rounded disabled:opacity-30"><ChevronUp size={14}/></button>
-                                            <button type="button" onClick={() => moveChainStep(product.id, idx, 'down')} disabled={idx === product.supplyChain.length - 1} className="p-0.5 hover:bg-slate-200 rounded disabled:opacity-30"><ChevronDown size={14}/></button>
-                                          </div>
-                                          <button type="button" onClick={() => removeChainStep(product.id, idx)} className="p-2 text-red-400 hover:text-red-600 rounded shrink-0"><Trash2 size={16}/></button>
-                                        </div>
+                                    {/* Action */}
+                                    <div className="w-full sm:w-40 shrink-0">
+                                       <label className="label whitespace-nowrap">Actie</label>
+                                       <select className="input py-2.5 px-2 text-sm font-bold text-slate-700 w-full" value={step.action} onChange={e => updateChainStep(product.id, idx, 'action', e.target.value)}>
+                                         <option value="none">{t.actNone}</option>
+                                         <option value="pack" className="text-green-700">{t.actPack}</option>
+                                         <option value="unpack" className="text-red-700">{t.actUnpack}</option>
+                                       </select>
+                                    </div>
+                                    
+                                    {/* Delete */}
+                                    <div className="pb-1 shrink-0">
+                                       <button type="button" onClick={() => removeChainStep(product.id, idx)} className="h-[42px] w-[42px] bg-red-50 text-red-500 rounded border border-red-100 hover:bg-red-100 flex items-center justify-center">
+                                         <Trash2 size={18}/>
+                                       </button>
                                     </div>
                                  </div>
                               ))}
