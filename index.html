@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PerfoTec Management Hub</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=League+Spartan:wght@700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .brand-heading { font-family: 'League Spartan', sans-serif; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import React from 'https://esm.sh/react@18.2.0';
+        import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
+        import { 
+            ClipboardList, File text, BarChart3, ArrowRight, 
+            Settings, ShieldCheck, Zap
+        } from 'https://esm.sh/lucide-react@0.292.0';
+
+        const BRAND = {
+            green: '#007C27',
+            blue: '#054E9A',
+            dark: '#211A1A'
+        };
+
+        const ToolCard = ({ title, description, icon: Icon, href, color, step }) => (
+            <a href={href} className="group relative bg-white p-8 rounded-2xl shadow-sm border border-slate-200 hover:shadow-xl hover:border-green-500 transition-all duration-300 flex flex-col h-full">
+                <div className="absolute -top-4 -left-4 w-10 h-10 rounded-full flex items-center justify-center text-white font-bold shadow-lg" style={{ backgroundColor: color }}>
+                    {step}
+                </div>
+                <div className="mb-6 p-4 rounded-xl inline-block" style={{ backgroundColor: `${color}10`, color: color }}>
+                    <Icon size={32} />
+                </div>
+                <h3 className="text-2xl font-bold mb-3 brand-heading text-slate-800 group-hover:text-green-700 transition-colors">{title}</h3>
+                <p className="text-slate-500 leading-relaxed mb-8 flex-grow">{description}</p>
+                <div className="flex items-center font-bold text-sm uppercase tracking-wider group-hover:gap-2 transition-all" style={{ color: color }}>
+                    Open Tool <ArrowRight size={18} className="ml-2" />
+                </div>
+            </a>
+        );
+
+        const App = () => {
+            return (
+                <div className="min-h-screen flex flex-col">
+                    {/* Header */}
+                    <header className="bg-white border-b border-slate-200 py-6">
+                        <div className="max-w-7xl mx-auto px-6 flex justify-between items-center">
+                            <div className="flex items-center gap-4">
+                                <img src="https://cdn.prod.website-files.com/68b594c756c22085ddc6c1ea/68b59ba2f027bfeecd25261b_PerfoTec%20logo.png" alt="PerfoTec" className="h-12" />
+                                <div className="h-10 border-l border-slate-300 ml-2"></div>
+                                <h1 className="brand-heading text-2xl uppercase tracking-tighter ml-2" style={{ color: BRAND.blue }}>Management Hub</h1>
+                            </div>
+                            <div className="flex gap-4">
+                                <button className="p-2 text-slate-400 hover:text-slate-600"><Settings size={20}/></button>
+                            </div>
+                        </div>
+                    </header>
+
+                    {/* Main Content */}
+                    <main className="flex-grow max-w-7xl mx-auto px-6 py-16 w-full">
+                        <div className="text-center mb-16">
+                            <h2 className="text-4xl font-bold text-slate-900 mb-4 brand-heading">Welkom bij de PerfoTec Workflow</h2>
+                            <p className="text-xl text-slate-500 max-w-2xl mx-auto">Selecteer de tool die u nodig heeft om uw kwaliteitstesten te beheren.</p>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+                            <ToolCard 
+                                step="1"
+                                title="Client Intake"
+                                description="Verzamel klantgegevens en productinformatie. Dit vormt de basis voor elke nieuwe aanvraag."
+                                icon={ClipboardList}
+                                href="intake.html"
+                                color={BRAND.blue}
+                            />
+                            <ToolCard 
+                                step="2"
+                                title="Trial Proposal"
+                                description="Stel een gedetailleerd testplan op. Gebruik de data uit de intake om een simulatie voor te stellen."
+                                icon={FileText}
+                                href="Trial_Proposal.html"
+                                color={BRAND.green}
+                            />
+                            <ToolCard 
+                                step="3"
+                                title="Official Report"
+                                description="Verwerk testdata tot een officieel rapport met grafieken, foto's en conclusies voor de klant."
+                                icon={BarChart3}
+                                href="index.html"
+                                color={BRAND.dark}
+                            />
+                        </div>
+
+                        {/* Info Footer */}
+                        <div className="mt-20 grid grid-cols-1 md:grid-cols-3 gap-8 border-t border-slate-200 pt-12 text-sm text-slate-500">
+                            <div className="flex gap-3 items-start">
+                                <Zap className="text-yellow-500 shrink-0" size={20} />
+                                <p><strong>Data Flow:</strong> Alle tools werken met JSON-bestanden. Je kunt data uit de ene tool exporteren en in de andere importeren.</p>
+                            </div>
+                            <div className="flex gap-3 items-start">
+                                <ShieldCheck className="text-green-600 shrink-0" size={20} />
+                                <p><strong>Privacy:</strong> Uw data wordt lokaal in de browser verwerkt en niet opgeslagen op een externe server (tenzij u op opslaan klikt).</p>
+                            </div>
+                            <div className="flex gap-3 items-start">
+                                <Settings className="text-blue-500 shrink-0" size={20} />
+                                <p><strong>Integratie:</strong> Gebruik de JSON-import functies in de tools om snel gegevens over te zetten tussen de verschillende fases.</p>
+                            </div>
+                        </div>
+                    </main>
+
+                    <footer className="py-8 text-center text-slate-400 text-xs border-t border-slate-100 bg-white">
+                        &copy; {new Date().getFullYear()} PerfoTec B.V. - Best for Freshness
+                    </footer>
+                </div>
+            );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
