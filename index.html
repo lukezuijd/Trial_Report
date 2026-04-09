@@ -4,50 +4,64 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PerfoTec Management Hub</title>
+    
+    <!-- Tailwind CSS (voor de lay-out) -->
     <script src="https://cdn.tailwindcss.com"></script>
+    
     <!-- Babel voor JSX compilatie in de browser -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
-    <style>
-        /* Tip: Dit is de CSS die je later naar style.css kunt verplaatsen */
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=League+Spartan:wght@700&display=swap');
-        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
-        .brand-heading { font-family: 'League Spartan', sans-serif; }
-    </style>
+    <!-- INLADEN VAN DE CENTRALE STYLING & CONFIGURATIE -->
+    <link rel="stylesheet" href="style.css">
+    <script src="config.js"></script>
 </head>
-<body>
+<body class="bg-[var(--brand-light-gray)] text-[var(--brand-black)]">
     <div id="root">
         <div style="padding: 2rem; text-align: center; font-family: sans-serif; color: #666;">
-            Aan het laden... Als dit scherm blijft staan, controleer dan of je verbonden bent met internet (voor de iconen/react libraries).
+            Aan het laden... Zorg ervoor dat 'style.css' en 'config.js' in dezelfde map staan.
         </div>
     </div>
 
     <!-- React App Script -->
     <script type="text/babel" data-type="module">
-        import React, { useState, useEffect } from 'https://esm.sh/react@18.2.0';
+        import React from 'https://esm.sh/react@18.2.0';
         import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
         import { 
             ClipboardList, FileText, BarChart3, ArrowRight, 
-            Settings, ShieldCheck, Zap
+            Settings, ShieldCheck, Zap, AlertTriangle
         } from 'https://esm.sh/lucide-react@0.292.0';
 
-        // Tip: Dit is de configuratie die je later naar config.js kunt verplaatsen
-        const BRAND = {
-            green: '#007C27',
-            blue: '#054E9A',
-            dark: '#211A1A'
+        // Veilige fallback voor het geval config.js niet gevonden of geblokkeerd wordt
+        const isConfigMissing = !window.PERFOTEC_CONFIG;
+        const config = window.PERFOTEC_CONFIG || {
+            BRAND: {
+                name: 'PerfoTec',
+                tagline: 'BEST FOR FRESHNESS',
+                logos: {
+                    default: 'https://cdn.prod.website-files.com/68b594c756c22085ddc6c1ea/68b59ba2f027bfeecd25261b_PerfoTec%20logo.png',
+                },
+                colors: {
+                    primary: { green: '#007C27', blue: '#054E9A', darkBlue: '#004B87' },
+                    secondary: { lightBlue: '#5B9BD5', orange: '#ea580c' },
+                    neutral: { black: '#211A1A', gray: '#E9E9E9', lightGray: '#F3F4F6', white: '#FFFFFF' }
+                },
+                fonts: {
+                    heading: '"League Spartan", sans-serif',
+                    body: '"Inter", sans-serif'
+                }
+            }
         };
 
         const ToolCard = ({ title, description, icon: Icon, href, color, step }) => (
-            <a href={href} className="group relative bg-white p-8 rounded-2xl shadow-sm border border-slate-200 hover:shadow-xl hover:border-green-500 transition-all duration-300 flex flex-col h-full">
+            <a href={href} className="group relative bg-[var(--brand-white)] p-8 rounded-2xl shadow-sm border border-[var(--brand-gray)] hover:shadow-xl transition-all duration-300 flex flex-col h-full" style={{ borderColor: 'var(--brand-gray)' }} onMouseEnter={(e) => e.currentTarget.style.borderColor = config.BRAND.colors.primary.green} onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--brand-gray)'}>
                 <div className="absolute -top-4 -left-4 w-10 h-10 rounded-full flex items-center justify-center text-white font-bold shadow-lg" style={{ backgroundColor: color }}>
                     {step}
                 </div>
-                <div className="mb-6 p-4 rounded-xl inline-block" style={{ backgroundColor: `${color}10`, color: color }}>
+                <div className="mb-6 p-4 rounded-xl inline-block" style={{ backgroundColor: `${color}15`, color: color }}>
                     <Icon size={32} />
                 </div>
-                <h3 className="text-2xl font-bold mb-3 brand-heading text-slate-800 group-hover:text-green-700 transition-colors">{title}</h3>
-                <p className="text-slate-500 leading-relaxed mb-8 flex-grow">{description}</p>
+                <h3 className="text-2xl font-bold mb-3 brand-heading text-[var(--brand-black)] transition-colors">{title}</h3>
+                <p className="opacity-70 leading-relaxed mb-8 flex-grow brand-body">{description}</p>
                 <div className="flex items-center font-bold text-sm uppercase tracking-wider group-hover:gap-2 transition-all" style={{ color: color }}>
                     Open Tool <ArrowRight size={18} className="ml-2" />
                 </div>
@@ -56,23 +70,39 @@
 
         const App = () => {
             return (
-                <div className="min-h-screen flex flex-col">
+                <div className="min-h-screen flex flex-col brand-body">
                     {/* Header */}
-                    <header className="bg-white border-b border-slate-200 py-6">
+                    <header className="bg-[var(--brand-white)] border-b border-[var(--brand-gray)] py-6 shadow-sm">
                         <div className="max-w-7xl mx-auto px-6 flex justify-between items-center">
                             <div className="flex items-center gap-4">
-                                <img src="https://cdn.prod.website-files.com/68b594c756c22085ddc6c1ea/68b59ba2f027bfeecd25261b_PerfoTec%20logo.png" alt="PerfoTec" className="h-12" />
-                                <div className="h-10 border-l border-slate-300 ml-2"></div>
-                                <h1 className="brand-heading text-2xl uppercase tracking-tighter ml-2" style={{ color: BRAND.blue }}>Management Hub</h1>
+                                <img src={config.BRAND.logos.default} alt={config.BRAND.name} className="h-12" />
+                                <div className="h-10 border-l border-[var(--brand-gray)] ml-2"></div>
+                                <div className="flex flex-col ml-2">
+                                    <h1 className="brand-heading text-2xl uppercase tracking-tighter" style={{ color: config.BRAND.colors.primary.blue }}>Management Hub</h1>
+                                    <p className="text-[10px] font-bold tracking-[0.2em] uppercase" style={{ color: config.BRAND.colors.primary.green }}>{config.BRAND.tagline}</p>
+                                </div>
                             </div>
                         </div>
                     </header>
 
+                    {/* Waarschuwing als config.js ontbreekt */}
+                    {isConfigMissing && (
+                        <div className="max-w-7xl mx-auto px-6 mt-6 w-full">
+                            <div className="bg-orange-50 border border-orange-200 text-orange-800 p-4 rounded-lg shadow-sm flex items-start gap-3">
+                                <AlertTriangle className="shrink-0 text-orange-500 mt-0.5" size={20} />
+                                <div>
+                                    <p className="font-bold">Let op: config.js kon niet worden ingeladen.</p>
+                                    <p className="text-sm mt-1">Zorg ervoor dat het bestand <code>config.js</code> in exact dezelfde map staat als <code>index.html</code>. Er worden nu tijdelijk standaardinstellingen gebruikt.</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Main Content */}
-                    <main className="flex-grow max-w-7xl mx-auto px-6 py-16 w-full">
+                    <main className="flex-grow max-w-7xl mx-auto px-6 py-12 w-full">
                         <div className="text-center mb-16">
-                            <h2 className="text-4xl font-bold text-slate-900 mb-4 brand-heading">Welkom bij de PerfoTec Workflow</h2>
-                            <p className="text-xl text-slate-500 max-w-2xl mx-auto">Selecteer de tool die u nodig heeft om uw kwaliteitstesten te beheren.</p>
+                            <h2 className="text-4xl font-bold mb-4 brand-heading">Welkom bij de {config.BRAND.name} Workflow</h2>
+                            <p className="text-xl max-w-2xl mx-auto opacity-70">Selecteer de tool die u nodig heeft om uw kwaliteitstesten te beheren.</p>
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
@@ -82,7 +112,7 @@
                                 description="Verzamel klantgegevens en productinformatie. Dit vormt de basis voor elke nieuwe aanvraag."
                                 icon={ClipboardList}
                                 href="intake.html"
-                                color={BRAND.blue}
+                                color={config.BRAND.colors.primary.blue}
                             />
                             <ToolCard 
                                 step="2"
@@ -90,7 +120,7 @@
                                 description="Stel een gedetailleerd testplan op. Gebruik de data uit de intake om een simulatie voor te stellen."
                                 icon={FileText}
                                 href="proposal.html"
-                                color={BRAND.green}
+                                color={config.BRAND.colors.primary.green}
                             />
                             <ToolCard 
                                 step="3"
@@ -98,29 +128,29 @@
                                 description="Verwerk testdata tot een officieel rapport met grafieken, foto's en conclusies voor de klant."
                                 icon={BarChart3}
                                 href="report.html"
-                                color={BRAND.dark}
+                                color={config.BRAND.colors.neutral.black}
                             />
                         </div>
 
                         {/* Info Footer */}
-                        <div className="mt-20 grid grid-cols-1 md:grid-cols-3 gap-8 border-t border-slate-200 pt-12 text-sm text-slate-500">
+                        <div className="mt-20 grid grid-cols-1 md:grid-cols-3 gap-8 border-t border-[var(--brand-gray)] pt-12 text-sm opacity-80">
                             <div className="flex gap-3 items-start">
-                                <Zap className="text-yellow-500 shrink-0" size={20} />
+                                <Zap className="shrink-0" size={20} style={{ color: config.BRAND.colors.secondary.orange }} />
                                 <p><strong>Data Flow:</strong> Alle tools werken met JSON-bestanden. Exporteer de JSON vanuit de Intake en laad deze direct in de Proposal of het Report.</p>
                             </div>
                             <div className="flex gap-3 items-start">
-                                <ShieldCheck className="text-green-600 shrink-0" size={20} />
-                                <p><strong>Privacy:</strong> Uw data wordt lokaal in de browser verwerkt en niet opgeslagen op een externe server (tenzij u op opslaan klikt).</p>
+                                <ShieldCheck className="shrink-0" size={20} style={{ color: config.BRAND.colors.primary.green }} />
+                                <p><strong>Privacy:</strong> Uw data wordt lokaal in de browser verwerkt en niet opgeslagen op een externe server.</p>
                             </div>
                             <div className="flex gap-3 items-start">
-                                <Settings className="text-blue-500 shrink-0" size={20} />
-                                <p><strong>Lokale Opslag:</strong> Voor de beste werking plaatst u alle bestanden in dezelfde map op uw computer of server.</p>
+                                <Settings className="shrink-0" size={20} style={{ color: config.BRAND.colors.secondary.lightBlue }} />
+                                <p><strong>Lokale Opslag:</strong> Zorg dat de bestanden <code>config.js</code> en <code>style.css</code> in dezelfde map staan als de webpagina's.</p>
                             </div>
                         </div>
                     </main>
 
-                    <footer className="py-8 text-center text-slate-400 text-xs border-t border-slate-100 bg-white">
-                        &copy; {new Date().getFullYear()} PerfoTec B.V. - Best for Freshness
+                    <footer className="py-8 text-center text-xs border-t border-[var(--brand-gray)] bg-[var(--brand-white)] opacity-60">
+                        &copy; {new Date().getFullYear()} {config.BRAND.name} - {config.BRAND.tagline}
                     </footer>
                 </div>
             );
