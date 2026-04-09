@@ -1,0 +1,20 @@
+/* style.css */
+@import url('[https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=League+Spartan:wght@700&display=swap](https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=League+Spartan:wght@700&display=swap)');
+
+html { scroll-behavior: smooth; }
+body { background-color: #f8fafc; font-family: 'Inter', sans-serif; }
+
+.brand-heading { font-family: 'League Spartan', sans-serif; }
+.brand-body { font-family: 'Inter', sans-serif; }
+
+/* Hier kun je al je label, input, en pdf-print classes uit de andere bestanden inzetten! */
+.label { 
+    display: block; font-size: 0.75rem; font-weight: 700; color: #64748b; 
+    text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; 
+}
+.input { 
+    width: 100%; padding: 0.75rem 1rem; border: 1px solid #cbd5e1; 
+    border-radius: 0.5rem; outline: none; transition: all 0.2s; 
+    background-color: #ffffff; color: #1e293b;
+}
+.input:focus { border-color: #007C27; box-shadow: 0 0 0 3px rgba(0, 124, 39, 0.15); }
