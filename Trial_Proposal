@@ -1,0 +1,1270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PerfoTec Proposal Tool</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Babel compiler voor in-browser React (JSX) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        html { scroll-behavior: smooth; }
+        body { background-color: #f8fafc; }
+        
+        .label { 
+            display: block; font-size: 0.75rem; font-weight: 700; color: #64748b; 
+            text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.35rem; 
+            font-family: 'Inter', sans-serif;
+            white-space: nowrap;
+        }
+        .input { 
+            width: 100%; padding: 0.6rem; border: 1px solid #e2e8f0; 
+            border-radius: 0.5rem; outline: none; transition: 0.2s; 
+            font-size: 0.9rem; font-family: 'Inter', sans-serif; 
+        }
+        .input:focus { 
+            border-color: #007C27; box-shadow: 0 0 0 3px rgba(0, 124, 39, 0.1); 
+        }
+        
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=League+Spartan:wght@700&display=swap');
+        .brand-heading { font-family: 'League Spartan', sans-serif; }
+        .brand-body { font-family: 'Inter', sans-serif; }
+
+        .rich-text-editor { min-height: 120px; }
+        .rich-text-editor ul { list-style-type: disc; padding-left: 1.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem; }
+        .rich-text-editor li { margin-bottom: 0.25rem; }
+        .rich-text-editor b { font-weight: 700; }
+        .rich-text-editor i { font-style: italic; }
+        .rich-text-editor u { text-decoration: underline; }
+        [contenteditable]:empty:before { content: attr(data-placeholder); color: #94a3b8; pointer-events: none; display: block; }
+
+        @media print {
+            body { background-color: white !important; }
+            .no-print { display: none !important; }
+            #print-area { width: 100%; padding: 0; margin: 0; }
+            .page-break { page-break-before: always; }
+            .break-inside-avoid { break-inside: avoid; page-break-inside: avoid; }
+            body * { visibility: hidden; }
+            #print-content, #print-content * { visibility: visible; }
+            #print-content { 
+              position: absolute; left: 0; top: 0; width: 100%; 
+              margin: 0; padding: 0; background: white; box-shadow: none; 
+            }
+            svg { break-inside: avoid; }
+            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        }
+        
+        .report-section-title { 
+            color: #007C27; font-family: 'League Spartan', sans-serif; 
+            font-size: 1.5rem; font-weight: bold; border-bottom: 2px solid #E9E9E9; 
+            padding-bottom: 0.5rem; margin-bottom: 1rem; margin-top: 2rem; 
+        }
+        .report-table th { background-color: #007C27; color: white; padding: 8px; text-align: left; font-family: 'League Spartan', sans-serif; }
+        .report-table td { border-bottom: 1px solid #E9E9E9; padding: 8px; font-family: 'Inter', sans-serif; font-size: 0.9rem; }
+        
+        .pdf-rich-text, .pdf-rich-text * { font-family: 'Inter', sans-serif !important; font-size: 0.875rem !important; color: #1e293b !important; line-height: 1.625 !important; }
+        .pdf-rich-text b, .pdf-rich-text strong { font-weight: 700 !important; }
+        .pdf-rich-text i, .pdf-rich-text em { font-style: italic !important; }
+        .pdf-rich-text u { text-decoration: underline !important; }
+        .pdf-rich-text ul { list-style-type: disc !important; padding-left: 1.5rem !important; margin-top: 0.5rem !important; margin-bottom: 0.5rem !important; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel" data-type="module">
+        import React, { useState, useRef, useEffect } from 'https://esm.sh/react@18.2.0';
+        import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
+        import { 
+          Printer, FileText, Settings, Layout, CheckCircle, 
+          ArrowRight, Copy, Trash2, Plus, Scale, Upload, Truck, 
+          Thermometer, Clock, Image as ImageIcon, ChevronRight, 
+          Save, FolderOpen, Tractor, Ship, Plane, Warehouse, Store, 
+          Utensils, Factory, ArrowDown, ArrowUp, ChevronUp, ChevronDown, 
+          Bold, Italic, Underline, List, AlertTriangle, Package,
+          X, Edit3, Camera, FileArchive, LineChart
+        } from 'https://esm.sh/lucide-react@0.292.0';
+
+        // --- BRAND CONFIGURATIE ---
+        const BRAND = {
+          colors: {
+            green: '#007C27', 
+            blue: '#054E9A',  
+            black: '#211A1A', 
+            gray: '#E9E9E9',
+            lightGray: '#F3F4F6',
+            white: '#FFFFFF'
+          },
+          fonts: {
+            heading: '"League Spartan", sans-serif',
+            body: '"Inter", sans-serif'
+          }
+        };
+
+        const CHART_COLORS = [
+          { stroke: '#054E9A', fill: '#dbeafe', name: 'Electric Blue' },    
+          { stroke: '#007C27', fill: '#dcfce7', name: 'La Salle Green' },     
+          { stroke: '#211A1A', fill: '#f3f4f6', name: 'Eerie Black' },   
+          { stroke: '#ea580c', fill: '#ffedd5', name: 'Orange' },  
+          { stroke: '#9333ea', fill: '#f3e8ff', name: 'Purple' }   
+        ];
+
+        const PACKAGING_TYPES = ['Retail', 'Box/ Crate', 'Cube crate', 'Pallet'];
+
+        const DEFAULT_CRITERIA = [
+          'General Quality', 'Taste', 'Visual Appearance', 'Color',
+          'Smell / Aroma', 'Texture / Firmness', 'Humidity / Condensation',
+          'Dehydration / Shriveling', 'Moulds / Decay', 'Internal Browning'
+        ];
+
+        // --- HULPFUNCTIES ---
+        const getStageIcon = (name) => {
+          const n = name?.toLowerCase() || '';
+          if (n.includes('farm') || n.includes('harvest') || n.includes('oogst')) return <Tractor size={14} color={BRAND.colors.black} />;
+          if (n.includes('sea')) return <Ship size={14} color={BRAND.colors.black} />;
+          if (n.includes('air')) return <Plane size={14} color={BRAND.colors.black} />;
+          if (n.includes('storage') || n.includes('dc')) return <Warehouse size={14} color={BRAND.colors.black} />;
+          if (n.includes('store') || n.includes('retail')) return <Store size={14} color={BRAND.colors.black} />;
+          if (n.includes('consumer') || n.includes('eat')) return <Utensils size={14} color={BRAND.colors.black} />;
+          if (n.includes('pack') && !n.includes('transport')) return <Factory size={14} color={BRAND.colors.black} />;
+          return <Truck size={14} color={BRAND.colors.black} />;
+        };
+
+        const formatRange = (start, end, unit) => {
+          if (start && end && start !== end) return `${start}-${end}${unit}`;
+          if (start) return `${start}${unit}`;
+          return `-`;
+        };
+
+        const formatDateToDDMMYYYY = (dateStr) => {
+          if (!dateStr) return '-';
+          const parts = dateStr.split('-');
+          if (parts.length !== 3) return dateStr;
+          return `${parts[2]}/${parts[1]}/${parts[0]}`;
+        };
+
+        // --- COMPONENTEN ---
+        const RichTextEditor = ({ value, onChange, placeholder }) => {
+          const editorRef = useRef(null);
+
+          useEffect(() => {
+            if (editorRef.current && value !== editorRef.current.innerHTML) {
+              editorRef.current.innerHTML = value || '';
+            }
+          }, [value]);
+
+          const handleInput = () => {
+            if (editorRef.current) onChange(editorRef.current.innerHTML);
+          };
+
+          const execCmd = (cmd) => {
+            document.execCommand(cmd, false, null);
+            editorRef.current.focus();
+            handleInput();
+          };
+
+          return (
+            <div className="border border-slate-200 rounded-md overflow-hidden bg-white focus-within:border-green-600 focus-within:ring-2 focus-within:ring-green-100 transition flex flex-col h-full min-h-[120px]">
+              <div className="bg-slate-50 border-b border-slate-200 p-1 flex gap-1 shrink-0">
+                <button type="button" onClick={() => execCmd('bold')} className="p-1.5 hover:bg-slate-200 rounded text-slate-700 w-8 flex justify-center items-center"><Bold size={16}/></button>
+                <button type="button" onClick={() => execCmd('italic')} className="p-1.5 hover:bg-slate-200 rounded text-slate-700 w-8 flex justify-center items-center"><Italic size={16}/></button>
+                <button type="button" onClick={() => execCmd('underline')} className="p-1.5 hover:bg-slate-200 rounded text-slate-700 w-8 flex justify-center items-center"><Underline size={16}/></button>
+                <div className="w-px bg-slate-300 mx-1 my-1"></div>
+                <button type="button" onClick={() => execCmd('insertUnorderedList')} className="p-1.5 hover:bg-slate-200 rounded text-slate-700 w-8 flex justify-center items-center"><List size={16}/></button>
+              </div>
+              <div
+                ref={editorRef}
+                contentEditable
+                onInput={handleInput}
+                onBlur={handleInput}
+                className="p-3 outline-none rich-text-editor text-sm font-sans flex-1 overflow-y-auto min-h-[100px]"
+                data-placeholder={placeholder}
+              />
+            </div>
+          );
+        };
+
+        const SupplyChainFlow = ({ chain }) => {
+          if (!chain || chain.length === 0) return null;
+          
+          return (
+            <div className="grid grid-cols-6 gap-2 w-full font-sans mt-4 mb-2 pb-2">
+              {chain.map((step, idx) => {
+                return (
+                  <div key={idx} className="relative flex flex-col items-center w-full">
+                    {/* Pijl naar het volgende item */}
+                    {(idx + 1) % 6 !== 0 && idx !== chain.length - 1 && (
+                      <div className="absolute top-10 -right-[12px] flex items-center justify-center z-10 text-gray-300">
+                        <ChevronRight size={16} />
+                      </div>
+                    )}
+                    <div className="w-full flex flex-col items-center bg-white border border-gray-200 rounded-lg shadow-sm p-1.5 relative min-h-[5.5rem]">
+                       <div className="absolute top-0 left-0 w-full h-1" style={{backgroundColor: idx % 2 === 0 ? BRAND.colors.green : BRAND.colors.blue}}></div>
+                       <div className="bg-gray-50 p-1.5 rounded-full mb-1 flex-shrink-0 mt-1">{getStageIcon(step.stage || '')}</div>
+                       <div className="text-[8px] font-bold text-center uppercase mb-1 flex-grow flex items-center justify-center leading-tight w-full break-words px-1 overflow-hidden">{step.stage || '-'}</div>
+                       <div className="w-full border-t border-dotted border-gray-200 my-0.5"></div>
+                       <div className="flex flex-col justify-center w-full text-[8px] gap-0.5">
+                          <span className="flex items-center justify-center gap-0.5 font-bold text-gray-700 whitespace-nowrap"><Thermometer size={8} className="text-red-500"/>{formatRange(step.tempStart, step.tempEnd, '°C')}</span>
+                          <span className="flex items-center justify-center gap-0.5 text-gray-500 whitespace-nowrap"><Clock size={8}/>{formatRange(step.daysStart, step.daysEnd, 'd')}</span>
+                       </div>
+                    </div>
+                    <div className="h-8 w-full flex justify-center items-start mt-1 relative">
+                        {step.action === 'pack' && <div className="flex flex-col items-center"><div className="bg-green-100 text-green-700 rounded-full p-0.5 border border-green-200"><ArrowDown size={12} /></div><span className="text-[7px] font-bold text-green-700 uppercase mt-0.5">Packed</span></div>}
+                        {step.action === 'unpack' && <div className="flex flex-col items-center"><div className="bg-red-100 text-red-700 rounded-full p-0.5 border border-red-200"><ArrowUp size={12} /></div><span className="text-[7px] font-bold text-red-700 uppercase mt-0.5">Opened</span></div>}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          );
+        };
+
+        // --- HOOFD APPLICATIE ---
+        const App = () => {
+          const [activeTab, setActiveTab] = useState('setup');
+          const [activeGroupId, setActiveGroupId] = useState(1);
+          const [isPreview, setIsPreview] = useState(false);
+          const fileInputRef = useRef(null);
+
+          const [pendingImageReplace, setPendingImageReplace] = useState(null);
+
+          // --- DATA STATE ---
+          const [project, setProject] = useState({
+            reportTitle: 'Trial Proposal', 
+            productName: '', processingType: 'Whole', type: '', origin: '', company: '', contactName: '', contactEmail: '', contactPhone: '', employee: '', trialTarget: '', currentChallenge: '',
+            rrO2: '', rrCO2: '', rrTemp: '', startWeight: '', 
+            acpO2: '', co2Max: '', co2Shock: '', co2ShockHours: '', tempMin: '', // Nieuwe optimale condities
+            totalDuration: '', retailOpenDays: '', transportMode: '',
+            criteria: [], // Verzoek: Standaard helemaal leeg
+            date: new Date().toISOString().split('T')[0], packingDate: new Date().toISOString().split('T')[0],
+            logo: 'https://cdn.prod.website-files.com/68b594c756c22085ddc6c1ea/68b59ba2f027bfeecd25261b_PerfoTec%20logo.png', clientLogo: null, startImage: null, coverImage: null,
+            maturityStage: '', postHarvestTreatment: '',
+            defectsMatrix: [] // Verzoek: Standaard leeg
+          });
+
+          const [supplyChain, setSupplyChain] = useState([
+            { stage: 'Farm / Harvest', tempStart: '15', tempEnd: '', daysStart: '0.5', daysEnd: '', action: 'none' },
+            { stage: 'Packing House', tempStart: '12', tempEnd: '', daysStart: '1', daysEnd: '', action: 'pack' },
+            { stage: 'Transport by road', tempStart: '6', tempEnd: '', daysStart: '2', daysEnd: '', action: 'none' },
+            { stage: 'Importer / Processor', tempStart: '8', tempEnd: '', daysStart: '1', daysEnd: '', action: 'none' },
+            { stage: 'Retail Store', tempStart: '18', tempEnd: '', daysStart: '4', daysEnd: '', action: 'none' },
+            { stage: 'Consumer (Open Pack)', tempStart: '20', tempEnd: '', daysStart: '2', daysEnd: '', action: 'unpack' }
+          ]);
+
+          const [groups, setGroups] = useState([
+            {
+              id: 1, name: 'Control',
+              specs: { packaging: 'Retail', material: 'BOPP', length: '', width: '', height: '', holes: '2', holeSize: '6000', sampleCount: 3 },
+              measurements: [{ day: 0 }, { day: 5 }],
+              predictedImage: null 
+            },
+            {
+              id: 2, name: 'PerfoTec Laser',
+              specs: { packaging: 'Retail', material: 'BOPP', length: '', width: '', height: '', holes: '4', holeSize: '95', sampleCount: 3 },
+              measurements: [{ day: 0 }, { day: 5 }],
+              predictedImage: null 
+            }
+          ]);
+
+          const [proposal, setProposal] = useState({ 
+            intro: 'To extend the shelf life and maintain the optimal quality of your product, we propose conducting a comparative MAP (Modified Atmosphere Packaging) trial. By utilizing PerfoTec\'s advanced respiration and laser technology, we aim to create the perfect microclimate within the packaging.', 
+            expectedOutcomes: '<ul><li>Extension of shelf life by X days.</li><li>Reduction of moisture loss and weight loss.</li><li>Maintenance of natural color and firmness.</li></ul>', 
+            requirements: '<ul><li>Provide current packaging material for the control group.</li><li>The product must be transported under cooled conditions.</li></ul>' 
+          });
+          
+          const [newCriteria, setNewCriteria] = useState('');
+
+          const calcUnpackingDate = () => {
+            const baseDate = project.packingDate || project.date;
+            const duration = parseInt(project.totalDuration) || 0;
+            if (baseDate && duration) {
+               const d = new Date(baseDate);
+               d.setDate(d.getDate() + duration);
+               const day = String(d.getDate()).padStart(2, '0');
+               const month = String(d.getMonth() + 1).padStart(2, '0');
+               const year = d.getFullYear();
+               return `${day}/${month}/${year}`; 
+            }
+            return '-';
+          };
+          
+          const calcRetailDate = () => {
+            const baseDate = project.packingDate || project.date;
+            const duration = parseInt(project.totalDuration) || 0;
+            const retailDays = parseInt(project.retailOpenDays) || 0;
+            if (baseDate && (duration || retailDays)) {
+               const d = new Date(baseDate);
+               d.setDate(d.getDate() + duration + retailDays);
+               const day = String(d.getDate()).padStart(2, '0');
+               const month = String(d.getMonth() + 1).padStart(2, '0');
+               const year = d.getFullYear();
+               return `${day}/${month}/${year}`; 
+            }
+            return '-';
+          };
+
+          // --- HANDLERS ---
+          const handleImgUpload = (e, field) => { 
+             const f = e.target.files[0]; 
+             if(f) { 
+                const r = new FileReader(); 
+                r.onloadend = () => { setProject(p => ({...p, [field]: r.result})); }; 
+                r.readAsDataURL(f); 
+             }
+          };
+
+          const handlePredictedImageUpload = (e, groupId) => { 
+            const file = e.target.files[0]; 
+            if(file) { 
+              const group = groups.find(g => g.id === groupId);
+              const reader = new FileReader(); 
+              reader.onloadend = () => {
+                 if (group && group.predictedImage) {
+                    setPendingImageReplace({ groupId: groupId, result: reader.result });
+                 } else {
+                    setGroups(prev => prev.map(g => g.id === groupId ? { ...g, predictedImage: reader.result } : g)); 
+                 }
+              };
+              reader.readAsDataURL(file); 
+              e.target.value = '';
+            }
+          };
+
+          const confirmReplaceImage = () => {
+            setGroups(prev => prev.map(g => g.id === pendingImageReplace.groupId ? { ...g, predictedImage: pendingImageReplace.result } : g));
+            setPendingImageReplace(null);
+          };
+
+          const removePredictedImage = (groupId) => {
+            setGroups(prev => prev.map(g => g.id === groupId ? { ...g, predictedImage: null } : g));
+          };
+
+          const handleProjectChange = (f, v) => setProject(p => ({...p, [f]: v}));
+          
+          const handleDurationChange = (e) => {
+            setProject(p => ({...p, totalDuration: e.target.value}));
+          };
+
+          const addDefectRow = () => {
+            setProject(p => ({ ...p, defectsMatrix: [...(p.defectsMatrix || []), { id: Date.now(), defect: '', cause: '', effectMHP: '', effectMAP: '' }] }));
+          };
+          const updateDefectRow = (id, field, val) => {
+            setProject(p => ({ ...p, defectsMatrix: p.defectsMatrix.map(r => r.id === id ? { ...r, [field]: val } : r) }));
+          };
+          const removeDefectRow = (id) => {
+            setProject(p => ({ ...p, defectsMatrix: p.defectsMatrix.filter(r => r.id !== id) }));
+          };
+
+          const exportData = () => {
+            const exportGroups = groups.map(g => ({
+              ...g,
+              measurements: (g.measurements || []).map(m => ({
+                 day: m.day,
+                 samples: Array.from({length: g.specs?.sampleCount || 3}, (_, i) => ({ id: Date.now()+i, o2: '', co2: '', weight: '' })),
+                 quality: 9,
+                 notes: '',
+                 images: [],
+                 qualityParams: [],
+                 evaluateQuality: true
+              }))
+            }));
+
+            const data = { project, supplyChain, groups: exportGroups, proposal };
+            const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a'); a.href = url; 
+            a.download = `perfotec_proposal_${project.company ? project.company.replace(/[^a-z0-9]/gi, '_').toLowerCase() : 'client'}.json`; 
+            a.click();
+          };
+
+          const importData = (e) => { 
+            const file = e.target.files[0]; if(!file) return; 
+            const reader = new FileReader(); 
+            reader.onload = (ev) => { 
+                try { 
+                    const d = JSON.parse(ev.target.result); 
+                    if(d.isPerfoTecIntake) {
+                       const client = d.client || {}; const prod = d.products?.[0] || {};
+                       setProject(p => ({ ...p, 
+                         company: client.companyName||'', street: client.street||'', houseNumber: client.houseNumber||'', zipCode: client.zipCode||'', city: client.city||'', country: client.country||'', contactName: client.contactName||'', contactRole: client.role||'', contactEmail: client.email||'', contactPhone: client.phone||'', logo: client.logo||p.logo, productName: prod.name||'', processingType: prod.processingType||'Whole', maturityStage: prod.maturityStage||'', postHarvestTreatment: prod.postHarvestTreatment||'', currentChallenge: prod.currentChallenge||'', trialTarget: prod.targetGoal||'', transportMode: prod.transportMode || (prod.transportModes?.[0] || ''), criteria: prod.qualityCriteria||[], startImage: prod.photo||null,
+                         startWeight: prod.weight || p.startWeight 
+                       }));
+                       if (prod.supplyChain) setSupplyChain(prod.supplyChain);
+                       setGroups(p => { const ug = [...p]; if(ug[0]) { ug[0].specs = { ...ug[0].specs, packaging: prod.packagingType||'Retail', material: prod.material||'', length: prod.length||'', width: prod.width||'', height: prod.height||'' }; } return ug; });
+                    } else {
+                       if(d.project) {
+                           setProject(p => ({
+                               ...p, 
+                               ...d.project, 
+                               co2Shock: d.project.co2Shock || d.project.co2Burst || '', // Backwards compatibility
+                               packingDate: d.project.packingDate || d.project.date || new Date().toISOString().split('T')[0], 
+                               transportMode: d.project.transportMode || '',
+                               startWeight: d.project.startWeight || d.groups?.[0]?.specs?.startWeight || ''
+                           })); 
+                       }
+                       if(d.supplyChain) setSupplyChain(d.supplyChain); 
+                       if(d.groups) {
+                           const proposalGroups = d.groups.map(g => ({
+                               ...g,
+                               measurements: (g.measurements || []).map(m => ({ day: m.day }))
+                           }));
+                           setGroups(proposalGroups);
+                       }
+                       if(d.proposal) setProposal(d.proposal);
+                    }
+                } catch(err){ alert("Error loading file."); } 
+            }; reader.readAsText(file); 
+          };
+
+          const handleGroupChange = (id, section, field, value) => {
+            setGroups(prev => prev.map(g => {
+              if (g.id !== id) return g;
+              if (section === 'name') return { ...g, name: value };
+              if (section === 'specs') return { ...g, specs: { ...g.specs, [field]: value } };
+              return g;
+            }));
+          };
+
+          const toggleCriteria = (c) => setProject(p => ({ ...p, criteria: p.criteria?.includes(c) ? p.criteria.filter(x => x !== c) : [...(p.criteria||[]), c] }));
+          const addNewCriteria = () => { if(newCriteria && !(project.criteria||[]).includes(newCriteria)) { toggleCriteria(newCriteria); setNewCriteria(''); }};
+          const handleTransportModeToggle = (mode) => {
+            setProject(p => ({ ...p, transportMode: p.transportMode === mode ? '' : mode }));
+          };
+
+          // Supply Chain
+          const addChainStep = () => setSupplyChain([...supplyChain, { stage: '', tempStart: '', tempEnd: '', daysStart: '', daysEnd: '', action: 'none' }]);
+          const updateChainStep = (i, f, v) => { const n = [...supplyChain]; n[i][f] = v; setSupplyChain(n); };
+          const removeChainStep = (i) => setSupplyChain(supplyChain.filter((_, idx) => idx !== i));
+          const moveChainStep = (i, dir) => { const n = [...supplyChain]; if(dir==='up' && i>0){ [n[i], n[i-1]] = [n[i-1], n[i]]; } else if(dir==='down' && i<n.length-1){ [n[i], n[i+1]] = [n[i+1], n[i]]; } setSupplyChain(n); };
+
+          // Group Handling
+          const addNewVariant = () => {
+            const newId = Math.max(...groups.map(g => g.id), 0) + 1;
+            setGroups([...groups, { 
+                id: newId, 
+                name: `Variant ${groups.length + 1}`, 
+                specs: { ...groups[0].specs }, 
+                measurements: [...groups[0].measurements],
+                predictedImage: null
+            }]);
+            setActiveGroupId(newId);
+          };
+
+          const duplicateGroup = (id) => { const org = groups.find(g => g.id === id); const newId = Math.max(...groups.map(g => g.id), 0) + 1; setGroups(p => [...p, { ...org, id: newId, name: `${org.name} (Copy)` }]); setActiveGroupId(newId); };
+          const removeGroup = (id) => { 
+            if(groups.length > 1) { 
+                setGroups(p => {
+                    const newGroups = p.filter(g => g.id !== id);
+                    if (activeGroupId === id) setActiveGroupId(newGroups[0].id);
+                    return newGroups;
+                });
+            }
+          };
+
+          // Days handling for groups
+          const addEvaluationDay = () => {
+              const lastDay = groups[0]?.measurements?.length > 0 ? Math.max(...groups[0].measurements.map(m => m.day)) : 0;
+              const newDay = lastDay + 1;
+              setGroups(prev => prev.map(g => ({
+                  ...g,
+                  measurements: [...(g.measurements || []), { day: newDay }].sort((a,b) => a.day - b.day)
+              })));
+          };
+
+          const removeEvaluationDay = (dayToRemove) => {
+              setGroups(prev => prev.map(g => ({
+                  ...g,
+                  measurements: (g.measurements || []).filter(m => m.day !== dayToRemove)
+              })));
+          };
+          
+          const updateEvaluationDay = (oldDay, newDayValue) => {
+              const newD = parseFloat(newDayValue) || 0;
+              setGroups(prev => prev.map(g => ({
+                  ...g,
+                  measurements: (g.measurements || []).map(m => m.day === oldDay ? { day: newD } : m).sort((a,b) => a.day - b.day)
+              })));
+          };
+
+          const handleWordExport = () => {
+              const content = document.getElementById('print-content').innerHTML;
+              const preHtml = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export HTML To Doc</title><style>body { font-family: 'Arial', sans-serif; } .page-break { page-break-before: always; } table { width: 100%; border-collapse: collapse; margin-bottom: 20px; } th, td { border: 1px solid #ccc; padding: 8px; text-align: left; } th { background-color: #007C27; color: white; } img { max-width: 100%; height: auto; }</style></head><body>`;
+              const postHtml = "</body></html>";
+              const html = preHtml + content + postHtml;
+              const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
+              const url = URL.createObjectURL(blob);
+              const downloadLink = document.createElement("a");
+              document.body.appendChild(downloadLink);
+              downloadLink.href = URL.createObjectURL(blob);
+              downloadLink.download = (project.reportTitle || 'Proposal') + '.doc';
+              downloadLink.click();
+              document.body.removeChild(downloadLink);
+          };
+
+
+          // --- PDF REPORT VIEW ---
+          if (isPreview) {
+            const evaluationDays = Array.from(new Set(groups.flatMap(g => (g.measurements || []).map(m => m.day)))).sort((a,b) => a-b);
+            
+            let allTemps = [];
+            (supplyChain || []).forEach(s => {
+                const ts = parseFloat(s.tempStart); if(!isNaN(ts)) allTemps.push(ts);
+                const te = parseFloat(s.tempEnd); if(!isNaN(te)) allTemps.push(te);
+            });
+            const minTemp = allTemps.length > 0 ? Math.min(...allTemps) : null;
+            const maxTemp = allTemps.length > 0 ? Math.max(...allTemps) : null;
+            const tempString = allTemps.length > 0 ? (minTemp === maxTemp ? `${minTemp}°C` : `${minTemp}°C - ${maxTemp}°C`) : '-°C';
+            const totalDays = project.totalDuration || (supplyChain || []).reduce((acc,s) => acc + parseFloat(s.daysStart || 0), 0);
+
+            return (
+              <div className="min-h-screen bg-gray-500 p-0 sm:p-8 overflow-y-auto font-sans print:p-0 print:bg-white no-print-bg">
+                <style dangerouslySetInnerHTML={{ __html: `
+                    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=League+Spartan:wght@700&display=swap');
+                    .brand-heading { font-family: 'League Spartan', sans-serif; }
+                    .brand-body { font-family: 'Inter', sans-serif; }
+                    .report-section-title { color: ${BRAND.colors.green}; font-family: 'League Spartan', sans-serif; font-size: 2rem; font-weight: bold; text-transform: uppercase; border-bottom: 3px solid ${BRAND.colors.gray}; padding-bottom: 0.5rem; margin-bottom: 1.5rem; margin-top: 1rem; }
+                    .report-table th { background-color: ${BRAND.colors.green}; color: white; padding: 8px; text-align: left; font-family: 'League Spartan', sans-serif; }
+                    .report-table td { border-bottom: 1px solid ${BRAND.colors.gray}; padding: 8px; font-family: 'Inter', sans-serif; font-size: 0.9rem; }
+                    
+                    /* PDF Richtext Styles */
+                    .pdf-rich-text ul { list-style-type: disc; padding-left: 1.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem; }
+                    .pdf-rich-text li { margin-bottom: 0.25rem; }
+                    .pdf-rich-text b { font-weight: 700; }
+                    .pdf-rich-text i { font-style: italic; }
+                    .pdf-rich-text u { text-decoration: underline; }
+                    .pdf-rich-text, .pdf-rich-text * { font-family: 'Inter', sans-serif !important; font-size: 0.875rem !important; color: #1e293b !important; line-height: 1.625 !important; }
+
+                    /* ROBUST PRINT STYLES */
+                    @media print {
+                      body { background: white; margin: 0; padding: 0; }
+                      body * { visibility: hidden; }
+                      #print-content, #print-content * { visibility: visible !important; }
+                      #print-content { 
+                        position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; background: white; box-shadow: none;
+                      }
+                      * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+                      .no-print, .no-print * { display: none !important; opacity: 0 !important; visibility: hidden !important; }
+                      button { display: none !important; }
+                      .page-break { page-break-before: always !important; break-before: page !important; }
+                      .break-inside-avoid { break-inside: avoid !important; page-break-inside: avoid !important; }
+                    }
+                `}} />
+
+                <div className="fixed bottom-8 right-8 flex gap-4 no-print z-50">
+                  <button onClick={() => setIsPreview(false)} className="bg-slate-600 text-white px-6 py-3 rounded-full shadow-lg font-bold transition hover:bg-slate-700">Edit</button>
+                  <button onClick={handleWordExport} className="bg-blue-600 text-white px-6 py-3 rounded-full shadow-lg font-bold flex gap-2 hover:bg-blue-700 transition">
+                    <FileArchive size={20} /> Download Word
+                  </button>
+                  <button onClick={() => window.print()} className="bg-green-600 text-white px-6 py-3 rounded-full shadow-lg font-bold flex items-center gap-2 hover:bg-green-700 transition">
+                    <Printer size={18} /> Download PDF
+                  </button>
+                </div>
+
+                <div id="print-content" className="max-w-[21cm] mx-auto bg-white shadow-2xl min-h-[29.7cm] p-12 relative print:shadow-none print:max-w-full print:w-full print:p-0">
+                  
+                  {/* --- COVER PAGE --- */}
+                  <div className="h-[27cm] flex flex-col justify-between">
+                     <div>
+                        <div className="flex justify-between items-start mb-16 w-full">
+                          <div className="flex flex-col">
+                            <img src={project.logo || ''} alt="PerfoTec Logo" className="h-16 max-w-[250px] object-contain self-start mb-2" />
+                            <div className="text-sm font-bold tracking-[0.25em] uppercase" style={{ color: BRAND.colors.blue, fontFamily: BRAND.fonts.heading, marginLeft: '4px' }}>Best for Freshness</div>
+                          </div>
+                          {project.clientLogo && (
+                            <div className="flex justify-end items-start h-16 max-w-[250px]">
+                               <img src={project.clientLogo} alt="Client Logo" className="h-full w-auto object-contain" />
+                            </div>
+                          )}
+                        </div>
+
+                        <h1 className="text-5xl font-bold uppercase mb-4 brand-heading" style={{ color: BRAND.colors.green }}>{project.reportTitle || 'Trial Proposal'}</h1>
+                        <h2 className="text-4xl font-light brand-heading text-slate-600 mb-12">{project.productName || '<Product Name>'}</h2>
+                        <div className="w-full h-[450px] overflow-hidden flex items-center justify-center relative bg-transparent border-none">
+                           {project.coverImage ? <img src={project.coverImage} className="w-full h-full object-contain" /> : project.startImage ? <img src={project.startImage} className="w-full h-full object-contain" /> : <span className="text-slate-300 italic">No Cover Photo</span>}
+                        </div>
+                     </div>
+                     <div className="text-center text-sm text-slate-400 brand-body">{new Date().getFullYear()} © PerfoTec B.V.</div>
+                  </div>
+
+                  <div className="page-break"></div>
+
+                  {/* --- PAGE 2: INTRO & SETTING --- */}
+                  <div className="min-h-[27cm] flex flex-col pt-4">
+                    <h2 className="report-section-title">1 Introduction & Objectives</h2>
+                    <div className="brand-body text-base leading-relaxed text-justify text-slate-800 mb-8">
+                       <div className="mb-6 whitespace-pre-wrap pdf-rich-text" dangerouslySetInnerHTML={{ __html: proposal?.intro || '' }}></div>
+                       
+                       {project.currentChallenge && (
+                         <div className="mb-4">
+                           <h4 className="font-bold text-lg" style={{color: BRAND.colors.black}}>Current Challenge:</h4>
+                           <div className="whitespace-pre-wrap">{project.currentChallenge}</div>
+                         </div>
+                       )}
+
+                       {project.trialTarget && (
+                         <div className="mb-4">
+                           <h4 className="font-bold text-lg" style={{color: BRAND.colors.green}}>Trial Target:</h4>
+                           <div className="whitespace-pre-wrap">{project.trialTarget}</div>
+                         </div>
+                       )}
+                       
+                       {proposal?.expectedOutcomes && (
+                         <div className="mb-6">
+                           <h4 className="font-bold text-lg mb-1" style={{color: BRAND.colors.blue}}>Expected Outcomes:</h4>
+                           <div className="whitespace-pre-wrap pdf-rich-text" dangerouslySetInnerHTML={{ __html: proposal.expectedOutcomes }}></div>
+                         </div>
+                       )}
+                    </div>
+
+                    <h2 className="report-section-title">2 Company & Project Info</h2>
+                    <div className="grid grid-cols-[180px_1fr] gap-y-3 text-base brand-body text-slate-800">
+                       <div className="font-bold">Product :</div> <div>{project.productName || '-'} {project.type ? `(${project.type})` : ''}</div>
+                       <div className="font-bold">State of product :</div> <div>{project.processingType === 'Whole' ? 'Whole' : 'Processed / Fresh-cut'}</div>
+                       <div className="font-bold">Product Origin :</div> <div>{project.origin || '-'}</div>
+                       
+                       {(project.company || project.street || project.contactName || project.contactEmail || project.contactPhone) && (
+                         <div className="font-bold col-span-2 mt-4 border-t border-slate-300 pt-2 text-lg" style={{color: BRAND.colors.green}}>Company Info</div>
+                       )}
+                       {project.company && <><div className="font-bold">Company Name :</div> <div>{project.company}</div></>}
+                       
+                       {(() => {
+                         const streetPart = [project.street, project.houseNumber].filter(Boolean).join(' ');
+                         const cityPart = [project.zipCode, project.city].filter(Boolean).join(' ');
+                         const addressStr = [streetPart, cityPart, project.country].filter(Boolean).join(', ');
+                         return addressStr ? <><div className="font-bold">Address :</div> <div>{addressStr}</div></> : null;
+                       })()}
+
+                       {project.contactName && <><div className="font-bold">Contact Person :</div> <div>{project.contactName} {project.contactRole && `(${project.contactRole})`}</div></>}
+                       {(project.contactEmail || project.contactPhone) && <><div className="font-bold">Contact Details :</div> <div>{[project.contactEmail, project.contactPhone].filter(Boolean).join(' | ')}</div></>}
+
+                       <div className="font-bold col-span-2 mt-4 border-t border-slate-300 pt-2 text-lg" style={{color: BRAND.colors.green}}>PerfoTec Support</div>
+                       {project.employee && <><div className="font-bold">PerfoTec Employee :</div> <div>{project.employee}</div></>}
+                       <div className="font-bold">Technology :</div> <div>PerfoTec Laser Perforation & Respiration Measuring</div>
+                    </div>
+                  </div>
+
+                  <div className="page-break"></div>
+
+                  {/* --- PAGE 3: PRODUCT CHARACTERISTICS & MATRIX --- */}
+                  <div className="pt-4">
+                    <h2 className="report-section-title">3 Product Characteristics & Defect Prevention</h2>
+                    
+                    <div className="mb-8 grid grid-cols-4 gap-4 text-sm brand-body">
+                        {project.acpO2 && <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 shadow-sm"><strong className="text-slate-500 block mb-1">O₂ min (ACP):</strong><span className="text-lg font-bold text-[#004B87]">{project.acpO2}</span></div>}
+                        {project.co2Max && <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 shadow-sm"><strong className="text-slate-500 block mb-1">CO₂ max:</strong><span className="text-lg font-bold text-red-600">{project.co2Max}</span></div>}
+                        {project.co2Shock && <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 shadow-sm"><strong className="text-slate-500 block mb-1">CO₂ shock:</strong><span className="text-lg font-bold text-orange-600">{project.co2Shock}</span>{project.co2ShockHours && <div className="text-xs text-slate-500 mt-1 font-medium">Drop &lt; {project.co2Max || 'max'}% within {project.co2ShockHours}h</div>}</div>}
+                        {project.tempMin && <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 shadow-sm"><strong className="text-slate-500 block mb-1">Temp min:</strong><span className="text-lg font-bold text-blue-500">{project.tempMin}</span></div>}
+                    </div>
+
+                    {project.defectsMatrix && project.defectsMatrix.length > 0 && (
+                        <div className="break-inside-avoid mb-8">
+                            <h3 className="font-bold text-xl mb-4 brand-heading" style={{ color: BRAND.colors.green }}>Defecten & Preventie Matrix</h3>
+                            <table className="w-full text-sm brand-body border-collapse border border-slate-200 shadow-sm">
+                                <thead>
+                                    <tr>
+                                        <th className="p-3 text-left text-white" style={{backgroundColor: '#004B87'}}>DEFECT</th>
+                                        <th className="p-3 text-left text-white" style={{backgroundColor: '#004B87'}}>FYSIOLOGISCHE OORZAAK</th>
+                                        <th className="p-3 text-left text-white" style={{backgroundColor: '#5B9BD5'}}>EFFECT MHP (VOCHT)</th>
+                                        <th className="p-3 text-left text-white" style={{backgroundColor: '#007C27'}}>EFFECT MAP (GAS)</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {project.defectsMatrix.map((row, i) => (
+                                        <tr key={row.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                                            <td className="p-3 border border-slate-200 font-bold text-slate-800">{row.defect}</td>
+                                            <td className="p-3 border border-slate-200 text-slate-700">{row.cause}</td>
+                                            <td className="p-3 border border-slate-200 text-slate-700 font-medium">{row.effectMHP}</td>
+                                            <td className="p-3 border border-slate-200 text-slate-700 font-medium">{row.effectMAP}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                  </div>
+
+                  <div className="page-break"></div>
+
+                  {/* --- PAGE 4: SUPPLY CHAIN --- */}
+                  <div className="pt-4">
+                    <h2 className="report-section-title">4 Simulated Supply Chain</h2>
+                    <div className="brand-body text-base text-slate-800 mb-8">
+                       <p className="mb-4">To ensure the trial is representative of the real-world conditions, we propose to test the product using the following temperature and time profile:</p>
+                       
+                       {project.transportMode && (
+                          <p className="mb-2"><strong>Transport Mode:</strong> {project.transportMode}</p>
+                       )}
+                       
+                       <div className="w-full mt-1 break-inside-avoid">
+                         <SupplyChainFlow chain={supplyChain} />
+                       </div>
+                       <p className="mt-4 text-sm italic text-gray-500">* Temperatures and durations are simulated based on provided information.</p>
+                       <p className="mt-2">Stored at {tempString} for {totalDays} days total.</p>
+                       <p>The product was packed on <strong>{formatDateToDDMMYYYY(project.packingDate || project.date)}</strong>.</p>
+                       <p>Unpacking moments were planned for <strong>{calcUnpackingDate()}</strong> (Day {project.totalDuration || 0}). Per packing moment, samples per treatment were unpacked.</p>
+                       {project.retailOpenDays && parseInt(project.retailOpenDays) > 0 && (
+                          <p>After opening, the product was kept in retail simulation for an additional <strong>{project.retailOpenDays}</strong> days and evaluated again on <strong>{calcRetailDate()}</strong>.</p>
+                       )}
+                    </div>
+
+                    <h2 className="report-section-title">5 Proposed Trial Setup</h2>
+                    <div className="brand-body text-base text-slate-800 mb-8">
+                        <p className="mb-4">The Fast Respiration Meter System will be used to measure the exact product respiration rate. Based on this, we calculate the optimal micro perforation pattern for the PerfoTec variant. The proposed variants to compare are:</p>
+                        
+                        <div className="overflow-x-auto break-inside-avoid">
+                            <table className="report-table w-full shadow-sm text-sm">
+                              <thead>
+                                <tr>
+                                  <th className="w-1/4">Variant</th>
+                                  <th className="text-center">Packaging Type</th>
+                                  <th className="text-center">Material</th>
+                                  <th className="text-center">Dimensions (mm)</th>
+                                  <th className="text-center">Netto Packing Weight (g)</th>
+                                  <th className="text-center">Transmission Value</th>
+                                  <th className="text-center">Samples / Eval.</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {groups.map((g, i) => (
+                                  <tr key={g.id}>
+                                    <td className="font-bold" style={{ borderLeft: `4px solid ${CHART_COLORS[i % CHART_COLORS.length].stroke}` }}>
+                                      {g.name}
+                                    </td>
+                                    <td className="text-center">{g.specs?.packaging || '-'}</td>
+                                    <td className="text-center">{g.specs?.material || '-'}</td>
+                                    <td className="text-center">{g.specs?.length || '-'}x{g.specs?.width || '-'}x{g.specs?.height || '-'}</td>
+                                    <td className="text-center">{project.startWeight || '-'}g</td>
+                                    <td className="text-center">{g.specs?.holes || '0'}</td>
+                                    <td className="text-center">{g.specs?.sampleCount || 3}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                        </div>
+                        
+                        {/* PREDICTED GAS GRAPHS */}
+                        <div className="mt-8 break-inside-avoid">
+                           <h4 className="font-bold mb-4 text-lg border-b pb-1 text-slate-700">Predicted Gas Levels (PerfoTec Hub)</h4>
+                           <div className="grid grid-cols-2 gap-8">
+                             {groups.map((g, idx) => {
+                                if (!g.predictedImage) return null;
+                                return (
+                                   <div key={g.id} className="flex flex-col items-center">
+                                      <div className="text-sm font-bold mb-2 text-center text-slate-700">{g.name || 'Variant'}</div>
+                                      <div className="w-full flex justify-center bg-white border border-gray-200 rounded p-2 shadow-sm">
+                                         <img src={g.predictedImage} className="w-full h-auto max-h-[220px] object-contain" />
+                                      </div>
+                                   </div>
+                                )
+                             })}
+                           </div>
+                        </div>
+
+                    </div>
+                  </div>
+
+                  <div className="page-break"></div>
+
+                  {/* --- PAGE 5: EVALUATION PLAN --- */}
+                  <div className="pt-4">
+                    <h2 className="report-section-title">6 Evaluation Plan</h2>
+                    <div className="brand-body text-base space-y-5 text-slate-800">
+                       <p>During the trial, the product quality and atmospheric conditions will be continuously monitored. We propose the following evaluation moments:</p>
+                       
+                       <div className="flex flex-wrap gap-3 mb-6">
+                           {evaluationDays.map((day, i) => (
+                               <div key={i} className="bg-slate-100 border border-slate-300 rounded px-4 py-2 font-bold text-slate-700 shadow-sm">
+                                   Evaluation: Day {day}
+                               </div>
+                           ))}
+                       </div>
+
+                       <div className="break-inside-avoid">
+                         <h4 className="font-bold mb-2 text-lg" style={{color: BRAND.colors.black}}>Measurements per evaluation:</h4>
+                         <ul className="list-disc pl-6 space-y-2">
+                           <li><strong>Gas Analysis:</strong> Measuring O₂ and CO₂ percentages inside the packaging.</li>
+                           <li><strong>Weight Tracking:</strong> Monitoring moisture/weight loss from Day 0.</li>
+                           <li><strong>Visual Quality:</strong> Taking photographic evidence of the product state.</li>
+                           <li>
+                              <strong>Detailed Quality Assessment:</strong> Scoring the following criteria on a 1-10 scale (where 6+ is acceptable):
+                              <ul className="list-circle pl-6 mt-1 grid grid-cols-2 gap-1 text-sm">
+                                  {project.criteria && project.criteria.length > 0 ? project.criteria.map((c, i) => <li key={i}>{c}</li>) : <li className="text-gray-400 italic">No specific criteria selected.</li>}
+                              </ul>
+                           </li>
+                         </ul>
+                       </div>
+
+                       {proposal?.requirements && (
+                           <div className="mt-8 pt-6 border-t border-slate-200 break-inside-avoid">
+                               <h4 className="font-bold mb-3 text-lg" style={{color: BRAND.colors.green}}>7 Requirements & Agreements</h4>
+                               
+                               {(() => {
+                                 const totalRequiredWeightGrams = groups.reduce((total, g) => {
+                                   const weightPerSample = parseFloat(project.startWeight) || 0;
+                                   const countPerEval = parseFloat(g.specs?.sampleCount) || 3;
+                                   const numberOfEvals = evaluationDays.length || 0;
+                                   const samplesPerVariant = countPerEval * numberOfEvals;
+                                   return total + (weightPerSample * samplesPerVariant);
+                                 }, 0);
+                                 const totalRequiredWeightKg = (totalRequiredWeightGrams / 1000).toFixed(1);
+                                 
+                                 const totalSamplesCount = groups.reduce((total, g) => {
+                                   const countPerEval = parseFloat(g.specs?.sampleCount) || 3;
+                                   const numberOfEvals = evaluationDays.length || 0;
+                                   return total + (countPerEval * numberOfEvals);
+                                 }, 0);
+
+                                 return (
+                                   <div className="mb-4 bg-blue-50 border-l-4 border-blue-500 p-3 text-sm text-blue-900 rounded-r">
+                                     <strong>Required Product:</strong> A minimum of <strong>{totalRequiredWeightKg} kg</strong> of fresh product is required to conduct this trial (based on a total of {totalSamplesCount} samples across all evaluation moments).
+                                   </div>
+                                 );
+                               })()}
+
+                               <div className="whitespace-pre-wrap pdf-rich-text" dangerouslySetInnerHTML={{ __html: proposal.requirements }}></div>
+                           </div>
+                       )}
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            );
+          }
+
+          // --- EDITOR VIEW ---
+          return (
+            <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-20">
+              <style dangerouslySetInnerHTML={{ __html: `
+                .label { display: block; font-size: 0.75rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.35rem; font-family: 'Inter', sans-serif; white-space: nowrap; } 
+                .input { width: 100%; padding: 0.6rem; border: 1px solid #e2e8f0; border-radius: 0.5rem; outline: none; transition: 0.2s; font-size: 0.9rem; font-family: 'Inter', sans-serif; } 
+                .input:focus { border-color: ${BRAND.colors.green}; box-shadow: 0 0 0 3px rgba(0, 124, 39, 0.1); }
+                .rich-text-editor { min-height: 120px; }
+                .rich-text-editor ul { list-style-type: disc; padding-left: 1.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem; }
+                .rich-text-editor li { margin-bottom: 0.25rem; }
+                .rich-text-editor b { font-weight: 700; }
+                .rich-text-editor i { font-style: italic; }
+                .rich-text-editor u { text-decoration: underline; }
+                [contenteditable]:empty:before { content: attr(data-placeholder); color: #94a3b8; pointer-events: none; display: block; }
+              `}} />
+              
+              {pendingImageReplace && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+                  <div className="bg-white p-6 rounded-lg shadow-xl max-w-sm w-full">
+                     <div className="flex items-center gap-3 mb-4 text-orange-600">
+                        <AlertTriangle size={24} />
+                        <h3 className="font-bold text-lg">Let op</h3>
+                     </div>
+                     <p className="mb-6 text-sm text-slate-700">Je staat op het punt de huidige Prediction Graph te overschrijven met een nieuwe afbeelding. Doorgaan?</p>
+                     <div className="flex justify-end gap-3">
+                       <button onClick={() => setPendingImageReplace(null)} className="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 font-bold">Annuleren</button>
+                       <button onClick={confirmReplaceImage} className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 font-bold">Overschrijven</button>
+                     </div>
+                  </div>
+                </div>
+              )}
+              
+              <nav className="bg-white border-b sticky top-0 z-20 px-4 md:px-6 py-4 flex justify-between items-center shadow-sm">
+                <div className="flex items-center gap-3">
+                  <img src="https://cdn.prod.website-files.com/68b594c756c22085ddc6c1ea/68b59ba2f027bfeecd25261b_PerfoTec%20logo.png" alt="PerfoTec" className="h-8 md:h-10 object-contain" />
+                  <div className="border-l border-slate-300 pl-3 ml-1 hidden sm:block">
+                    <h1 className="font-bold text-xl leading-none" style={{color: BRAND.colors.blue}}>PerfoTec Manager</h1>
+                    <p className="text-xs text-slate-500 font-medium mt-0.5">PROPOSAL TOOL</p>
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <label className="text-slate-600 bg-white border px-4 py-2 rounded font-medium flex items-center gap-2 hover:bg-slate-50 transition cursor-pointer shadow-sm"><FolderOpen size={18} /> Load JSON<input type="file" className="hidden" accept=".json" onChange={importData} ref={fileInputRef} /></label>
+                  <button onClick={exportData} className="text-slate-600 bg-white border px-4 py-2 rounded font-medium flex items-center gap-2 hover:bg-slate-50 transition shadow-sm"><Save size={18} /> Save As...</button>
+                  <button onClick={() => { if(!project.company) alert('Let op: Vul bedrijfsgegevens in!'); setIsPreview(true); }} className="text-white px-4 py-2 rounded font-medium flex items-center gap-2 hover:opacity-90 transition shadow-lg shadow-green-100" style={{backgroundColor: BRAND.colors.blue}}><FileText size={18} /> Preview Voorstel</button>
+                </div>
+              </nav>
+
+              <main className="max-w-7xl mx-auto p-4 sm:p-6 grid grid-cols-1 md:grid-cols-12 gap-6">
+                <div className="col-span-1 md:col-span-12 flex flex-wrap gap-2 border-b border-slate-200 pb-1 mb-2">
+                  {['setup', 'groups', 'proposal'].map(tab => (
+                    <button key={tab} onClick={() => setActiveTab(tab)} className={`px-4 sm:px-6 py-3 font-bold rounded-t-lg transition flex items-center gap-2 ${activeTab === tab ? 'text-white shadow-sm' : 'bg-white text-slate-500 hover:bg-slate-100'}`} style={{ backgroundColor: activeTab === tab ? BRAND.colors.green : undefined }}>
+                      {tab === 'setup' && <Settings size={16}/>}{tab === 'groups' && <Package size={16}/>}{tab === 'proposal' && <FileText size={16}/>}
+                      {tab === 'proposal' ? 'Voorstel Teksten' : tab === 'groups' ? 'Varianten & Metingen' : 'Project & Product'}
+                    </button>
+                  ))}
+                </div>
+
+                {/* 1. SETUP TAB */}
+                {activeTab === 'setup' && (
+                  <div className="col-span-1 md:col-span-12 space-y-6">
+                    {/* Project & Product Info */}
+                    <div className="bg-white p-4 sm:p-8 rounded-xl shadow-sm border border-slate-100">
+                       <h2 className="font-bold text-lg mb-6 text-[#211A1A] border-b pb-2">1. Project & Product</h2>
+                       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                         <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                           <div className="sm:col-span-2"><label className="label">Proposal Title</label><input type="text" className="input text-lg font-bold" value={project.reportTitle || ''} onChange={e => handleProjectChange('reportTitle', e.target.value)} /></div>
+                           <div className="sm:col-span-2"><label className="label">Product Name</label><input type="text" className="input text-lg font-bold" value={project.productName || ''} onChange={e => handleProjectChange('productName', e.target.value)} /></div>
+                           <div><label className="label">Proposal Date</label><input type="date" className="input" value={project.date || ''} onChange={e => handleProjectChange('date', e.target.value)} /></div>
+                           
+                           <div><label className="label">Packing Date</label><input type="date" className="input bg-yellow-50" value={project.packingDate || ''} onChange={e => handleProjectChange('packingDate', e.target.value)} /></div>
+                           <div><label className="label">Total Duration (Days)</label><input type="number" className="input bg-yellow-50" value={project.totalDuration || ''} onChange={handleDurationChange} placeholder="e.g. 10" /></div>
+                           <div><label className="label">Retail Simulation (after opening)</label><input type="number" className="input bg-blue-50" value={project.retailOpenDays || ''} onChange={e => handleProjectChange('retailOpenDays', e.target.value)} placeholder="e.g. 7" /></div>
+                           
+                           <div>
+                              <label className="label">Processing Type</label>
+                              <select className="input" value={project.processingType || 'Whole'} onChange={e => handleProjectChange('processingType', e.target.value)}>
+                                <option value="Whole">Whole</option>
+                                <option value="Processed">Processed / Fresh-cut</option>
+                              </select>
+                           </div>
+                           <div><label className="label">Product Type / Variety</label><input type="text" className="input" value={project.type || ''} onChange={e => handleProjectChange('type', e.target.value)} /></div>
+                           
+                           <div><label className="label">Product Origin</label><input type="text" className="input" value={project.origin || ''} onChange={e => handleProjectChange('origin', e.target.value)} /></div>
+                           <div><label className="label whitespace-nowrap">Netto Weight (g)</label><input type="number" className="input font-bold text-blue-900" value={project.startWeight || ''} onChange={e => handleProjectChange('startWeight', e.target.value)} /></div>
+                           
+                           <div><label className="label">Maturity Stage at Packing</label><input type="text" className="input" value={project.maturityStage || ''} onChange={e => handleProjectChange('maturityStage', e.target.value)} /></div>
+                           <div><label className="label">Post-harvest Treatment</label><input type="text" className="input" value={project.postHarvestTreatment || ''} onChange={e => handleProjectChange('postHarvestTreatment', e.target.value)} /></div>
+                           
+                           <div className="sm:col-span-2 bg-slate-50 p-4 rounded border border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-4 mt-2">
+                              <div><label className="label">RR O₂</label><input type="text" className="input" value={project.rrO2 || ''} onChange={e => handleProjectChange('rrO2', e.target.value)} /></div>
+                              <div><label className="label">RR CO₂</label><input type="text" className="input" value={project.rrCO2 || ''} onChange={e => handleProjectChange('rrCO2', e.target.value)} /></div>
+                              <div><label className="label whitespace-nowrap">Measured at (°C)</label><input type="text" className="input" value={project.rrTemp || ''} onChange={e => handleProjectChange('rrTemp', e.target.value)} /></div>
+                           </div>
+                         </div>
+                         
+                         <div className="space-y-4">
+                            <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center bg-slate-50 relative group min-h-[100px]">
+                                <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={(e) => handleImgUpload(e, 'logo')} />
+                                {project.logo ? <img src={project.logo} className="h-full object-contain" /> : <><Upload size={24} color={BRAND.colors.blue} className="mb-2"/><span className="font-bold text-xs text-slate-600">Upload PerfoTec Logo (PNG)</span></>}
+                            </div>
+                            <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center bg-slate-50 relative group min-h-[100px]">
+                                <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={(e) => handleImgUpload(e, 'clientLogo')} />
+                                {project.clientLogo ? <img src={project.clientLogo} className="h-full object-contain" /> : <><Upload size={24} color={BRAND.colors.green} className="mb-2"/><span className="font-bold text-xs text-slate-600">Upload Client Logo</span></>}
+                            </div>
+                            <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center bg-slate-50 relative group min-h-[150px]">
+                                <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={(e) => handleImgUpload(e, 'coverImage')} />
+                                {project.coverImage ? <img src={project.coverImage} className="w-full h-full object-cover rounded" /> : <><ImageIcon size={24} color={BRAND.colors.green} className="mb-2"/><span className="font-bold text-xs text-slate-600">Cover Photo (Page 1)</span></>}
+                            </div>
+                            <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center text-center bg-slate-50 relative group min-h-[150px]">
+                                <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={(e) => handleImgUpload(e, 'startImage')} />
+                                {project.startImage ? <img src={project.startImage} className="w-full h-full object-cover rounded" /> : <><ImageIcon size={24} color={BRAND.colors.green} className="mb-2"/><span className="font-bold text-xs text-slate-600">Ref Photo (P+0)</span></>}
+                            </div>
+                         </div>
+                       </div>
+                    </div>
+                    
+                    {/* OPTIMAL PACKAGING CONDITIONS */}
+                    <div className="bg-white p-4 sm:p-8 rounded-xl shadow-sm border border-slate-100">
+                        <h2 className="font-bold text-lg mb-6 text-[#211A1A] border-b pb-2">2. Optimum Packaging Conditions</h2>
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
+                            <div><label className="label">O₂ min (ACP) %</label><input type="text" className="input" value={project.acpO2 || ''} onChange={e => handleProjectChange('acpO2', e.target.value)} placeholder="e.g. 2%" /></div>
+                            <div><label className="label">CO₂ max %</label><input type="text" className="input" value={project.co2Max || ''} onChange={e => handleProjectChange('co2Max', e.target.value)} placeholder="e.g. 15%" /></div>
+                            <div><label className="label">CO₂ shock %</label><input type="text" className="input" value={project.co2Shock || ''} onChange={e => handleProjectChange('co2Shock', e.target.value)} placeholder="e.g. 20%" /></div>
+                            <div><label className="label">Uren tot &lt; CO₂ max</label><input type="number" className="input" value={project.co2ShockHours || ''} onChange={e => handleProjectChange('co2ShockHours', e.target.value)} placeholder="e.g. 48" /></div>
+                            <div><label className="label">Temp min (°C)</label><input type="text" className="input" value={project.tempMin || ''} onChange={e => handleProjectChange('tempMin', e.target.value)} placeholder="e.g. -1°C" /></div>
+                        </div>
+                    </div>
+
+                    {/* DEFECTEN & PREVENTIE MATRIX */}
+                    <div className="bg-white p-4 sm:p-8 rounded-xl shadow-sm border border-slate-100">
+                        <h2 className="font-bold text-lg mb-6 text-[#211A1A] border-b pb-2">3. Defecten & Preventie Matrix</h2>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm text-left">
+                                <thead className="bg-slate-50 text-slate-500">
+                                    <tr>
+                                        <th className="p-2">Defect</th>
+                                        <th className="p-2">Fysiologische Oorzaak</th>
+                                        <th className="p-2">Effect MHP (Vocht)</th>
+                                        <th className="p-2">Effect MAP (Gas)</th>
+                                        <th className="p-2 w-10"></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {(project.defectsMatrix || []).map(row => (
+                                        <tr key={row.id} className="border-b border-slate-100">
+                                            <td className="p-1"><input type="text" className="w-full p-2 border rounded" value={row.defect} onChange={e => updateDefectRow(row.id, 'defect', e.target.value)} /></td>
+                                            <td className="p-1"><input type="text" className="w-full p-2 border rounded" value={row.cause} onChange={e => updateDefectRow(row.id, 'cause', e.target.value)} /></td>
+                                            <td className="p-1"><input type="text" className="w-full p-2 border rounded" value={row.effectMHP} onChange={e => updateDefectRow(row.id, 'effectMHP', e.target.value)} /></td>
+                                            <td className="p-1"><input type="text" className="w-full p-2 border rounded" value={row.effectMAP} onChange={e => updateDefectRow(row.id, 'effectMAP', e.target.value)} /></td>
+                                            <td className="p-1 text-center"><button onClick={() => removeDefectRow(row.id)} className="text-red-400 hover:text-red-600"><Trash2 size={16}/></button></td>
+                                        </tr>
+                                    ))}
+                                    {(project.defectsMatrix === undefined || project.defectsMatrix.length === 0) && (
+                                        <tr><td colSpan="5" className="p-4 text-center text-slate-400 italic">Geen defecten toegevoegd. Matrix zal niet zichtbaar zijn in PDF.</td></tr>
+                                    )}
+                                </tbody>
+                            </table>
+                            <button onClick={addDefectRow} className="mt-3 flex items-center gap-2 text-sm font-bold text-green-600 hover:text-green-800"><Plus size={16}/> Rij Toevoegen</button>
+                        </div>
+                    </div>
+
+                    <div className="bg-white p-4 sm:p-8 rounded-xl shadow-sm border border-slate-100">
+                       <h2 className="font-bold text-lg mb-6 text-[#211A1A] border-b pb-2">4. Company & Contact</h2>
+                       <div className="grid grid-cols-4 gap-6">
+                         <div className="col-span-4 sm:col-span-2"><label className="label">Company Name</label><input type="text" className="input font-bold" value={project.company || ''} onChange={e => handleProjectChange('company', e.target.value)} /></div>
+                         <div className="col-span-4 sm:col-span-2"><label className="label">PerfoTec Employee</label><input type="text" className="input" value={project.employee || ''} onChange={e => handleProjectChange('employee', e.target.value)} /></div>
+                         
+                         <div className="col-span-4 sm:col-span-3"><label className="label">Street</label><input type="text" className="input" value={project.street || ''} onChange={e => handleProjectChange('street', e.target.value)} /></div>
+                         <div className="col-span-4 sm:col-span-1"><label className="label">House No.</label><input type="text" className="input" value={project.houseNumber || ''} onChange={e => handleProjectChange('houseNumber', e.target.value)} /></div>
+                         
+                         <div className="col-span-4 sm:col-span-1"><label className="label">Zip Code</label><input type="text" className="input" value={project.zipCode || ''} onChange={e => handleProjectChange('zipCode', e.target.value)} /></div>
+                         <div className="col-span-4 sm:col-span-1"><label className="label">City</label><input type="text" className="input" value={project.city || ''} onChange={e => handleProjectChange('city', e.target.value)} /></div>
+                         <div className="col-span-4 sm:col-span-2"><label className="label">Country</label><input type="text" className="input" value={project.country || ''} onChange={e => handleProjectChange('country', e.target.value)} /></div>
+
+                         <div className="col-span-4 sm:col-span-1"><label className="label">Contact Person</label><input type="text" className="input" value={project.contactName || ''} onChange={e => handleProjectChange('contactName', e.target.value)} /></div>
+                         <div className="col-span-4 sm:col-span-1"><label className="label">Role</label><input type="text" className="input" value={project.contactRole || ''} onChange={e => handleProjectChange('contactRole', e.target.value)} /></div>
+                         <div className="col-span-4 sm:col-span-1"><label className="label">Email</label><input type="email" className="input" value={project.contactEmail || ''} onChange={e => handleProjectChange('contactEmail', e.target.value)} /></div>
+                         <div className="col-span-4 sm:col-span-1"><label className="label">Phone</label><input type="text" className="input" value={project.contactPhone || ''} onChange={e => handleProjectChange('contactPhone', e.target.value)} /></div>
+                       </div>
+                    </div>
+
+                    <div className="bg-white p-4 sm:p-8 rounded-xl shadow-sm border border-slate-100">
+                       <h2 className="font-bold text-lg mb-6 text-[#211A1A] border-b pb-2">5. Goals & Challenges</h2>
+                       <div className="grid grid-cols-2 gap-6">
+                         <div>
+                           <label className="label text-orange-600">Current Challenge</label>
+                           <textarea rows="3" className="input bg-orange-50 border-orange-200" value={project.currentChallenge || ''} onChange={e => handleProjectChange('currentChallenge', e.target.value)} />
+                         </div>
+                         <div>
+                           <label className="label text-green-600">Trial Target / Goal</label>
+                           <textarea rows="3" className="input bg-green-50 border-green-200" value={project.trialTarget || ''} onChange={e => handleProjectChange('trialTarget', e.target.value)} />
+                         </div>
+                         
+                         <div className="col-span-2">
+                           <label className="label mb-2">Transport Mode</label>
+                           <div className="flex flex-wrap gap-2">
+                             {['Air Freight', 'Sea Freight', 'Road Transport', 'Storage'].map(mode => (
+                               <button 
+                                 key={mode} 
+                                 onClick={() => handleTransportModeToggle(mode)}
+                                 className={`px-3 py-1.5 rounded-full text-xs font-bold border transition ${project.transportMode === mode ? 'bg-blue-100 border-blue-300 text-blue-800' : 'bg-white border-slate-300 text-slate-500'}`}
+                               >
+                                 {mode} {project.transportMode === mode && <CheckCircle size={12} className="inline ml-1"/>}
+                               </button>
+                             ))}
+                           </div>
+                         </div>
+                       </div>
+                    </div>
+
+                    {/* Supply Chain Editor */}
+                    <div className="bg-white p-4 sm:p-8 rounded-xl shadow-sm border border-slate-100">
+                      <h2 className="font-bold text-lg mb-6 text-[#211A1A] border-b pb-2 flex items-center gap-2"><Truck size={20}/> 6. Product Supply Chain</h2>
+                      <div className="space-y-4 overflow-hidden">
+                        {supplyChain.map((step, idx) => (
+                           <div key={idx} className="flex gap-4 items-end bg-slate-50 p-4 rounded-lg border border-slate-200 relative group">
+                              <div className="flex flex-col gap-1 pb-1 shrink-0 w-full sm:w-auto flex-row lg:flex-col justify-end lg:justify-start">
+                                 <button onClick={() => moveChainStep(idx, 'up')} disabled={idx === 0} className="p-1.5 hover:bg-slate-200 rounded disabled:opacity-30"><ChevronUp size={16}/></button>
+                                 <button onClick={() => moveChainStep(idx, 'down')} disabled={idx === supplyChain.length - 1} className="p-1.5 hover:bg-slate-200 rounded disabled:opacity-30"><ChevronDown size={16}/></button>
+                              </div>
+                              
+                              <div className="flex-1 min-w-[200px] w-full">
+                                <label className="label whitespace-nowrap">Fase (Activiteit)</label>
+                                {idx === 2 ? (
+                                  <select className="input" value={step.stage || ''} onChange={e => updateChainStep(idx, 'stage', e.target.value)}>
+                                    <option>Transport by road</option><option>Seafreight</option><option>Airfreight</option><option>Storage</option>
+                                  </select>
+                                ) : (
+                                  <input type="text" className="input" value={step.stage || ''} onChange={e => updateChainStep(idx, 'stage', e.target.value)} />
+                                )}
+                              </div>
+                              
+                              <div className="flex gap-2 w-full sm:w-56 items-end shrink-0">
+                                 <div className="w-1/2"><label className="label whitespace-nowrap">Temp Min (°C)</label><input type="number" className="input font-bold text-center w-full" value={step.tempStart || ''} onChange={e => updateChainStep(idx, 'tempStart', e.target.value)} /></div>
+                                 <div className="w-1/2"><label className="label whitespace-nowrap">Max</label><input type="number" className="input text-center w-full" value={step.tempEnd || ''} onChange={e => updateChainStep(idx, 'tempEnd', e.target.value)} placeholder="-" /></div>
+                              </div>
+                              
+                              <div className="flex gap-2 w-full sm:w-56 items-end shrink-0">
+                                 <div className="w-1/2"><label className="label whitespace-nowrap">Dagen Min</label><input type="number" className="input text-center w-full" value={step.daysStart || ''} onChange={e => updateChainStep(idx, 'daysStart', e.target.value)} /></div>
+                                 <div className="w-1/2"><label className="label whitespace-nowrap">Max</label><input type="number" className="input text-center w-full" value={step.daysEnd || ''} onChange={e => updateChainStep(idx, 'daysEnd', e.target.value)} placeholder="-" /></div>
+                              </div>
+                              
+                              <div className="w-full sm:w-40 shrink-0">
+                                <label className="label whitespace-nowrap">Actie</label>
+                                <select className="input" value={step.action || 'none'} onChange={e => updateChainStep(idx, 'action', e.target.value)}>
+                                  <option value="none">- Geen -</option>
+                                  <option value="pack">Inpakken</option>
+                                  <option value="unpack">Uitpakken</option>
+                                </select>
+                              </div>
+                              
+                              <div className="pb-1 shrink-0 w-full sm:w-auto">
+                                <button onClick={() => removeChainStep(idx)} className="p-3 bg-red-50 text-red-500 rounded border border-red-100 hover:bg-red-100 h-[44px] flex items-center justify-center w-full sm:w-auto"><Trash2 size={18}/></button>
+                              </div>
+                           </div>
+                        ))}
+                        <button onClick={addChainStep} className="flex items-center gap-2 text-sm font-bold text-green-700 hover:text-green-800 mt-4 px-2 py-1"><Plus size={16}/> Extra Stap Toevoegen</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. GROUPS (Inputs) */}
+                {activeTab === 'groups' && (
+                  <>
+                    <div className="col-span-1 md:col-span-3 space-y-4">
+                       <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm mb-4">
+                          <label className="label mb-2 text-slate-700">Global Assessment Criteria</label>
+                          <div className="flex flex-wrap gap-2 mb-3">
+                            {(!project.criteria || project.criteria.length === 0) && <span className="text-xs text-gray-400 italic">Geen criteria geselecteerd.</span>}
+                            {(project.criteria || []).map(c => (
+                              <span key={c} className="bg-slate-50 border border-slate-300 text-slate-700 text-xs px-2 py-1 rounded flex items-center gap-1 whitespace-nowrap">{c} <button onClick={() => toggleCriteria(c)} className="text-red-400 hover:text-red-600 font-bold ml-1">×</button></span>
+                            ))}
+                          </div>
+                          <div className="flex gap-2">
+                            <select className="input w-full" value={newCriteria || ''} onChange={e => setNewCriteria(e.target.value)}>
+                               <option value="">Select standard criterion...</option>
+                               {DEFAULT_CRITERIA.filter(c => !(project.criteria || []).includes(c)).map(c => <option key={c}>{c}</option>)}
+                            </select>
+                            <button onClick={addNewCriteria} className="bg-slate-800 text-white px-3 py-2 rounded hover:bg-black flex justify-center items-center"><Plus size={16}/></button>
+                          </div>
+                       </div>
+
+                       <div className="bg-white p-4 rounded-lg border border-slate-200 shadow-sm mb-4">
+                          <label className="label mb-2 text-slate-700">Geplande Meetmomenten (Dagen)</label>
+                          <p className="text-xs text-gray-500 mb-3">Geef aan op welke dagen de verpakkingen worden geopend en geëvalueerd.</p>
+                          <div className="flex flex-col gap-2">
+                              {(groups[0]?.measurements || []).map((m, i) => (
+                                  <div key={i} className="flex gap-2 items-center">
+                                      <span className="text-sm font-bold text-gray-500 w-12">Dag:</span>
+                                      <input type="number" className="input py-1 text-center" value={m.day} onChange={e => updateEvaluationDay(m.day, e.target.value)} />
+                                      {i > 0 && <button onClick={() => removeEvaluationDay(m.day)} className="text-red-500"><X size={16}/></button>}
+                                  </div>
+                              ))}
+                              <button onClick={addEvaluationDay} className="mt-2 text-xs bg-blue-50 text-blue-700 px-3 py-1.5 rounded font-bold border border-blue-200 hover:bg-blue-100">+ Meetdag Toevoegen</button>
+                          </div>
+                       </div>
+
+                       <button onClick={addNewVariant} className="w-full py-3 rounded font-bold border-2 border-dashed hover:bg-green-50 text-green-700 transition" style={{borderColor: BRAND.colors.green}}>+ New Variant</button>
+                       {groups.map((g, idx) => (
+                         <div key={g.id} onClick={() => setActiveGroupId(g.id)} className={`p-4 rounded-lg border cursor-pointer transition relative group ${activeGroupId === g.id ? 'bg-white shadow-md border-green-500 border-l-4' : 'bg-slate-50 hover:bg-white'}`}>
+                           <div className="flex items-center gap-3 font-bold text-sm text-slate-700"><div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: CHART_COLORS[idx % CHART_COLORS.length].stroke }}></div><span className="truncate">{g.name || 'Variant'}</span></div>
+                           <div className="absolute top-2 right-2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition">
+                              <div className="flex gap-1">
+                                <button onClick={(e) => { e.stopPropagation(); moveGroup(g.id, 'up'); }} className="p-1.5 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"><ChevronUp size={14}/></button>
+                                <button onClick={(e) => { e.stopPropagation(); moveGroup(g.id, 'down'); }} className="p-1.5 bg-gray-100 text-gray-600 rounded hover:bg-gray-200"><ChevronDown size={14}/></button>
+                              </div>
+                              <div className="flex gap-1">
+                                <button onClick={(e) => { e.stopPropagation(); duplicateGroup(g.id); }} className="p-1.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100"><Copy size={14} /></button>
+                                <button onClick={(e) => { e.stopPropagation(); removeGroup(g.id); }} className="p-1.5 bg-red-50 text-red-600 rounded hover:bg-red-100"><Trash2 size={14} /></button>
+                              </div>
+                           </div>
+                         </div>
+                       ))}
+                    </div>
+                    <div className="col-span-1 md:col-span-9 bg-white p-4 sm:p-8 rounded-xl shadow-sm border border-slate-100 space-y-8 overflow-hidden">
+                       {groups.find(g => g.id === activeGroupId) && (
+                         <>
+                           <div>
+                             <h3 className="font-bold text-lg mb-4 text-[#211A1A]">Trial Samples Config</h3>
+                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-4">
+                               <div><label className="label whitespace-nowrap">Name</label><input type="text" className="input font-bold" value={groups.find(g => g.id === activeGroupId).name || ''} onChange={(e) => handleGroupChange(activeGroupId, 'name', null, e.target.value)} /></div>
+                               <div><label className="label whitespace-nowrap">Packaging Type</label><select className="input" value={groups.find(g => g.id === activeGroupId).specs.packaging || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'packaging', e.target.value)}>{PACKAGING_TYPES.map(t => <option key={t}>{t}</option>)}</select></div>
+                             </div>
+                             
+                             <label className="label text-blue-800 mb-2 border-b border-blue-200 pb-1 w-full block mt-4">Packaging Dimensions</label>
+                             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-t-lg border-x border-t border-slate-100">
+                                <div><label className="label whitespace-nowrap">Length (mm)</label><input type="number" className="input" value={groups.find(g => g.id === activeGroupId).specs.length || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'length', e.target.value)} /></div>
+                                <div><label className="label whitespace-nowrap">Width (mm)</label><input type="number" className="input" value={groups.find(g => g.id === activeGroupId).specs.width || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'width', e.target.value)} /></div>
+                                <div><label className="label whitespace-nowrap">Height (mm)</label><input type="number" className="input" value={groups.find(g => g.id === activeGroupId).specs.height || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'height', e.target.value)} /></div>
+                             </div>
+                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-b-lg border border-slate-100 mb-6">
+                               <div><label className="label whitespace-nowrap">Material</label><input className="input" value={groups.find(g => g.id === activeGroupId).specs.material || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'material', e.target.value)} /></div>
+                               <div><label className="label whitespace-nowrap">Transmission Value</label><input type="number" className="input" value={groups.find(g => g.id === activeGroupId).specs.holes || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'holes', e.target.value)} /></div>
+                               <div className="col-span-1 lg:col-span-1 mt-2 lg:mt-0"><label className="label whitespace-nowrap">Aantal Samples / Meting</label><input type="number" min="1" className="input w-full bg-white border-blue-200 font-bold text-blue-900" value={groups.find(g => g.id === activeGroupId).specs.sampleCount || 3} onChange={(e) => handleSampleCountChange(activeGroupId, parseInt(e.target.value))} /></div>
+                             </div>
+                             
+                             <div className="border-2 border-dashed border-blue-200 bg-blue-50 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                                <div className="flex items-center gap-4">
+                                   <LineChart size={24} className="text-blue-500 shrink-0" />
+                                   <div>
+                                     <div className="font-bold text-sm text-blue-900">Predicted Gas Graph</div>
+                                     <div className="text-xs text-blue-600">Upload screenshot for this variant</div>
+                                   </div>
+                                </div>
+                                <label className="cursor-pointer bg-white border border-blue-200 text-blue-700 px-4 py-2 rounded font-bold text-xs hover:bg-blue-50 transition shrink-0 whitespace-nowrap">
+                                   Upload Image
+                                   <input 
+                                     type="file" 
+                                     accept="image/*" 
+                                     className="hidden" 
+                                     onClick={(e) => {
+                                        const g = groups.find(x => x.id === activeGroupId);
+                                        if (g && g.predictedImage) {
+                                          e.preventDefault();
+                                          setPendingImageReplace({ groupId: activeGroupId, result: null });
+                                        }
+                                     }}
+                                     onChange={(e) => handlePredictedImageUpload(e, activeGroupId)} 
+                                   />
+                                </label>
+                             </div>
+                             {groups.find(g => g.id === activeGroupId).predictedImage && (
+                                <div className="mt-2 border rounded p-2 bg-white inline-block max-w-full relative group">
+                                  <img src={groups.find(g => g.id === activeGroupId).predictedImage} className="h-32 max-w-full object-contain" />
+                                  <button onClick={() => handleGroupChange(activeGroupId, null, 'predictedImage', null)} className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition shadow-lg"><Trash2 size={12}/></button>
+                                </div>
+                             )}
+                           </div>
+                         </>
+                       )}
+                    </div>
+                  </>
+                )}
+
+                {/* 3. PROPOSAL (Teksten) */}
+                {activeTab === 'proposal' && (
+                  <div className="col-span-12 space-y-6">
+                    <div className="bg-white p-4 sm:p-8 rounded-xl shadow-sm border border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-8">
+                       <div className="md:col-span-2"><h2 className="font-bold text-lg border-b pb-2 mb-2 text-[#211A1A]">Voorstel & Evaluatieplan</h2></div>
+                       
+                       <div className="md:col-span-2">
+                          <label className="label mb-2">Introductie / Huidige Uitdaging</label>
+                          <RichTextEditor 
+                             value={proposal.intro} 
+                             onChange={(val) => setProposal(prev => ({...prev, intro: val}))} 
+                             placeholder="Beschrijf de uitdaging en waarom we deze test uitvoeren..."
+                          />
+                       </div>
+                       
+                       <div className="md:col-span-2">
+                          <label className="label mb-2">Doel / Verwachte Resultaten</label>
+                          <RichTextEditor 
+                             value={proposal.expectedOutcomes} 
+                             onChange={(val) => setProposal(prev => ({...prev, expectedOutcomes: val}))} 
+                             placeholder="Wat hopen we te bereiken met deze test?"
+                          />
+                       </div>
+                       
+                       <div className="md:col-span-2">
+                          <label className="label mb-2">Benodigdheden & Afspraken (Requirements)</label>
+                          <RichTextEditor 
+                             value={proposal.requirements} 
+                             onChange={(val) => setProposal(prev => ({...prev, requirements: val}))} 
+                             placeholder="Wat moet de klant aanleveren? Welke afspraken zijn er gemaakt?"
+                          />
+                       </div>
+
+                       <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6 mt-4">
+                         <div>
+                           <label className="label text-orange-600">Korte Samenvatting Uitdaging</label>
+                           <textarea rows="3" className="input bg-orange-50 border-orange-200" value={project.currentChallenge} onChange={e => handleProjectChange('currentChallenge', e.target.value)} placeholder="(Optioneel) Korte bullet-points voor op blz 2" />
+                         </div>
+                         <div>
+                           <label className="label text-green-600">Trial Target</label>
+                           <textarea rows="3" className="input bg-green-50 border-green-200" value={project.trialTarget} onChange={e => handleProjectChange('trialTarget', e.target.value)} placeholder="(Optioneel) Kort doel voor op blz 2" />
+                         </div>
+                       </div>
+                    </div>
+                  </div>
+                )}
+
+              </main>
+            </div>
+          );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
