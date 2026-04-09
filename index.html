@@ -19,7 +19,7 @@
         import React from 'https://esm.sh/react@18.2.0';
         import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
         import { 
-            ClipboardList, File text, BarChart3, ArrowRight, 
+            ClipboardList, FileText, BarChart3, ArrowRight, 
             Settings, ShieldCheck, Zap
         } from 'https://esm.sh/lucide-react@0.292.0';
 
@@ -56,9 +56,6 @@
                                 <div className="h-10 border-l border-slate-300 ml-2"></div>
                                 <h1 className="brand-heading text-2xl uppercase tracking-tighter ml-2" style={{ color: BRAND.blue }}>Management Hub</h1>
                             </div>
-                            <div className="flex gap-4">
-                                <button className="p-2 text-slate-400 hover:text-slate-600"><Settings size={20}/></button>
-                            </div>
                         </div>
                     </header>
 
@@ -83,7 +80,7 @@
                                 title="Trial Proposal"
                                 description="Stel een gedetailleerd testplan op. Gebruik de data uit de intake om een simulatie voor te stellen."
                                 icon={FileText}
-                                href="Trial_Proposal.html"
+                                href="proposal.html"
                                 color={BRAND.green}
                             />
                             <ToolCard 
@@ -91,7 +88,7 @@
                                 title="Official Report"
                                 description="Verwerk testdata tot een officieel rapport met grafieken, foto's en conclusies voor de klant."
                                 icon={BarChart3}
-                                href="index.html"
+                                href="report.html"
                                 color={BRAND.dark}
                             />
                         </div>
@@ -100,7 +97,7 @@
                         <div className="mt-20 grid grid-cols-1 md:grid-cols-3 gap-8 border-t border-slate-200 pt-12 text-sm text-slate-500">
                             <div className="flex gap-3 items-start">
                                 <Zap className="text-yellow-500 shrink-0" size={20} />
-                                <p><strong>Data Flow:</strong> Alle tools werken met JSON-bestanden. Je kunt data uit de ene tool exporteren en in de andere importeren.</p>
+                                <p><strong>Data Flow:</strong> Alle tools werken met JSON-bestanden. Exporteer de JSON vanuit de Intake en laad deze direct in de Proposal of het Report.</p>
                             </div>
                             <div className="flex gap-3 items-start">
                                 <ShieldCheck className="text-green-600 shrink-0" size={20} />
@@ -108,7 +105,7 @@
                             </div>
                             <div className="flex gap-3 items-start">
                                 <Settings className="text-blue-500 shrink-0" size={20} />
-                                <p><strong>Integratie:</strong> Gebruik de JSON-import functies in de tools om snel gegevens over te zetten tussen de verschillende fases.</p>
+                                <p><strong>Lokale Opslag:</strong> Voor de beste werking plaatst u alle bestanden in dezelfde map op uw computer of server.</p>
                             </div>
                         </div>
                     </main>
