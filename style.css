@@ -1,20 +1,204 @@
-/* style.css */
+/* ==========================================================================
+   PERFOTEC HUB - GEDEELDE STYLESHEET
+   ========================================================================== */
+
+/* === FONTS === */
 @import url('[https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=League+Spartan:wght@700&display=swap](https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=League+Spartan:wght@700&display=swap)');
 
-html { scroll-behavior: smooth; }
-body { background-color: #f8fafc; font-family: 'Inter', sans-serif; }
+/* === BASIS INSTELLINGEN === */
+html { 
+    scroll-behavior: smooth; 
+}
 
-.brand-heading { font-family: 'League Spartan', sans-serif; }
-.brand-body { font-family: 'Inter', sans-serif; }
+body { 
+    background-color: #f8fafc; 
+    font-family: 'Inter', sans-serif; 
+}
 
-/* Hier kun je al je label, input, en pdf-print classes uit de andere bestanden inzetten! */
+/* === TYPOGRAFIE === */
+.brand-heading { 
+    font-family: 'League Spartan', sans-serif; 
+}
+
+.brand-body { 
+    font-family: 'Inter', sans-serif; 
+}
+
+/* === FORMULIER ELEMENTEN (Intake, Proposal, Editor) === */
 .label { 
-    display: block; font-size: 0.75rem; font-weight: 700; color: #64748b; 
-    text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; 
+    display: block; 
+    font-size: 0.75rem; 
+    font-weight: 700; 
+    color: #64748b; 
+    text-transform: uppercase; 
+    letter-spacing: 0.05em; 
+    margin-bottom: 0.35rem; 
+    font-family: 'Inter', sans-serif; 
+    white-space: nowrap;
 }
+
 .input { 
-    width: 100%; padding: 0.75rem 1rem; border: 1px solid #cbd5e1; 
-    border-radius: 0.5rem; outline: none; transition: all 0.2s; 
-    background-color: #ffffff; color: #1e293b;
+    width: 100%; 
+    padding: 0.6rem; 
+    border: 1px solid #e2e8f0; 
+    border-radius: 0.5rem; 
+    outline: none; 
+    transition: 0.2s; 
+    font-size: 0.9rem; 
+    font-family: 'Inter', sans-serif; 
+    background-color: #ffffff; 
+    color: #1e293b;
 }
-.input:focus { border-color: #007C27; box-shadow: 0 0 0 3px rgba(0, 124, 39, 0.15); }
+
+.input:focus { 
+    border-color: #007C27; 
+    box-shadow: 0 0 0 3px rgba(0, 124, 39, 0.1); 
+}
+
+.input::placeholder { 
+    color: #94a3b8; 
+    font-weight: normal; 
+}
+
+/* === RICH TEXT EDITOR === */
+.rich-text-editor { 
+    min-height: 120px; 
+}
+.rich-text-editor ul { 
+    list-style-type: disc; 
+    padding-left: 1.5rem; 
+    margin-top: 0.5rem; 
+    margin-bottom: 0.5rem; 
+}
+.rich-text-editor li { margin-bottom: 0.25rem; }
+.rich-text-editor b { font-weight: 700; }
+.rich-text-editor i { font-style: italic; }
+.rich-text-editor u { text-decoration: underline; }
+[contenteditable]:empty:before { 
+    content: attr(data-placeholder); 
+    color: #94a3b8; 
+    pointer-events: none; 
+    display: block; 
+}
+
+/* === RAPPORTAGE & PDF WEERGAVE (Report & Proposal) === */
+.report-section-title { 
+    color: #007C27; 
+    font-family: 'League Spartan', sans-serif; 
+    font-size: 1.5rem; 
+    font-weight: bold; 
+    border-bottom: 2px solid #E9E9E9; 
+    padding-bottom: 0.5rem; 
+    margin-bottom: 1rem; 
+    margin-top: 2rem; 
+    text-transform: uppercase;
+}
+
+.report-table th { 
+    background-color: #007C27; 
+    color: white; 
+    padding: 8px; 
+    text-align: left; 
+    font-family: 'League Spartan', sans-serif; 
+}
+
+.report-table td { 
+    border-bottom: 1px solid #E9E9E9; 
+    padding: 8px; 
+    font-family: 'Inter', sans-serif; 
+    font-size: 0.9rem; 
+}
+
+/* Specifieke formattering voor de geëxporteerde tekst */
+.pdf-rich-text, .pdf-rich-text * { 
+    font-family: 'Inter', sans-serif !important; 
+    font-size: 0.875rem !important; 
+    color: #1e293b !important; 
+    line-height: 1.625 !important; 
+}
+.pdf-rich-text b, .pdf-rich-text strong { font-weight: 700 !important; }
+.pdf-rich-text i, .pdf-rich-text em { font-style: italic !important; }
+.pdf-rich-text u { text-decoration: underline !important; }
+.pdf-rich-text ul { 
+    list-style-type: disc !important; 
+    padding-left: 1.5rem !important; 
+    margin-top: 0.5rem !important; 
+    margin-bottom: 0.5rem !important; 
+}
+
+/* === ROBUUSTE PRINT REGELS === */
+@media print {
+    body { background-color: white !important; margin: 0; padding: 0; }
+    
+    /* Verberg standaard alles, tenzij het onderdeel is van #print-content */
+    body * { visibility: hidden; }
+    
+    .no-print, .no-print * { 
+        display: none !important; 
+        opacity: 0 !important; 
+        visibility: hidden !important; 
+    }
+    
+    button { display: none !important; }
+    
+    #print-area { width: 100%; padding: 0; margin: 0; }
+    
+    .page-break { 
+        page-break-before: always !important; 
+        break-before: page !important; 
+    }
+    
+    .break-inside-avoid { 
+        break-inside: avoid !important; 
+        page-break-inside: avoid !important; 
+    }
+    
+    #print-content, #print-content * { visibility: visible !important; }
+    
+    #print-content { 
+        position: absolute; 
+        left: 0; 
+        top: 0; 
+        width: 100%; 
+        margin: 0; 
+        padding: 0; 
+        background: white; 
+        box-shadow: none; 
+    }
+    
+    svg { break-inside: avoid; }
+    
+    * { 
+        -webkit-print-color-adjust: exact !important; 
+        print-color-adjust: exact !important; 
+    }
+}
+
+
+Stap 2: Maak een bestand genaamd config.js
+
+In plaats van een "Module" (die lokaal vastloopt), hangen we de branding vast aan het globale window object van de browser.
+
+// config.js
+window.PERFOTEC_CONFIG = {
+    brand: {
+        colors: { 
+            green: '#007C27', 
+            blue: '#054E9A', 
+            black: '#211A1A',
+            gray: '#E9E9E9', 
+            lightGray: '#F3F4F6', 
+            white: '#FFFFFF' 
+        },
+        fonts: { 
+            heading: '"League Spartan", sans-serif', 
+            body: '"Inter", sans-serif' 
+        }
+    },
+    packagingTypes: ['Retail', 'Box/ Crate', 'Cube crate', 'Pallet', 'Punnets', 'Pillow Bag', 'Bin crate'],
+    defaultCriteria: [
+        'General Quality', 'Taste', 'Visual Appearance', 'Color',
+        'Smell / Aroma', 'Texture / Firmness', 'Humidity / Condensation',
+        'Dehydration / Shriveling', 'Moulds / Decay', 'Internal Browning'
+    ]
+};
