@@ -86,7 +86,7 @@
           Save, FolderOpen, Tractor, Ship, Plane, Warehouse, Store, 
           Utensils, Factory, ArrowDown, ArrowUp, ChevronUp, ChevronDown, 
           Bold, Italic, Underline, List, AlertTriangle, Package,
-          X, FileArchive, LineChart
+          X, Edit3, Camera, FileArchive, LineChart
         } from 'https://esm.sh/lucide-react@0.292.0';
 
         // --- BRAND CONFIGURATIE ---
@@ -123,12 +123,12 @@
 
         // --- HULPFUNCTIES ---
         const getStageIcon = (name) => {
-          const n = name.toLowerCase();
+          const n = name?.toLowerCase() || '';
           if (n.includes('farm') || n.includes('harvest') || n.includes('oogst')) return <Tractor size={14} color={BRAND.colors.black} />;
           if (n.includes('sea')) return <Ship size={14} color={BRAND.colors.black} />;
           if (n.includes('air')) return <Plane size={14} color={BRAND.colors.black} />;
           if (n.includes('storage') || n.includes('dc')) return <Warehouse size={14} color={BRAND.colors.black} />;
-          if (n.includes('store') || n.includes('retail') || n.includes('shop')) return <Store size={14} color={BRAND.colors.black} />;
+          if (n.includes('store') || n.includes('retail')) return <Store size={14} color={BRAND.colors.black} />;
           if (n.includes('consumer') || n.includes('eat')) return <Utensils size={14} color={BRAND.colors.black} />;
           if (n.includes('pack') && !n.includes('transport')) return <Factory size={14} color={BRAND.colors.black} />;
           return <Truck size={14} color={BRAND.colors.black} />;
@@ -138,6 +138,13 @@
           if (start && end && start !== end) return `${start}-${end}${unit}`;
           if (start) return `${start}${unit}`;
           return `-`;
+        };
+
+        const formatDateToDDMMYYYY = (dateStr) => {
+          if (!dateStr) return '-';
+          const parts = dateStr.split('-');
+          if (parts.length !== 3) return dateStr;
+          return `${parts[2]}/${parts[1]}/${parts[0]}`;
         };
 
         // --- COMPONENTEN ---
@@ -302,6 +309,35 @@
           });
           
           const [newCriteria, setNewCriteria] = useState('');
+
+          const calcUnpackingDate = () => {
+            const baseDate = project.packingDate || project.date;
+            const duration = parseInt(project.totalDuration) || 0;
+            if (baseDate && duration) {
+               const d = new Date(baseDate);
+               d.setDate(d.getDate() + duration);
+               const day = String(d.getDate()).padStart(2, '0');
+               const month = String(d.getMonth() + 1).padStart(2, '0');
+               const year = d.getFullYear();
+               return `${day}/${month}/${year}`; 
+            }
+            return '-';
+          };
+          
+          const calcRetailDate = () => {
+            const baseDate = project.packingDate || project.date;
+            const duration = parseInt(project.totalDuration) || 0;
+            const retailDays = parseInt(project.retailOpenDays) || 0;
+            if (baseDate && (duration || retailDays)) {
+               const d = new Date(baseDate);
+               d.setDate(d.getDate() + duration + retailDays);
+               const day = String(d.getDate()).padStart(2, '0');
+               const month = String(d.getMonth() + 1).padStart(2, '0');
+               const year = d.getFullYear();
+               return `${day}/${month}/${year}`; 
+            }
+            return '-';
+          };
 
           // --- HANDLERS ---
           const handleImgUpload = (e, field) => { 
@@ -604,7 +640,7 @@
                       body * { visibility: hidden; }
                       #print-content, #print-content * { visibility: visible !important; }
                       #print-content { 
-                        position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; background: white; box-shadow: none;
+                        position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; background: white; box-shadow: none; 
                       }
                       * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
                       .no-print, .no-print * { display: none !important; opacity: 0 !important; visibility: hidden !important; }
@@ -748,7 +784,7 @@
 
                   <div className="page-break"></div>
 
-                  {/* --- PAGE 4: SUPPLY CHAIN & SET UP --- */}
+                  {/* --- PAGE 4: SUPPLY CHAIN --- */}
                   <div className="pt-4">
                     <h2 className="report-section-title">4 Simulated Supply Chain</h2>
                     <div className="brand-body text-base text-slate-800 mb-8">
@@ -764,6 +800,7 @@
                        <p className="mt-4 text-sm italic text-gray-500">* Temperatures and durations are simulated based on provided information.</p>
                        <p className="mt-2">Stored at {tempString} for {totalDays} days total.</p>
                        <p>The product was packed on <strong>{formatDateToDDMMYYYY(project.packingDate || project.date)}</strong>.</p>
+                       <p>Unpacking moments are specific to each variant and are detailed in the Trial Setup table below.</p>
                     </div>
 
                     <h2 className="report-section-title">5 Proposed Trial Setup</h2>
@@ -780,7 +817,7 @@
                                   <th className="text-center">Dimensions (mm)</th>
                                   <th className="text-center">Netto Packing Weight (g)</th>
                                   <th className="text-center">Transmission Value</th>
-                                  <th className="text-center">Total Samples</th>
+                                  <th className="text-center">Evaluation Days</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -794,7 +831,7 @@
                                     <td className="text-center">{g.specs?.length || '-'}x{g.specs?.width || '-'}x{g.specs?.height || '-'}</td>
                                     <td className="text-center">{project.startWeight || '-'}</td>
                                     <td className="text-center">{g.specs?.holes || '-'}</td>
-                                    <td className="text-center">{g.specs?.sampleCount || 3}</td>
+                                    <td className="text-center">{g.measurements.filter(m => parseFloat(m.day) > 0).map(m => m.day).join(', ')}</td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -983,7 +1020,10 @@
                            <div className="sm:col-span-2"><label className="label">Proposal Title</label><input type="text" className="input text-lg font-bold" value={project.reportTitle || ''} onChange={e => handleProjectChange('reportTitle', e.target.value)} /></div>
                            <div className="sm:col-span-2"><label className="label">Product Name</label><input type="text" className="input text-lg font-bold" value={project.productName || ''} onChange={e => handleProjectChange('productName', e.target.value)} /></div>
                            <div><label className="label">Proposal Date</label><input type="date" className="input" value={project.date || ''} onChange={e => handleProjectChange('date', e.target.value)} /></div>
+                           
                            <div><label className="label">Packing Date</label><input type="date" className="input bg-yellow-50" value={project.packingDate || ''} onChange={e => handleProjectChange('packingDate', e.target.value)} /></div>
+                           <div><label className="label">Total Duration (Days)</label><input type="number" className="input bg-yellow-50" value={project.totalDuration || ''} onChange={handleDurationChange} placeholder="e.g. 10" /></div>
+                           <div><label className="label">Retail Simulation (after opening)</label><input type="number" className="input bg-blue-50" value={project.retailOpenDays || ''} onChange={e => handleProjectChange('retailOpenDays', e.target.value)} placeholder="e.g. 7" /></div>
                            
                            <div>
                               <label className="label">Processing Type</label>
@@ -1000,7 +1040,7 @@
                            <div><label className="label">Maturity Stage at Packing</label><input type="text" className="input" value={project.maturityStage || ''} onChange={e => handleProjectChange('maturityStage', e.target.value)} /></div>
                            <div><label className="label">Post-harvest Treatment</label><input type="text" className="input" value={project.postHarvestTreatment || ''} onChange={e => handleProjectChange('postHarvestTreatment', e.target.value)} /></div>
                            
-                           <div className="sm:col-span-2 bg-slate-50 p-4 rounded border border-slate-200 grid grid-cols-1 sm:grid-cols-3 gap-4 mt-2">
+                           <div className="sm:col-span-2 bg-slate-50 p-4 rounded border border-slate-200 grid grid-cols-1 sm:grid-cols-4 gap-4 mt-2">
                               <div><label className="label">RR O₂</label><input type="text" className="input" value={project.rrO2 || ''} onChange={e => handleProjectChange('rrO2', e.target.value)} /></div>
                               <div><label className="label">RR CO₂</label><input type="text" className="input" value={project.rrCO2 || ''} onChange={e => handleProjectChange('rrCO2', e.target.value)} /></div>
                               <div><label className="label whitespace-nowrap">Measured at (°C)</label><input type="text" className="input" value={project.rrTemp || ''} onChange={e => handleProjectChange('rrTemp', e.target.value)} /></div>
@@ -1114,9 +1154,9 @@
                                <button 
                                  key={mode} 
                                  onClick={() => handleTransportModeToggle(mode)}
-                                 className={`px-3 py-1.5 rounded-full text-xs font-bold border transition ${project.transportModes?.includes(mode) ? 'bg-blue-100 border-blue-300 text-blue-800' : 'bg-white border-slate-300 text-slate-500'}`}
+                                 className={`px-3 py-1.5 rounded-full text-xs font-bold border transition ${project.transportMode === mode ? 'bg-blue-100 border-blue-300 text-blue-800' : 'bg-white border-slate-300 text-slate-500'}`}
                                >
-                                 {mode} {project.transportModes?.includes(mode) && <CheckCircle size={12} className="inline ml-1"/>}
+                                 {mode} {project.transportMode === mode && <CheckCircle size={12} className="inline ml-1"/>}
                                </button>
                              ))}
                            </div>
@@ -1129,10 +1169,10 @@
                       <h2 className="font-bold text-lg mb-6 text-[#211A1A] border-b pb-2 flex items-center gap-2"><Truck size={20}/> 6. Product Supply Chain</h2>
                       <div className="space-y-4 overflow-hidden">
                         {supplyChain.map((step, idx) => (
-                           <div key={idx} className="flex flex-wrap xl:flex-nowrap gap-4 items-end bg-slate-50 p-4 rounded-lg border border-slate-200 relative group">
-                              <div className="flex flex-col gap-1 pb-1 shrink-0 w-full sm:w-auto flex-row xl:flex-col justify-end xl:justify-start">
-                                 <button type="button" onClick={() => moveChainStep(idx, 'up')} disabled={idx === 0} className="p-2 sm:p-1 hover:bg-slate-200 rounded disabled:opacity-30"><ChevronUp size={16}/></button>
-                                 <button type="button" onClick={() => moveChainStep(idx, 'down')} disabled={idx === supplyChain.length - 1} className="p-2 sm:p-1 hover:bg-slate-200 rounded disabled:opacity-30"><ChevronDown size={16}/></button>
+                           <div key={idx} className="flex gap-4 items-end bg-slate-50 p-4 rounded-lg border border-slate-200 relative group">
+                              <div className="flex flex-col gap-1 pb-1 shrink-0 w-full sm:w-auto flex-row lg:flex-col justify-end lg:justify-start">
+                                 <button type="button" onClick={() => moveChainStep(idx, 'up')} disabled={idx === 0} className="p-1.5 hover:bg-slate-200 rounded disabled:opacity-30"><ChevronUp size={16}/></button>
+                                 <button type="button" onClick={() => moveChainStep(idx, 'down')} disabled={idx === supplyChain.length - 1} className="p-1.5 hover:bg-slate-200 rounded disabled:opacity-30"><ChevronDown size={16}/></button>
                               </div>
                               
                               <div className="flex-1 min-w-[200px] w-full">
@@ -1156,12 +1196,12 @@
                                  <div className="w-1/2"><label className="label whitespace-nowrap">Max</label><input type="number" className="input text-center w-full" value={step.daysEnd || ''} onChange={e => updateChainStep(idx, 'daysEnd', e.target.value)} placeholder="-" /></div>
                               </div>
                               
-                              <div className="w-full sm:w-32 shrink-0">
+                              <div className="w-full sm:w-40 shrink-0">
                                 <label className="label whitespace-nowrap">Actie</label>
                                 <select className="input font-bold text-slate-700 w-full" value={step.action || 'none'} onChange={e => updateChainStep(idx, 'action', e.target.value)}>
                                   <option value="none">- Geen -</option>
-                                  <option value="pack" className="text-green-600">Inpakken</option>
-                                  <option value="unpack" className="text-red-600">Uitpakken</option>
+                                  <option value="pack">Inpakken</option>
+                                  <option value="unpack">Uitpakken</option>
                                 </select>
                               </div>
                               
@@ -1224,7 +1264,7 @@
                                <div><label className="label whitespace-nowrap">Packaging Type</label><select className="input" value={groups.find(g => g.id === activeGroupId).specs.packaging || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'packaging', e.target.value)}>{PACKAGING_TYPES.map(t => <option key={t}>{t}</option>)}</select></div>
                              </div>
                              
-                             <label className="label text-blue-800 mb-2 border-b border-blue-200 pb-1 w-full block mt-4">Packaging Dimensions</label>
+                             <label className="label text-blue-800 mb-2 border-b border-blue-200 pb-1 w-full block mt-4">Packaging Dimensions & Samples</label>
                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-slate-50 p-4 rounded-t-lg border-x border-t border-slate-100">
                                 <div><label className="label whitespace-nowrap">Length (mm)</label><input type="number" className="input" value={groups.find(g => g.id === activeGroupId).specs.length || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'length', e.target.value)} /></div>
                                 <div><label className="label whitespace-nowrap">Width (mm)</label><input type="number" className="input" value={groups.find(g => g.id === activeGroupId).specs.width || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'width', e.target.value)} /></div>
@@ -1236,6 +1276,56 @@
                                <div className="col-span-1 lg:col-span-1 mt-2 lg:mt-0"><label className="label whitespace-nowrap">Aantal Samples Fysiek</label><input type="number" min="1" className="input w-full bg-white border-blue-200 font-bold text-blue-900" value={groups.find(g => g.id === activeGroupId).specs.sampleCount || 3} onChange={(e) => handleSampleCountChange(activeGroupId, parseInt(e.target.value))} /></div>
                              </div>
                              
+                             <div className="bg-slate-50 p-4 rounded-lg border border-slate-100 mb-6">
+                                <div className="flex justify-between items-center mb-4">
+                                  <h4 className="font-bold text-slate-700">Timeline & Events</h4>
+                                  <button onClick={() => addEvaluationDay(activeGroupId)} className="text-xs bg-green-600 text-white px-3 py-1.5 rounded font-bold shadow-sm hover:opacity-90">+ Add Event Day</button>
+                                </div>
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-sm bg-white rounded border overflow-hidden">
+                                    <thead className="bg-slate-100 border-b">
+                                      <tr className="text-left text-slate-500">
+                                        <th className="p-2 w-16 text-center">Day</th>
+                                        <th className="p-2 border-l">Measure Gas/Wt.</th>
+                                        <th className="p-2 border-l">Open Pack</th>
+                                        <th className="p-2 border-l">Evaluate Quality</th>
+                                        <th className="p-2 border-l w-10"></th>
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y">
+                                      {(groups.find(g => g.id === activeGroupId).measurements || []).map((m, idx, arr) => {
+                                        const disabledForMeasure = [];
+                                        arr.filter(prev => parseFloat(prev.day) < parseFloat(m.day)).forEach(prev => {
+                                          disabledForMeasure.push(...(prev.open || []));
+                                        });
+                                        const sCount = groups.find(g => g.id === activeGroupId).specs.sampleCount || 3;
+
+                                        return (
+                                          <tr key={idx} className="hover:bg-slate-50">
+                                            <td className="p-2 text-center">
+                                              <input type="number" className="w-12 p-1 border rounded text-center font-bold" value={m.day} onChange={e => updateEvaluationDay(activeGroupId, m.day, e.target.value)} />
+                                            </td>
+                                            <td className="p-2 border-l">
+                                              <SampleToggles max={sCount} selected={m.measure||[]} disabled={disabledForMeasure} activeClass="bg-blue-500 border-blue-600 text-white" onChange={s => toggleEvent(activeGroupId, m.day, 'measure', s)} />
+                                            </td>
+                                            <td className="p-2 border-l">
+                                              <SampleToggles max={sCount} selected={m.open||[]} disabled={[]} activeClass="bg-orange-500 border-orange-600 text-white" onChange={s => toggleEvent(activeGroupId, m.day, 'open', s)} />
+                                            </td>
+                                            <td className="p-2 border-l">
+                                              <SampleToggles max={sCount} selected={m.evaluate||[]} disabled={[]} activeClass="bg-green-500 border-green-600 text-white" onChange={s => toggleEvent(activeGroupId, m.day, 'evaluate', s)} />
+                                            </td>
+                                            <td className="p-2 border-l text-center">
+                                              <button onClick={() => removeEvaluationDay(activeGroupId, m.day)} className="text-red-400 hover:text-red-600"><Trash2 size={14}/></button>
+                                            </td>
+                                          </tr>
+                                        )
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                                <div className="mt-2 text-xs italic text-gray-500">* Zodra een sample op een eerdere dag als 'Open' is gemarkeerd, kan deze logischerwijs niet meer gekozen worden voor gas/gewichtsmetingen (de knop wordt grijs en onklikbaar).</div>
+                             </div>
+
                              <div className="border-2 border-dashed border-blue-200 bg-blue-50 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                                 <div className="flex items-center gap-4">
                                    <LineChart size={24} className="text-blue-500 shrink-0" />
@@ -1256,7 +1346,7 @@
                                           e.preventDefault();
                                           setPendingImageReplace({ groupId: activeGroupId, result: null });
                                         }
-                                     }} 
+                                     }}
                                      onChange={(e) => handlePredictedImageUpload(e, activeGroupId)} 
                                    />
                                 </label>
@@ -1268,58 +1358,6 @@
                                 </div>
                              )}
                            </div>
-
-                           <div className="bg-slate-50 p-4 rounded-lg border border-slate-100 mt-8">
-                             <div className="flex justify-between items-center mb-4">
-                               <h4 className="font-bold text-slate-700">Timeline & Events</h4>
-                               <button onClick={() => addMeasurementDay(activeGroupId)} className="text-xs bg-green-600 text-white px-3 py-1.5 rounded font-bold shadow-sm hover:opacity-90">+ Add Event Day</button>
-                             </div>
-                             <div className="overflow-x-auto">
-                               <table className="w-full text-sm bg-white rounded border overflow-hidden">
-                                 <thead className="bg-slate-100 border-b">
-                                   <tr className="text-left text-slate-500">
-                                     <th className="p-2 w-16 text-center">Day</th>
-                                     <th className="p-2 border-l">Measure Gas/Wt.</th>
-                                     <th className="p-2 border-l">Open Pack</th>
-                                     <th className="p-2 border-l">Evaluate Quality</th>
-                                     <th className="p-2 border-l w-10"></th>
-                                   </tr>
-                                 </thead>
-                                 <tbody className="divide-y">
-                                   {groups.find(g => g.id === activeGroupId).measurements.map((m, idx, arr) => {
-                                     // Determine disabled measurement samples (opened in ANY strictly previous day)
-                                     const disabledForMeasure = [];
-                                     arr.filter(prev => parseFloat(prev.day) < parseFloat(m.day)).forEach(prev => {
-                                       disabledForMeasure.push(...(prev.open || []));
-                                     });
-                                     const sCount = groups.find(g => g.id === activeGroupId).specs.sampleCount || 3;
-
-                                     return (
-                                       <tr key={idx} className="hover:bg-slate-50">
-                                         <td className="p-2 text-center">
-                                           <input type="number" className="w-12 p-1 border rounded text-center font-bold" value={m.day} onChange={e => updateEvaluationDay(activeGroupId, m.day, e.target.value)} />
-                                         </td>
-                                         <td className="p-2 border-l">
-                                           <SampleToggles max={sCount} selected={m.measure||[]} disabled={disabledForMeasure} activeClass="bg-blue-500 border-blue-600 text-white" onChange={s => toggleEvent(activeGroupId, m.day, 'measure', s)} />
-                                         </td>
-                                         <td className="p-2 border-l">
-                                           <SampleToggles max={sCount} selected={m.open||[]} disabled={[]} activeClass="bg-orange-500 border-orange-600 text-white" onChange={s => toggleEvent(activeGroupId, m.day, 'open', s)} />
-                                         </td>
-                                         <td className="p-2 border-l">
-                                           <SampleToggles max={sCount} selected={m.evaluate||[]} disabled={[]} activeClass="bg-green-500 border-green-600 text-white" onChange={s => toggleEvent(activeGroupId, m.day, 'evaluate', s)} />
-                                         </td>
-                                         <td className="p-2 border-l text-center">
-                                           <button onClick={() => removeEvaluationDay(activeGroupId, m.day)} className="text-red-400 hover:text-red-600"><Trash2 size={14}/></button>
-                                         </td>
-                                       </tr>
-                                     )
-                                   })}
-                                 </tbody>
-                               </table>
-                             </div>
-                             <div className="mt-2 text-xs italic text-gray-500">* Zodra een sample op een eerdere dag als 'Open' is gemarkeerd, kan deze logischerwijs niet meer gekozen worden voor gas/gewichtsmetingen (de knop wordt grijs en onklikbaar).</div>
-                           </div>
-
                          </>
                        )}
                     </div>
@@ -1357,6 +1395,17 @@
                              onChange={(val) => setProposal(prev => ({...prev, requirements: val}))} 
                              placeholder="Wat moet de klant aanleveren? Welke afspraken zijn er gemaakt?"
                           />
+                       </div>
+
+                       <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6 mt-4">
+                         <div>
+                           <label className="label text-orange-600">Korte Samenvatting Uitdaging</label>
+                           <textarea rows="3" className="input bg-orange-50 border-orange-200" value={project.currentChallenge} onChange={e => handleProjectChange('currentChallenge', e.target.value)} placeholder="(Optioneel) Korte bullet-points voor op blz 2" />
+                         </div>
+                         <div>
+                           <label className="label text-green-600">Trial Target</label>
+                           <textarea rows="3" className="input bg-green-50 border-green-200" value={project.trialTarget} onChange={e => handleProjectChange('trialTarget', e.target.value)} placeholder="(Optioneel) Kort doel voor op blz 2" />
+                         </div>
                        </div>
                     </div>
                   </div>
