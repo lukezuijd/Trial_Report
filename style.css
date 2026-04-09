@@ -1,9 +1,32 @@
 /* ==========================================================================
    PERFOTEC HUB - GEDEELDE STYLESHEET
+   Gebaseerd op: PerfoTec Brand Guidelines (V 1.0, 2023)
    ========================================================================== */
 
 /* === FONTS === */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=League+Spartan:wght@700&display=swap');
+
+/* === BRAND CSS VARIABLES === */
+:root {
+    /* Primary Colors */
+    --brand-green: #007C27;
+    --brand-blue: #054E9A;
+    --brand-dark-blue: #004B87;
+    
+    /* Secondary Colors */
+    --brand-light-blue: #5B9BD5;
+    --brand-orange: #ea580c;
+    
+    /* Neutral Colors */
+    --brand-black: #211A1A;
+    --brand-gray: #E9E9E9;
+    --brand-light-gray: #F3F4F6;
+    --brand-white: #FFFFFF;
+    
+    /* Typography */
+    --font-heading: 'League Spartan', sans-serif;
+    --font-body: 'Inter', sans-serif;
+}
 
 /* === BASIS INSTELLINGEN === */
 html { 
@@ -11,17 +34,22 @@ html {
 }
 
 body { 
-    background-color: #f8fafc; 
-    font-family: 'Inter', sans-serif; 
+    background-color: var(--brand-light-gray); 
+    font-family: var(--font-body); 
+    color: var(--brand-black);
 }
 
 /* === TYPOGRAFIE === */
 .brand-heading { 
-    font-family: 'League Spartan', sans-serif; 
+    font-family: var(--font-heading); 
 }
 
 .brand-body { 
-    font-family: 'Inter', sans-serif; 
+    font-family: var(--font-body); 
+}
+
+h1, h2, h3, h4, h5, h6 {
+    color: var(--brand-black);
 }
 
 /* === FORMULIER ELEMENTEN (Intake, Proposal, Editor) === */
@@ -29,34 +57,35 @@ body {
     display: block; 
     font-size: 0.75rem; 
     font-weight: 700; 
-    color: #64748b; 
+    /* Gebruik PerfoTec Black met iets transparantie voor zachtere labels */
+    color: rgba(33, 26, 26, 0.7); 
     text-transform: uppercase; 
     letter-spacing: 0.05em; 
     margin-bottom: 0.35rem; 
-    font-family: 'Inter', sans-serif; 
+    font-family: var(--font-body); 
     white-space: nowrap;
 }
 
 .input { 
     width: 100%; 
     padding: 0.6rem; 
-    border: 1px solid #e2e8f0; 
+    border: 1px solid var(--brand-gray); 
     border-radius: 0.5rem; 
     outline: none; 
     transition: 0.2s; 
     font-size: 0.9rem; 
-    font-family: 'Inter', sans-serif; 
-    background-color: #ffffff; 
-    color: #1e293b;
+    font-family: var(--font-body); 
+    background-color: var(--brand-white); 
+    color: var(--brand-black);
 }
 
 .input:focus { 
-    border-color: #007C27; 
+    border-color: var(--brand-green); 
     box-shadow: 0 0 0 3px rgba(0, 124, 39, 0.1); 
 }
 
 .input::placeholder { 
-    color: #94a3b8; 
+    color: rgba(33, 26, 26, 0.4); 
     font-weight: normal; 
 }
 
@@ -76,18 +105,18 @@ body {
 .rich-text-editor u { text-decoration: underline; }
 [contenteditable]:empty:before { 
     content: attr(data-placeholder); 
-    color: #94a3b8; 
+    color: rgba(33, 26, 26, 0.4); 
     pointer-events: none; 
     display: block; 
 }
 
 /* === RAPPORTAGE & PDF WEERGAVE (Report & Proposal) === */
 .report-section-title { 
-    color: #007C27; 
-    font-family: 'League Spartan', sans-serif; 
+    color: var(--brand-green); 
+    font-family: var(--font-heading); 
     font-size: 1.5rem; 
     font-weight: bold; 
-    border-bottom: 2px solid #E9E9E9; 
+    border-bottom: 2px solid var(--brand-gray); 
     padding-bottom: 0.5rem; 
     margin-bottom: 1rem; 
     margin-top: 2rem; 
@@ -95,25 +124,26 @@ body {
 }
 
 .report-table th { 
-    background-color: #007C27; 
-    color: white; 
+    background-color: var(--brand-green); 
+    color: var(--brand-white); 
     padding: 8px; 
     text-align: left; 
-    font-family: 'League Spartan', sans-serif; 
+    font-family: var(--font-heading); 
 }
 
 .report-table td { 
-    border-bottom: 1px solid #E9E9E9; 
+    border-bottom: 1px solid var(--brand-gray); 
     padding: 8px; 
-    font-family: 'Inter', sans-serif; 
+    font-family: var(--font-body); 
     font-size: 0.9rem; 
+    color: var(--brand-black);
 }
 
 /* Specifieke formattering voor de geëxporteerde tekst */
 .pdf-rich-text, .pdf-rich-text * { 
-    font-family: 'Inter', sans-serif !important; 
+    font-family: var(--font-body) !important; 
     font-size: 0.875rem !important; 
-    color: #1e293b !important; 
+    color: var(--brand-black) !important; 
     line-height: 1.625 !important; 
 }
 .pdf-rich-text b, .pdf-rich-text strong { font-weight: 700 !important; }
@@ -128,7 +158,7 @@ body {
 
 /* === ROBUUSTE PRINT REGELS === */
 @media print {
-    body { background-color: white !important; margin: 0; padding: 0; }
+    body { background-color: var(--brand-white) !important; margin: 0; padding: 0; }
     
     /* Verberg standaard alles, tenzij het onderdeel is van #print-content */
     body * { visibility: hidden; }
@@ -162,7 +192,7 @@ body {
         width: 100%; 
         margin: 0; 
         padding: 0; 
-        background: white; 
+        background: var(--brand-white); 
         box-shadow: none; 
     }
     
