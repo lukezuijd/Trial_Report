@@ -314,6 +314,7 @@
 
         // --- MAIN APPLICATION (EDITOR) ---
         const App = () => {
+          // Language strictly set to English for this file.
           const lang = 'en';
           const t = T[lang];
 
@@ -346,7 +347,7 @@
 
           const [errors, setErrors] = useState([]);
           const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
-          const [mailUrl, setMailUrl] = useState('#');
+          const [mailUrl, setMailUrl] = useState('');
           const [isPreview, setIsPreview] = useState(false);
 
           // --- HANDLERS CLIENT INFO ---
@@ -551,12 +552,16 @@
 
             setIsSuccessModalOpen(true);
             
-            // Safeguarded navigation to avoid window.location errors
+            // Fallback strategy for environments where window.location.href to mailto is blocked
             setTimeout(() => {
                 try {
-                    window.location.href = generatedMailUrl;
+                    const iframe = document.createElement('iframe');
+                    iframe.style.display = 'none';
+                    iframe.src = generatedMailUrl;
+                    document.body.appendChild(iframe);
+                    setTimeout(() => document.body.removeChild(iframe), 3000);
                 } catch(err) {
-                    console.warn('Mailto navigation failed (sandbox limitation)', err);
+                    console.warn('Mailto iframe failed', err);
                 }
             }, 600);
           };
@@ -593,7 +598,7 @@
                      
                      <div className="mb-8 p-5 bg-slate-50 border border-slate-200 rounded-xl flex flex-col items-center gap-3">
                         <p className="text-sm font-medium text-slate-500">{t.fallbackMailText}</p>
-                        <a href={mailUrl !== '#' && mailUrl !== '' ? mailUrl : '#'} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-full font-bold transition-all flex items-center gap-2 shadow-lg hover:shadow-blue-500/30 hover:-translate-y-0.5">
+                        <a href={mailUrl !== '#' && mailUrl !== '' ? mailUrl : '#'} onClick={(e) => { if(mailUrl === '#' || mailUrl === '') e.preventDefault(); }} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-full font-bold transition-all flex items-center gap-2 shadow-lg hover:shadow-blue-500/30 hover:-translate-y-0.5">
                           <Mail size={18} /> {t.fallbackMailBtn}
                         </a>
                      </div>
@@ -624,18 +629,19 @@
                          value="en" 
                          onChange={(e) => {
                            const val = e.target.value;
-                           if (val === 'nl' || val === 'es') {
-                              try {
-                                  window.location.assign(`intake_${val}.html`);
-                              } catch(err) {
-                                  console.warn("Navigation failed", err);
-                              }
-                           }
+                           if (globalConfig.setLanguage) globalConfig.setLanguage(val);
+                           setLang(val);
                          }}
                        >
-                         <option value="en">EN</option>
-                         <option value="nl">NL</option>
-                         <option value="es">ES</option>
+                         {globalConfig.LANGUAGES ? globalConfig.LANGUAGES.map(l => (
+                             <option key={l.code} value={l.code}>{l.label}</option>
+                         )) : (
+                             <React.Fragment>
+                               <option value="en">EN</option>
+                               <option value="nl">NL</option>
+                               <option value="es">ES</option>
+                             </React.Fragment>
+                         )}
                        </select>
                     </div>
                     
