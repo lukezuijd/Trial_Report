@@ -3,12 +3,12 @@
  * PERFOTEC GLOBALE CONFIGURATIE (config.js)
  * ============================================================================
  * Gebaseerd op: PerfoTec Brand Guidelines (V 1.0, 2023)
- * Dit bestand bevat alle gedeelde constanten, instellingen en logica 
+ * Dit bestand bevat alle gedeelde constanten, huisstijlregels en instellingen 
  * voor de PerfoTec Hub, Intake, Proposal en Report tools.
  */
 
 window.PERFOTEC_CONFIG = {
-    // === 1. BRANDING & STYLING ===
+    // === 1. BRANDING & STYLING (Conform Brand Guidelines) ===
     BRAND: {
         name: 'PerfoTec',
         tagline: 'BEST FOR FRESHNESS',
@@ -18,9 +18,21 @@ window.PERFOTEC_CONFIG = {
             reverse: '' 
         },
         colors: {
-            primary: { green: '#007C27', blue: '#054E9A', darkBlue: '#004B87' },
-            secondary: { lightBlue: '#5B9BD5', orange: '#ea580c' },
-            neutral: { black: '#211A1A', gray: '#E9E9E9', lightGray: '#F3F4F6', white: '#FFFFFF' }
+            primary: {
+                green: '#007C27', 
+                blue: '#054E9A',  
+                darkBlue: '#004B87' 
+            },
+            secondary: {
+                lightBlue: '#5B9BD5', 
+                orange: '#ea580c'     
+            },
+            neutral: {
+                black: '#211A1A',
+                gray: '#E9E9E9',
+                lightGray: '#F3F4F6',
+                white: '#FFFFFF'
+            }
         },
         fonts: {
             heading: '"League Spartan", sans-serif',
@@ -37,23 +49,26 @@ window.PERFOTEC_CONFIG = {
     ],
 
     // === 2. DROPDOWN OPTIES ===
-    PACKAGING_TYPES: ['Retail', 'Punnets', 'Pillow Bag', 'Box/ Crate', 'Bin crate', 'Cube crate', 'Pallet'],
-    TRANSPORT_MODES: ['Air Freight', 'Sea Freight', 'Road Transport', 'Storage'],
+    PACKAGING_TYPES: [
+        'Retail', 'Punnets', 'Pillow Bag', 'Box/ Crate', 'Bin crate', 'Cube crate', 'Pallet'
+    ],
+    TRANSPORT_MODES: [
+        'Air Freight', 'Sea Freight', 'Road Transport', 'Storage'
+    ],
 
-    // === 3. KWALITEIT & SUPPLY CHAIN STANDAARDEN ===
+    // === 3. KWALITEIT & SUPPLY CHAIN ===
     DEFAULT_CRITERIA: [
         'General Quality', 'Taste', 'Visual Appearance', 'Color',
         'Smell / Aroma', 'Texture / Firmness', 'Humidity / Condensation',
         'Dehydration / Shriveling', 'Moulds / Decay', 'Internal Browning'
     ],
-
     DEFAULT_SUPPLY_CHAIN: [
         { stage: 'Farm / Harvest', tempStart: '15', tempEnd: '', daysStart: '0.5', daysEnd: '', action: 'none' },
         { stage: 'Packing House', tempStart: '12', tempEnd: '', daysStart: '1', daysEnd: '', action: 'pack' },
-        { stage: 'Transport by road', tempStart: '6', tempEnd: '', daysStart: '2', daysEnd: '', action: 'none' },
-        { stage: 'Importer / Processor', tempStart: '8', tempEnd: '', daysStart: '1', daysEnd: '', action: 'none' },
+        { stage: 'Transport', tempStart: '6', tempEnd: '', daysStart: '2', daysEnd: '', action: 'none' },
+        { stage: 'Distribution Center', tempStart: '4', tempEnd: '', daysStart: '1', daysEnd: '', action: 'none' },
         { stage: 'Retail Store', tempStart: '18', tempEnd: '', daysStart: '4', daysEnd: '', action: 'none' },
-        { stage: 'Consumer (Open Pack)', tempStart: '20', tempEnd: '', daysStart: '2', daysEnd: '', action: 'unpack' }
+        { stage: 'Consumer', tempStart: '20', tempEnd: '', daysStart: '2', daysEnd: '', action: 'unpack' }
     ],
 
     // === 4. BEOORDELINGSSCHALEN ===
@@ -69,7 +84,6 @@ window.PERFOTEC_CONFIG = {
         [2, 'bad – strong and severe quality loss, strongly unpleasant'],
         [1, 'very bad – complete quality decay, spoiled and repulsive']
     ],
-
     MINI_SCORES: [
         [10, 'Excellent', 'text-green-700'], 
         [8, 'Good', 'text-green-600'],
@@ -107,7 +121,7 @@ window.PERFOTEC_CONFIG = {
     exportJSON: async function(data, defaultFilename) {
         const dataString = JSON.stringify(data, null, 2);
         
-        // Probeer de moderne "Opslaan Als" (Save As) functionaliteit te gebruiken
+        // Probeer de moderne "Opslaan Als" (Save As) API te gebruiken in Chrome/Edge e.d.
         if (window.showSaveFilePicker) {
             try {
                 const fileHandle = await window.showSaveFilePicker({
@@ -120,15 +134,15 @@ window.PERFOTEC_CONFIG = {
                 const writable = await fileHandle.createWritable();
                 await writable.write(dataString);
                 await writable.close();
-                return; // Opslaan was succesvol
+                return; // Opslaan was succesvol via dialoog
             } catch (err) {
-                // Als de gebruiker zelf annuleert, stop de functie zonder download
+                // Als de gebruiker zelf op 'Annuleren' klikt, doe niets.
                 if (err.name === 'AbortError') return;
                 console.error("Save As dialog failed, falling back to direct download...", err);
             }
         }
         
-        // Fallback (directe download) voor Safari, Firefox of als het fout gaat
+        // Fallback (directe download) voor Safari, Firefox of als API geblokkeerd wordt
         const blob = new Blob([dataString], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
