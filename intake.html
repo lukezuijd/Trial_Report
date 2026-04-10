@@ -505,33 +505,55 @@
               products: products
             };
 
-            const dataString = JSON.stringify(exportData, null, 2);
-            const blob = new Blob([dataString], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
             const cleanCompanyName = clientInfo.companyName.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'new_client';
-            a.download = `perfotec_intake_${cleanCompanyName}.json`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            const filename = `perfotec_intake_${cleanCompanyName}.json`;
+
+            if (globalConfig.exportJSON) {
+                globalConfig.exportJSON(exportData, filename);
+            } else {
+                const dataString = JSON.stringify(exportData, null, 2);
+                const blob = new Blob([dataString], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
           };
 
           const handleImportJSON = (e) => {
             const file = e.target.files[0];
             if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (event) => {
-              try {
-                const data = JSON.parse(event.target.result);
-                if(data.isPerfoTecIntake) {
-                   if(data.client) setClientInfo(data.client);
-                   if(data.products) setProducts(data.products);
-                } else { alert("Invalid intake file."); }
-              } catch (err) { alert("Error loading JSON file."); }
-            };
-            reader.readAsText(file);
+            
+            if (globalConfig.importJSON) {
+                globalConfig.importJSON(file, (data) => {
+                    if(data.isPerfoTecIntake) {
+                       if(data.client) setClientInfo(data.client);
+                       if(data.products) setProducts(data.products);
+                       if(data.language && globalConfig.setLanguage) {
+                           globalConfig.setLanguage(data.language);
+                       }
+                    } else { alert(t.validationErr || "Invalid intake file."); }
+                }, (err) => {
+                    alert("Error loading JSON file.");
+                });
+            } else {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                  try {
+                    const data = JSON.parse(event.target.result);
+                    if(data.isPerfoTecIntake) {
+                       if(data.client) setClientInfo(data.client);
+                       if(data.products) setProducts(data.products);
+                    } else { alert("Invalid intake file."); }
+                  } catch (err) { alert("Error loading JSON file."); }
+                };
+                reader.readAsText(file);
+            }
+            e.target.value = null; // Zorgt dat je hetzelfde bestand twee keer achter elkaar kunt inladen
           };
 
           const handleSubmit = (e) => {
@@ -552,7 +574,6 @@
 
             setIsSuccessModalOpen(true);
             
-            // Fallback strategy for environments where window.location.href to mailto is blocked
             setTimeout(() => {
                 try {
                     const iframe = document.createElement('iframe');
@@ -629,19 +650,18 @@
                          value="en" 
                          onChange={(e) => {
                            const val = e.target.value;
-                           if (globalConfig.setLanguage) globalConfig.setLanguage(val);
-                           setLang(val);
+                           if (val === 'nl' || val === 'es') {
+                              try {
+                                  window.location.assign(`intake_${val}.html`);
+                              } catch(err) {
+                                  console.warn("Navigation failed", err);
+                              }
+                           }
                          }}
                        >
-                         {globalConfig.LANGUAGES ? globalConfig.LANGUAGES.map(l => (
-                             <option key={l.code} value={l.code}>{l.label}</option>
-                         )) : (
-                             <React.Fragment>
-                               <option value="en">EN</option>
-                               <option value="nl">NL</option>
-                               <option value="es">ES</option>
-                             </React.Fragment>
-                         )}
+                         <option value="en">EN</option>
+                         <option value="nl">NL</option>
+                         <option value="es">ES</option>
                        </select>
                     </div>
                     
