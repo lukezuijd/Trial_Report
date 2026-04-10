@@ -3,38 +3,24 @@
  * PERFOTEC GLOBALE CONFIGURATIE (config.js)
  * ============================================================================
  * Gebaseerd op: PerfoTec Brand Guidelines (V 1.0, 2023)
- * Dit bestand bevat alle gedeelde constanten, huisstijlregels en instellingen 
+ * Dit bestand bevat alle gedeelde constanten, instellingen en logica 
  * voor de PerfoTec Hub, Intake, Proposal en Report tools.
- * Gebruik in React (bijv): `window.PERFOTEC_CONFIG.BRAND.colors.primary.green`
  */
 
 window.PERFOTEC_CONFIG = {
-    // === 1. BRANDING & STYLING (Conform Brand Guidelines) ===
+    // === 1. BRANDING & STYLING ===
     BRAND: {
         name: 'PerfoTec',
         tagline: 'BEST FOR FRESHNESS',
         logos: {
             default: 'https://cdn.prod.website-files.com/68b594c756c22085ddc6c1ea/68b59ba2f027bfeecd25261b_PerfoTec%20logo.png',
-            // Reserveringen voor de overige logotypes uit de brand guide
             icon: '', 
             reverse: '' 
         },
         colors: {
-            primary: {
-                green: '#007C27', // PerfoTec Brand Green
-                blue: '#054E9A',  // PerfoTec Brand Blue (Logo)
-                darkBlue: '#004B87' // Alternate Dark Blue (gebruikt in tabellen)
-            },
-            secondary: {
-                lightBlue: '#5B9BD5', // Gebruikt voor accenten / matrix
-                orange: '#ea580c'     // Voor waarschuwingen / defects
-            },
-            neutral: {
-                black: '#211A1A',
-                gray: '#E9E9E9',
-                lightGray: '#F3F4F6',
-                white: '#FFFFFF'
-            }
+            primary: { green: '#007C27', blue: '#054E9A', darkBlue: '#004B87' },
+            secondary: { lightBlue: '#5B9BD5', orange: '#ea580c' },
+            neutral: { black: '#211A1A', gray: '#E9E9E9', lightGray: '#F3F4F6', white: '#FFFFFF' }
         },
         fonts: {
             heading: '"League Spartan", sans-serif',
@@ -42,7 +28,6 @@ window.PERFOTEC_CONFIG = {
         }
     },
 
-    // Grafiekkleuren: Strikter afgestemd op het merk
     CHART_COLORS: [
         { stroke: '#007C27', fill: '#dcfce7', name: 'PerfoTec Green' },
         { stroke: '#054E9A', fill: '#dbeafe', name: 'PerfoTec Blue' },
@@ -52,35 +37,14 @@ window.PERFOTEC_CONFIG = {
     ],
 
     // === 2. DROPDOWN OPTIES ===
-    PACKAGING_TYPES: [
-        'Retail', 
-        'Punnets', 
-        'Pillow Bag', 
-        'Box/ Crate', 
-        'Bin crate', 
-        'Cube crate', 
-        'Pallet'
-    ],
-
-    TRANSPORT_MODES: [
-        'Air Freight', 
-        'Sea Freight', 
-        'Road Transport', 
-        'Storage'
-    ],
+    PACKAGING_TYPES: ['Retail', 'Punnets', 'Pillow Bag', 'Box/ Crate', 'Bin crate', 'Cube crate', 'Pallet'],
+    TRANSPORT_MODES: ['Air Freight', 'Sea Freight', 'Road Transport', 'Storage'],
 
     // === 3. KWALITEIT & SUPPLY CHAIN STANDAARDEN ===
     DEFAULT_CRITERIA: [
-        'General Quality', 
-        'Taste', 
-        'Visual Appearance', 
-        'Color',
-        'Smell / Aroma', 
-        'Texture / Firmness', 
-        'Humidity / Condensation',
-        'Dehydration / Shriveling', 
-        'Moulds / Decay', 
-        'Internal Browning'
+        'General Quality', 'Taste', 'Visual Appearance', 'Color',
+        'Smell / Aroma', 'Texture / Firmness', 'Humidity / Condensation',
+        'Dehydration / Shriveling', 'Moulds / Decay', 'Internal Browning'
     ],
 
     DEFAULT_SUPPLY_CHAIN: [
@@ -92,7 +56,7 @@ window.PERFOTEC_CONFIG = {
         { stage: 'Consumer (Open Pack)', tempStart: '20', tempEnd: '', daysStart: '2', daysEnd: '', action: 'unpack' }
     ],
 
-    // === 4. BEOORDELINGSSCHALEN (Voor Report) ===
+    // === 4. BEOORDELINGSSCHALEN ===
     SCORES: [
         [10, 'excellent – exceptionally appealing quality, exceptional good'],
         [9, 'very good – natural quality of the product, full strong characteristic quality attributes'],
@@ -115,39 +79,78 @@ window.PERFOTEC_CONFIG = {
     ],
 
     // === 5. TAAL BEHEER ===
-    // Voeg hier simpelweg talen toe om de dropdown overal in de app uit te breiden.
     LANGUAGES: [
         { code: 'en', label: 'EN' },
         { code: 'nl', label: 'NL' },
         { code: 'es', label: 'ES' }
     ],
 
-    // Slimme functie die de juiste taal kiest (LocalStorage -> Systeemtaal -> Fallback)
     getLanguage: function() {
-        // 1. Check of de gebruiker eerder een taal heeft gekozen
         const savedLang = localStorage.getItem('perfotec_lang');
-        if (savedLang && this.LANGUAGES.find(l => l.code === savedLang)) {
-            return savedLang;
-        }
-
-        // 2. Check de taal van het besturingssysteem/browser
+        if (savedLang && this.LANGUAGES.find(l => l.code === savedLang)) return savedLang;
         if (typeof navigator !== 'undefined') {
             const browserLang = (navigator.language || navigator.userLanguage || '').substring(0, 2).toLowerCase();
-            if (this.LANGUAGES.find(l => l.code === browserLang)) {
-                return browserLang;
-            }
+            if (this.LANGUAGES.find(l => l.code === browserLang)) return browserLang;
         }
-
-        // 3. Standaard terugvallen op Engels
         return 'en';
     },
 
-    // Functie om de taal centraal op te slaan
     setLanguage: function(code) {
         if (this.LANGUAGES.find(l => l.code === code)) {
             localStorage.setItem('perfotec_lang', code);
             return true;
         }
         return false;
+    },
+
+    // === 6. CENTRALE JSON LOGICA (Import / Export "Save As") ===
+    exportJSON: async function(data, defaultFilename) {
+        const dataString = JSON.stringify(data, null, 2);
+        
+        // Probeer de moderne "Opslaan Als" (Save As) functionaliteit te gebruiken
+        if (window.showSaveFilePicker) {
+            try {
+                const fileHandle = await window.showSaveFilePicker({
+                    suggestedName: defaultFilename,
+                    types: [{
+                        description: 'JSON File',
+                        accept: { 'application/json': ['.json'] },
+                    }],
+                });
+                const writable = await fileHandle.createWritable();
+                await writable.write(dataString);
+                await writable.close();
+                return; // Opslaan was succesvol
+            } catch (err) {
+                // Als de gebruiker zelf annuleert, stop de functie zonder download
+                if (err.name === 'AbortError') return;
+                console.error("Save As dialog failed, falling back to direct download...", err);
+            }
+        }
+        
+        // Fallback (directe download) voor Safari, Firefox of als het fout gaat
+        const blob = new Blob([dataString], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = defaultFilename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    },
+
+    importJSON: function(file, successCallback, errorCallback) {
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const data = JSON.parse(event.target.result);
+                if (successCallback) successCallback(data);
+            } catch (err) {
+                if (errorCallback) errorCallback(err);
+            }
+        };
+        reader.readAsText(file);
     }
 };
