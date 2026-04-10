@@ -3,9 +3,9 @@
  * PERFOTEC GLOBALE CONFIGURATIE (config.js)
  * ============================================================================
  * Gebaseerd op: PerfoTec Brand Guidelines (V 1.0, 2023)
- * * Dit bestand bevat alle gedeelde constanten, huisstijlregels en instellingen 
+ * Dit bestand bevat alle gedeelde constanten, huisstijlregels en instellingen 
  * voor de PerfoTec Hub, Intake, Proposal en Report tools.
- * * Gebruik in React (bijv): `window.PERFOTEC_CONFIG.BRAND.colors.primary.green`
+ * Gebruik in React (bijv): `window.PERFOTEC_CONFIG.BRAND.colors.primary.green`
  */
 
 window.PERFOTEC_CONFIG = {
@@ -42,7 +42,7 @@ window.PERFOTEC_CONFIG = {
         }
     },
 
-    // Grafiekkleuren: Strikter afgestemd op het merk (geen willekeurig paars meer)
+    // Grafiekkleuren: Strikter afgestemd op het merk
     CHART_COLORS: [
         { stroke: '#007C27', fill: '#dcfce7', name: 'PerfoTec Green' },
         { stroke: '#054E9A', fill: '#dbeafe', name: 'PerfoTec Blue' },
@@ -112,5 +112,42 @@ window.PERFOTEC_CONFIG = {
         [6, 'Satisfactory', 'text-yellow-600'], 
         [4, 'Unacceptable', 'text-red-600'], 
         [1, 'Very Bad', 'text-red-800']
-    ]
+    ],
+
+    // === 5. TAAL BEHEER ===
+    // Voeg hier simpelweg talen toe om de dropdown overal in de app uit te breiden.
+    LANGUAGES: [
+        { code: 'en', label: 'EN' },
+        { code: 'nl', label: 'NL' },
+        { code: 'es', label: 'ES' }
+    ],
+
+    // Slimme functie die de juiste taal kiest (LocalStorage -> Systeemtaal -> Fallback)
+    getLanguage: function() {
+        // 1. Check of de gebruiker eerder een taal heeft gekozen
+        const savedLang = localStorage.getItem('perfotec_lang');
+        if (savedLang && this.LANGUAGES.find(l => l.code === savedLang)) {
+            return savedLang;
+        }
+
+        // 2. Check de taal van het besturingssysteem/browser
+        if (typeof navigator !== 'undefined') {
+            const browserLang = (navigator.language || navigator.userLanguage || '').substring(0, 2).toLowerCase();
+            if (this.LANGUAGES.find(l => l.code === browserLang)) {
+                return browserLang;
+            }
+        }
+
+        // 3. Standaard terugvallen op Engels
+        return 'en';
+    },
+
+    // Functie om de taal centraal op te slaan
+    setLanguage: function(code) {
+        if (this.LANGUAGES.find(l => l.code === code)) {
+            localStorage.setItem('perfotec_lang', code);
+            return true;
+        }
+        return false;
+    }
 };
