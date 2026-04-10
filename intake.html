@@ -574,6 +574,7 @@
 
             setIsSuccessModalOpen(true);
             
+            // Fallback strategy for environments where window.location.href to mailto is blocked
             setTimeout(() => {
                 try {
                     const iframe = document.createElement('iframe');
