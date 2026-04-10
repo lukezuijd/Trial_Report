@@ -1,0 +1,1207 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PerfoTec Ingreso de Clientes</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- LOAD CENTRAL STYLING & CONFIGURATION -->
+    <link rel="stylesheet" href="style.css">
+    <script src="config.js"></script>
+</head>
+<body class="bg-slate-100 text-slate-800 antialiased selection:bg-blue-200 selection:text-blue-900">
+    <div id="root">
+        <div style="padding: 2rem; text-align: center; font-family: sans-serif; color: #666;">
+            Cargando formulario de ingreso... Asegúrese de que 'style.css' y 'config.js' estén en la misma carpeta.
+        </div>
+    </div>
+
+    <script type="text/babel" data-type="module">
+        import React, { useState, useRef, useEffect } from 'https://esm.sh/react@18.2.0';
+        import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
+        import { 
+          Building2, PackagePlus, Trash2, Plus, ChevronUp, ChevronDown, 
+          Upload, Image as ImageIcon, CheckCircle, Target, AlertCircle,
+          Globe, AlertTriangle, Truck, Tractor, Ship, Plane, Warehouse, Store, 
+          Utensils, Factory, Thermometer, Clock, ChevronRight, ArrowDown, ArrowUp, 
+          Beaker, Save, FolderOpen, FileText, Printer, Edit3, Camera, X, Mail, Send
+        } from 'https://esm.sh/lucide-react@0.292.0';
+
+        // --- LINK WITH CONFIG.JS ---
+        const globalConfig = window.PERFOTEC_CONFIG || {};
+
+        const BRAND = {
+          colors: { 
+            green: globalConfig.BRAND?.colors?.primary?.green || '#007C27', 
+            blue: globalConfig.BRAND?.colors?.primary?.blue || '#054E9A', 
+            black: globalConfig.BRAND?.colors?.neutral?.black || '#211A1A' 
+          }
+        };
+
+        const PACKAGING_TYPES = globalConfig.PACKAGING_TYPES || ['Punnets', 'Pillow Bag', 'Box/ Crate', 'Bin crate', 'Pallet'];
+        const TRANSPORT_MODES = globalConfig.TRANSPORT_MODES || ['Air Freight', 'Sea Freight', 'Road Transport', 'Storage'];
+
+        const DEFAULT_CRITERIA = globalConfig.DEFAULT_CRITERIA || [
+          'General Quality', 'Taste', 'Visual Appearance', 'Color',
+          'Smell / Aroma', 'Texture / Firmness', 'Humidity / Condensation',
+          'Dehydration / Shriveling', 'Moulds / Decay', 'Internal Browning'
+        ];
+
+        // --- TRANSLATIONS (100% Spanish setup) ---
+        const T = {
+          nl: {
+            title: "Klant Intake Formulier", subtitle: "Test Aanvraag Voorbereiding",
+            introTitle: "Welkom bij PerfoTec!",
+            introText: "Vul de bedrijfs- en productgegevens in. Klik op 'Opslaan (.json)' om uw voortgang te bewaren. Klaar? Klik op 'Bekijk Overzicht' om de PDF te controleren en af te drukken of op te slaan.",
+            load: "Laden (.json)", save: "Opslaan (.json)", preview: "Bekijk Overzicht", print: "Print / Opslaan als PDF", back: "Terug naar bewerken",
+            sec1Title: "1. Bedrijfs- & Contactgegevens",
+            companyName: "Bedrijfsnaam", street: "Straat", houseNumber: "Huisnummer", zipCode: "Postcode", city: "Plaats / Stad", country: "Land",
+            contactName: "Naam Contactpersoon", role: "Functie", email: "E-mailadres", phone: "Telefoonnummer",
+            logoUpload: "Bedrijfslogo", clickUpload: "Klik om te uploaden", uploadDesc: "PNG, JPG tot 5MB",
+            sec2Title: "2. Product(en) voor de Test", prodDetails: "Details", delProd: "Verwijder Product",
+            secATitle: "A. Product & Verpakking", prodName: "Productnaam", prodType: "Variëteit / Type", origin: "Herkomst", prodPhoto: "Foto", processingType: "Staat van het product",
+            whole: "Heel", processed: "Verwerkt / Gesneden",
+            maturity: "Rijpheidsstadium", treatment: "Standaard Behandeling",
+            packType: "Type Verpakking", material: "Huidig Materiaal",
+            dimens: "Dimensies (Binnenmaat)", len: "Lengte", wid: "Breedte", widSeal: "Breedte Seal", hei: "Hoogte",
+            weight: "Netto Gewicht",
+            qualityCrit: "Kwaliteitscriteria", qualityCritDesc: "Selecteer de aspecten die u wilt laten beoordelen:",
+            secBTitle: "B. Uitdaging & Doelstelling", challenge: "Huidige Uitdaging", challengePl: "Beschrijf de huidige kwaliteitsproblemen...", goal: "Beoogd Doel", goalPl: "Wat wilt u bereiken?",
+            secCTitle: "C. Huidige Supply Chain", transportMode: "Transport & Opslag", transportModeErr: "Transportmodus",
+            airFreight: "Luchtvracht", seaFreight: "Zeevracht", roadTransport: "Wegtransport", storage: "Opslag",
+            step: "Stap", phase: "Fase (Activiteit)", temp: "Temperatuur (°C)", to: "Tot", days: "Tijd (Dagen)", action: "Actie",
+            actNone: "- Geen -", actPack: "Inpakken", actUnpack: "Uitpakken", addStep: "Extra Stap", addProd: "Extra product toevoegen",
+            validationErr: "Nog niet alle verplichte velden zijn ingevuld:", reqField: "is verplicht", reqProd: "Product",
+            printTitle: "Intake Overzicht",
+            successTitle: "Bijna klaar!",
+            successStep1: "Uw e-mailprogramma is zojuist geopend (gericht aan luke.zuijderwijk@perfotec.com).",
+            successStep2: "Het aanvraagbestand (JSON data) is zojuist gedownload in uw 'Downloads' map.",
+            successStep3: "BELANGRIJK: Sleep het gedownloade bestand in de geopende e-mail als bijlage en klik op verzenden! Gebruik eventueel de 'Print als PDF' functie om het overzicht op te slaan.",
+            fallbackMailText: "Opent de e-mail niet automatisch?",
+            fallbackMailBtn: "Open E-mail Handmatig",
+            closeBtn: "Ik begrijp het, sluiten", submitBtn: "Afronden & Verzenden",
+            removeStep: "Verwijder Stap",
+            supplyChainFlow: "Supply Chain Overzicht",
+            noLogo: "Geen Logo", noPhoto: "Geen Foto"
+          },
+          en: {
+            title: "Client Intake Form", subtitle: "Test Request Preparation",
+            introTitle: "Welcome to PerfoTec!",
+            introText: "Please fill in the details. Click 'Save (.json)' to save progress. Click 'View Summary' to review and print/save as PDF.",
+            load: "Load (.json)", save: "Save (.json)", preview: "View Summary", print: "Print / Save PDF", back: "Back to edit",
+            sec1Title: "1. Company & Contact Details",
+            companyName: "Company Name", street: "Street", houseNumber: "Number", zipCode: "Zip / Postal", city: "City", country: "Country",
+            contactName: "Contact Name", role: "Job Title", email: "Email", phone: "Phone",
+            logoUpload: "Company Logo", clickUpload: "Click to upload", uploadDesc: "PNG, JPG up to 5MB",
+            sec2Title: "2. Product(s) for Testing", prodDetails: "Details", delProd: "Remove Product",
+            secATitle: "A. Product & Packaging", prodName: "Product Name", prodType: "Variety / Type", origin: "Origin", prodPhoto: "Photo", processingType: "State of product",
+            whole: "Whole", processed: "Processed / Fresh-cut",
+            maturity: "Maturity stage", treatment: "Post-harvest treatment",
+            packType: "Packaging Type", material: "Current Material",
+            dimens: "Dimensions (Internal)", len: "Length", wid: "Width", widSeal: "Seal Width", hei: "Height",
+            weight: "Net Weight",
+            qualityCrit: "Quality criteria", qualityCritDesc: "Select the aspects to evaluate:",
+            secBTitle: "B. Challenge & Objectives", challenge: "Current Challenge", challengePl: "Describe current quality issues...", goal: "Target Goal", goalPl: "What do you want to achieve?",
+            secCTitle: "C. Current Supply Chain", transportMode: "Transport & Storage", transportModeErr: "Transport mode",
+            airFreight: "Air", seaFreight: "Sea", roadTransport: "Road", storage: "Storage",
+            step: "Step", phase: "Phase (Activity)", temp: "Temperature (°C)", to: "To", days: "Time (Days)", action: "Action",
+            actNone: "- None -", actPack: "Pack", actUnpack: "Unpack", addStep: "Add Step", addProd: "Add another product",
+            validationErr: "Not all mandatory fields have been filled in:", reqField: "is required", reqProd: "Product",
+            printTitle: "Intake Summary",
+            successTitle: "Almost done!",
+            successStep1: "Your email program has just been opened (addressed to luke.zuijderwijk@perfotec.com).",
+            successStep2: "The request file (JSON data) has just been downloaded to your 'Downloads' folder.",
+            successStep3: "IMPORTANT: Please attach the downloaded file to the opened email and click send! You can also use the 'Print to PDF' function to save the summary.",
+            fallbackMailText: "Did the email not open automatically?",
+            fallbackMailBtn: "Open Email Manually",
+            closeBtn: "I understand, close", submitBtn: "Finish & Send",
+            removeStep: "Remove Step",
+            supplyChainFlow: "Supply Chain Flow",
+            noLogo: "No Logo", noPhoto: "No Photo"
+          },
+          es: {
+            title: "Formulario de Ingreso de Clientes", subtitle: "Preparación de Solicitud de Prueba",
+            introTitle: "¡Bienvenido a PerfoTec!",
+            introText: "Por favor complete los detalles. Haga clic en 'Guardar (.json)' para guardar su progreso. ¿Terminó? Haga clic en 'Ver Resumen' para revisar y guardar como PDF.",
+            load: "Cargar (.json)", save: "Guardar (.json)", preview: "Ver Resumen", print: "Imprimir / Guardar PDF", back: "Volver a editar",
+            sec1Title: "1. Detalles de la Empresa y Contacto",
+            companyName: "Nombre de la Empresa", street: "Calle", houseNumber: "Número", zipCode: "Código Postal", city: "Ciudad", country: "País",
+            contactName: "Nombre del Contacto", role: "Cargo", email: "Correo Electrónico", phone: "Teléfono",
+            logoUpload: "Logotipo de la Empresa", clickUpload: "Haga clic para subir", uploadDesc: "PNG, JPG hasta 5MB",
+            sec2Title: "2. Producto(s) para Prueba", prodDetails: "Detalles", delProd: "Eliminar Producto",
+            secATitle: "A. Producto y Empaque", prodName: "Nombre del Producto", prodType: "Variedad / Tipo", origin: "Origen", prodPhoto: "Foto", processingType: "Estado del producto",
+            whole: "Entero", processed: "Procesado / Cortado",
+            maturity: "Etapa de madurez", treatment: "Tratamiento estándar",
+            packType: "Tipo de Empaque", material: "Material Actual",
+            dimens: "Dimensiones (Internas)", len: "Longitud", wid: "Ancho", widSeal: "Ancho del Sello", hei: "Altura",
+            weight: "Peso Neto",
+            qualityCrit: "Criterios de calidad", qualityCritDesc: "Seleccione los aspectos a evaluar:",
+            secBTitle: "B. Desafío y Objetivos", challenge: "Desafío Actual", challengePl: "Describa los problemas de calidad actuales...", goal: "Objetivo", goalPl: "¿Qué desea lograr?",
+            secCTitle: "C. Cadena de Suministro Actual", transportMode: "Transporte y Almacenamiento", transportModeErr: "Modo de transporte",
+            airFreight: "Flete Aéreo", seaFreight: "Flete Marítimo", roadTransport: "Transporte Terrestre", storage: "Almacenamiento",
+            step: "Paso", phase: "Fase (Actividad)", temp: "Temperatura (°C)", to: "A", days: "Tiempo (Días)", action: "Acción",
+            actNone: "- Ninguna -", actPack: "Empacar", actUnpack: "Desempacar", addStep: "Añadir Paso", addProd: "Añadir otro producto",
+            validationErr: "No se han completado todos los campos obligatorios:", reqField: "es obligatorio", reqProd: "Producto",
+            printTitle: "Resumen de Ingreso",
+            successTitle: "¡Casi listo!",
+            successStep1: "Su programa de correo electrónico se acaba de abrir (dirigido a luke.zuijderwijk@perfotec.com).",
+            successStep2: "El archivo de solicitud (datos JSON) se acaba de descargar en su carpeta de 'Descargas'.",
+            successStep3: "IMPORTANTE: ¡Por favor, adjunte el archivo descargado al correo electrónico abierto y envíelo! También puede usar la función 'Imprimir como PDF' para guardar el resumen.",
+            fallbackMailText: "¿No se abrió el correo electrónico automáticamente?",
+            fallbackMailBtn: "Abrir Correo Manualmente",
+            closeBtn: "Entendido, cerrar", submitBtn: "Terminar y Enviar",
+            removeStep: "Eliminar Paso",
+            supplyChainFlow: "Resumen de la Cadena de Suministro",
+            noLogo: "Sin Logo", noPhoto: "Sin Foto"
+          }
+        };
+
+        const DEFAULT_SUPPLY_CHAIN = globalConfig.DEFAULT_SUPPLY_CHAIN || [
+          { stage: 'Farm / Harvest', tempStart: '15', tempEnd: '', daysStart: '0.5', daysEnd: '', action: 'none' },
+          { stage: 'Packing House', tempStart: '12', tempEnd: '', daysStart: '1', daysEnd: '', action: 'pack' },
+          { stage: 'Transport', tempStart: '6', tempEnd: '', daysStart: '2', daysEnd: '', action: 'none' },
+          { stage: 'Distribution Center', tempStart: '4', tempEnd: '', daysStart: '1', daysEnd: '', action: 'none' },
+          { stage: 'Retail Store', tempStart: '18', tempEnd: '', daysStart: '4', daysEnd: '', action: 'none' },
+          { stage: 'Consumer', tempStart: '20', tempEnd: '', daysStart: '2', daysEnd: '', action: 'unpack' }
+        ];
+
+        const getStageIcon = (name) => {
+          const n = name?.toLowerCase() || '';
+          if (n.includes('farm') || n.includes('harvest') || n.includes('oogst') || n.includes('granja')) return <Tractor size={14} color={BRAND.colors.black} />;
+          if (n.includes('sea') || n.includes('zee') || n.includes('marítimo')) return <Ship size={14} color={BRAND.colors.black} />;
+          if (n.includes('air') || n.includes('lucht') || n.includes('aéreo')) return <Plane size={14} color={BRAND.colors.black} />;
+          if (n.includes('storage') || n.includes('dc') || n.includes('distributie') || n.includes('opslag') || n.includes('almacenamiento')) return <Warehouse size={14} color={BRAND.colors.black} />;
+          if (n.includes('store') || n.includes('retail') || n.includes('shop') || n.includes('winkel') || n.includes('tienda')) return <Store size={14} color={BRAND.colors.black} />;
+          if (n.includes('consumer') || n.includes('eat') || n.includes('consument') || n.includes('consumidor')) return <Utensils size={14} color={BRAND.colors.black} />;
+          if (n.includes('pack') && !n.includes('transport')) return <Factory size={14} color={BRAND.colors.black} />;
+          return <Truck size={14} color={BRAND.colors.black} />;
+        };
+
+        const formatRange = (start, end, unit) => {
+          if (start && end && start !== end) return `${start}-${end}${unit}`;
+          if (start) return `${start}${unit}`;
+          return `-`;
+        };
+
+        // --- HELPER CLASSES ---
+        const inputClass = "w-full bg-slate-50 border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block p-3 shadow-sm transition-all hover:bg-slate-100 focus:bg-white";
+        const narrowInputClass = "w-full bg-slate-50 border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block py-2.5 px-1 text-center shadow-sm transition-all hover:bg-slate-100 focus:bg-white [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] min-w-0";
+        const labelClass = "block mb-2 text-xs font-bold tracking-wide text-slate-600 uppercase";
+
+        // --- COMPONENT: PRODUCT SUPPLY CHAIN FLOW (Visualizer for PDF) ---
+        const ProductSupplyChainFlow = ({ chain, t }) => {
+          if (!chain || chain.length === 0) return null;
+          let cumulativeMin = 0;
+          let cumulativeMax = 0;
+
+          return (
+            <div className="flex w-full gap-1 items-start justify-between mt-2 mb-2 font-sans overflow-hidden">
+              {chain.map((step, idx) => {
+                const minD = parseFloat(step.daysStart) || 0;
+                const maxD = step.daysEnd ? parseFloat(step.daysEnd) : minD;
+                cumulativeMin += minD;
+                cumulativeMax += maxD;
+                
+                const cumStr = cumulativeMin === cumulativeMax ? `${cumulativeMin}` : `${cumulativeMin}-${cumulativeMax}`;
+
+                return (
+                  <React.Fragment key={idx}>
+                    {idx > 0 && <div className="h-16 flex items-center justify-center"><ChevronRight size={14} className="text-gray-300 flex-shrink-0" /></div>}
+                    
+                    <div className="flex flex-col items-center flex-1 min-w-0">
+                      <div className="w-full flex flex-col items-center bg-white border border-gray-200 rounded shadow-sm p-1.5 relative">
+                         <div className="absolute top-0 left-0 w-full h-1" style={{backgroundColor: idx % 2 === 0 ? BRAND.colors.green : BRAND.colors.blue}}></div>
+                         
+                         <div className="bg-gray-50 p-1.5 rounded-full mb-1 flex-shrink-0 mt-1">
+                            {getStageIcon(step.stage)}
+                         </div>
+                         
+                         <div className="text-[8px] font-bold text-center uppercase mb-1 min-h-[24px] py-0.5 flex items-center justify-center leading-tight w-full break-words px-0.5">
+                           {step.stage}
+                         </div>
+                         
+                         <div className="w-full border-t border-dotted border-gray-200 my-0.5"></div>
+                         
+                         <div className="flex flex-col justify-center w-full text-[8px] gap-0.5 pb-0.5">
+                            <span className="flex items-center justify-center gap-0.5 font-bold text-gray-700 whitespace-nowrap">
+                              <Thermometer size={8} className="text-red-500"/> {formatRange(step.tempStart, step.tempEnd, '°C')}
+                            </span>
+                            <span className="flex items-center justify-center gap-0.5 text-gray-500 whitespace-nowrap">
+                              <Clock size={8}/> {formatRange(step.daysStart, step.daysEnd, 'd')}
+                            </span>
+                         </div>
+                         
+                         <div className="mt-1 bg-blue-50 text-blue-700 border border-blue-100 text-[7px] font-bold px-1 rounded whitespace-nowrap">
+                            ∑ {cumStr}d
+                         </div>
+                      </div>
+                      
+                      <div className="h-6 w-full flex justify-center items-start mt-1 relative">
+                         {step.action === 'pack' && <div className="flex flex-col items-center"><div className="bg-green-100 text-green-700 rounded-full p-0.5"><ArrowDown size={10} /></div><span className="text-[6px] font-bold text-green-700 uppercase mt-0.5">{t.actPack}</span></div>}
+                         {step.action === 'unpack' && <div className="flex flex-col items-center"><div className="bg-red-100 text-red-700 rounded-full p-0.5"><ArrowUp size={10} /></div><span className="text-[6px] font-bold text-red-700 uppercase mt-0.5">{t.actUnpack}</span></div>}
+                      </div>
+                    </div>
+                  </React.Fragment>
+                );
+              })}
+            </div>
+          );
+        };
+
+        // --- COMPONENT: PRINT VIEW ---
+        const PrintPreview = ({ clientInfo, products, t, onBack }) => {
+          return (
+             <div className="min-h-screen bg-slate-600 p-8 overflow-y-auto no-print-bg selection:bg-blue-200 selection:text-blue-900">
+                <div className="fixed top-6 right-6 flex gap-4 no-print z-50">
+                    <button onClick={onBack} className="bg-slate-800 text-white px-6 py-3 rounded-full shadow-xl font-bold flex items-center gap-2 hover:bg-slate-900 transition"><Edit3 size={18}/> {t.back}</button>
+                    <button onClick={() => window.print()} className="bg-blue-600 text-white px-6 py-3 rounded-full shadow-xl font-bold flex items-center gap-2 hover:bg-blue-700 transition"><Printer size={18}/> {t.print}</button>
+                </div>
+
+                <div id="print-area" className="max-w-[21cm] mx-auto bg-white min-h-[29.7cm] p-12 print:p-0 print:shadow-none shadow-2xl font-sans text-slate-800 relative">
+                   {/* HEADER */}
+                   <div className="flex justify-between items-center border-b-4 pb-6 mb-10" style={{ borderColor: BRAND.colors.green }}>
+                     <div>
+                        {clientInfo.logo ? (
+                          <img src={clientInfo.logo} className="h-16 object-contain" crossOrigin="anonymous" />
+                        ) : (
+                          <div className="h-16 flex items-center font-bold text-2xl brand-heading text-slate-300 italic">{t.noLogo}</div>
+                        )}
+                     </div>
+                     <div className="text-right">
+                       <h1 className="text-4xl font-bold uppercase brand-heading" style={{ color: BRAND.colors.blue }}>{t.printTitle}</h1>
+                       <p className="text-sm font-bold text-slate-500 mt-1">{new Date().toLocaleDateString()}</p>
+                     </div>
+                   </div>
+
+                   {/* CLIENT INFO */}
+                   <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 mb-10 break-inside-avoid text-sm">
+                      <h2 className="font-bold text-xl mb-5 border-b border-slate-200 pb-3 text-slate-800 uppercase tracking-wide brand-heading">{t.sec1Title}</h2>
+                      <div className="grid grid-cols-2 gap-y-6 gap-x-8">
+                         <div>
+                            <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">{t.companyName}</p>
+                            <p className="font-bold text-slate-800 text-lg">{clientInfo.companyName || '-'}</p>
+                         </div>
+                         <div>
+                            <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">{t.contactName}</p>
+                            <p className="font-bold text-slate-800 text-lg">{clientInfo.contactName || '-'} {clientInfo.role && <span className="font-normal text-slate-500 text-sm ml-1">({clientInfo.role})</span>}</p>
+                         </div>
+                         <div>
+                            <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">{t.street}</p>
+                            <p className="text-slate-700 text-base">{clientInfo.street} {clientInfo.houseNumber}</p>
+                            <p className="text-slate-700 text-base">{clientInfo.zipCode} {clientInfo.city}, {clientInfo.country}</p>
+                         </div>
+                         <div>
+                            <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Contacto</p>
+                            <p className="text-slate-700 text-base">{clientInfo.email || '-'}</p>
+                            <p className="text-slate-700 text-base">{clientInfo.phone || '-'}</p>
+                         </div>
+                      </div>
+                   </div>
+
+                   {/* PRODUCTS */}
+                   <div className="space-y-12">
+                     {products.map((p, idx) => {
+                       const isLargeBulk = p.packagingType === 'Bin crate' || p.packagingType === 'Pallet';
+                       const dimUnit = isLargeBulk ? 'cm' : 'mm';
+                       const weightUnit = isLargeBulk ? 'kg' : 'g';
+
+                       return (
+                         <div key={p.id} className="border border-slate-200 rounded-2xl p-8 mb-8 break-inside-avoid bg-white">
+                            <div className="flex justify-between items-start border-b-2 border-slate-100 pb-5 mb-8">
+                               <div className="pr-4">
+                                  <h2 className="text-4xl font-bold brand-heading" style={{ color: BRAND.colors.green }}>{p.name || 'Producto sin nombre'}</h2>
+                                  <p className="text-slate-500 uppercase tracking-widest text-sm font-bold mt-2 bg-slate-100 inline-block px-3 py-1 rounded">{p.processingType === 'Whole' ? t.whole : t.processed}</p>
+                               </div>
+                               
+                               <div style={{ width: '80mm', height: '80mm' }} className="border border-slate-200 rounded-xl flex items-center justify-center bg-white p-2 shadow-sm shrink-0 overflow-hidden">
+                                  {p.photo ? (
+                                     <img src={p.photo} className="max-w-full max-h-full object-contain rounded" crossOrigin="anonymous" />
+                                  ) : (
+                                     <div className="flex flex-col items-center text-slate-300">
+                                        <ImageIcon size={32} className="mb-2 opacity-50"/> 
+                                        <span className="text-xs italic font-medium">{t.noPhoto}</span>
+                                     </div>
+                                  )}
+                               </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-10 mb-10">
+                               {/* Left Col: Specs */}
+                               <div>
+                                  <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4 border-b border-slate-200 pb-2">{t.secATitle}</h3>
+                                  <table className="w-full text-sm text-slate-700">
+                                     <tbody>
+                                        <tr className="border-b border-slate-100"><td className="py-3 text-slate-500 font-medium w-1/2">{t.prodType}</td><td className="py-3 font-bold">{p.type || '-'}</td></tr>
+                                        <tr className="border-b border-slate-100"><td className="py-3 text-slate-500 font-medium">{t.origin}</td><td className="py-3 font-bold">{p.origin || '-'}</td></tr>
+                                        <tr className="border-b border-slate-100"><td className="py-3 text-slate-500 font-medium">{t.packType}</td><td className="py-3 font-bold">{p.packagingType || '-'}</td></tr>
+                                        <tr className="border-b border-slate-100"><td className="py-3 text-slate-500 font-medium">{t.material}</td><td className="py-3 font-bold">{p.material || '-'}</td></tr>
+                                        <tr className="border-b border-slate-100"><td className="py-3 text-slate-500 font-medium">{t.dimens}</td><td className="py-3 font-bold">{p.length || '?'} x {p.width || '?'} {p.packagingType !== 'Pillow Bag' && `x ${p.height || '?'}`} {dimUnit}</td></tr>
+                                        <tr className="border-b border-slate-100"><td className="py-3 text-slate-500 font-medium">{t.weight}</td><td className="py-3 font-bold">{p.weight || '?'} {weightUnit}</td></tr>
+                                        <tr className="border-b border-slate-100"><td className="py-3 text-slate-500 font-medium">{t.maturity}</td><td className="py-3 font-bold">{p.maturityStage || '-'}</td></tr>
+                                        <tr><td className="py-3 text-slate-500 font-medium">{t.treatment}</td><td className="py-3 font-bold">{p.postHarvestTreatment || '-'}</td></tr>
+                                     </tbody>
+                                  </table>
+                               </div>
+
+                               {/* Right Col: Goals */}
+                               <div>
+                                  <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4 border-b border-slate-200 pb-2">{t.secBTitle}</h3>
+                                  <div className="mb-6">
+                                     <strong className="text-orange-600 block text-xs uppercase tracking-wider mb-2">{t.challenge}</strong>
+                                     <p className="text-sm text-slate-700 leading-relaxed bg-orange-50 p-4 rounded-xl border border-orange-100">{p.currentChallenge || '-'}</p>
+                                  </div>
+                                  <div>
+                                     <strong className="text-green-600 block text-xs uppercase tracking-wider mb-2">{t.goal}</strong>
+                                     <p className="text-sm text-slate-700 leading-relaxed font-medium bg-green-50 p-4 rounded-xl border border-green-100">{p.targetGoal || '-'}</p>
+                                  </div>
+                               </div>
+                            </div>
+
+                            {/* Chain Summary Visual */}
+                            <div className="mt-6 pt-6 border-t border-slate-200">
+                               <strong className="text-slate-500 block text-xs uppercase tracking-wider mb-4">{t.secCTitle} ({p.transportMode || '-'})</strong>
+                               <ProductSupplyChainFlow chain={p.supplyChain} t={t} />
+                            </div>
+
+                            {/* Criteria */}
+                            {p.qualityCriteria && p.qualityCriteria.length > 0 && (
+                              <div className="mt-8 pt-6 border-t border-slate-200">
+                                 <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider mb-4 border-b border-slate-100 pb-2">{t.qualityCrit}</h3>
+                                 <ul className="list-disc pl-6 text-sm text-slate-700 space-y-2 font-medium">
+                                    {p.qualityCriteria.map((crit, i) => <li key={i}>{crit}</li>)}
+                                 </ul>
+                              </div>
+                            )}
+                         </div>
+                       )
+                     })}
+                   </div>
+                </div>
+             </div>
+          );
+        };
+
+
+        // --- MAIN APPLICATION (EDITOR) ---
+        const App = () => {
+          // Language strictly set to Spanish for this file.
+          const lang = 'es';
+          const t = T[lang];
+
+          // Call config update only once on load so the Hub remembers we are in ES.
+          useEffect(() => {
+             if (globalConfig.setLanguage) globalConfig.setLanguage('es');
+          }, []);
+
+          const [clientInfo, setClientInfo] = useState({
+            companyName: '', street: '', houseNumber: '', zipCode: '', city: '', country: '',
+            contactName: '', role: '', email: '', phone: '', logo: null
+          });
+
+          const [products, setProducts] = useState([
+            {
+              id: Date.now(),
+              name: '', 
+              type: '', 
+              origin: '', 
+              processingType: 'Whole',
+              packagingType: 'Punnets', 
+              length: '', width: '', height: '', 
+              weight: '', 
+              material: '',
+              maturityStage: '',
+              postHarvestTreatment: '',
+              qualityCriteria: [],
+              transportMode: '', 
+              supplyChain: JSON.parse(JSON.stringify(DEFAULT_SUPPLY_CHAIN)),
+              currentChallenge: '', 
+              targetGoal: '', 
+              photo: null
+            }
+          ]);
+
+          const [errors, setErrors] = useState([]);
+          const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
+          const [mailUrl, setMailUrl] = useState('');
+          const [isPreview, setIsPreview] = useState(false);
+
+          // --- HANDLERS CLIENT INFO ---
+          const handleClientChange = (field, value) => {
+            setClientInfo(prev => ({ ...prev, [field]: value }));
+            if (errors.length > 0) setErrors([]); 
+          };
+
+          const handleLogoUpload = (e) => {
+            const file = e.target.files[0];
+            if (file) {
+              const reader = new FileReader();
+              reader.onloadend = () => handleClientChange('logo', reader.result);
+              reader.readAsDataURL(file);
+            }
+          };
+
+          // --- HANDLERS PRODUCTS ---
+          const addProduct = () => {
+            setProducts([...products, {
+              id: Date.now(), name: '', type: '', origin: '', processingType: 'Whole', packagingType: 'Punnets', length: '', width: '', height: '', weight: '', material: '',
+              maturityStage: '', postHarvestTreatment: '', qualityCriteria: [], transportMode: '',
+              supplyChain: JSON.parse(JSON.stringify(DEFAULT_SUPPLY_CHAIN)),
+              currentChallenge: '', targetGoal: '', photo: null
+            }]);
+          };
+
+          const removeProduct = (id) => {
+            if (products.length > 1) setProducts(products.filter(p => p.id !== id));
+          };
+
+          const handleProductChange = (id, field, value) => {
+            setProducts(prev => prev.map(p => {
+              if (p.id === id) {
+                const updatedProduct = { ...p, [field]: value };
+                
+                // Smart Supply Chain Logic for Packaging Action
+                if (field === 'packagingType') {
+                  const bulkTypes = ['Box/ Crate', 'Bin crate', 'Pallet'];
+                  const isBulk = bulkTypes.includes(value);
+                  
+                  updatedProduct.supplyChain = updatedProduct.supplyChain.map(step => {
+                    const stageLower = step.stage.toLowerCase();
+                    let newAction = step.action;
+                    if (newAction === 'unpack') newAction = 'none';
+
+                    if (stageLower.includes('packing') || stageLower.includes('verpak') || stageLower.includes('empacado')) {
+                       newAction = 'pack';
+                    } else if (stageLower.includes('distribution') || stageLower.includes('dc') || stageLower.includes('distribu')) {
+                       if (isBulk) newAction = 'unpack';
+                    } else if (stageLower.includes('consumer') || stageLower.includes('consumidor')) {
+                       if (!isBulk) newAction = 'unpack';
+                    }
+                    return { ...step, action: newAction };
+                  });
+                }
+                return updatedProduct;
+              }
+              return p;
+            }));
+            
+            if (errors.length > 0) setErrors([]);
+          };
+
+          const toggleCriteria = (productId, crit) => {
+             setProducts(prev => prev.map(p => {
+                if (p.id === productId) {
+                   const exists = p.qualityCriteria.includes(crit);
+                   const newCriteria = exists ? p.qualityCriteria.filter(c => c !== crit) : [...p.qualityCriteria, crit];
+                   return { ...p, qualityCriteria: newCriteria };
+                }
+                return p;
+             }));
+          };
+
+          const handleProductPhotoUpload = (e, id) => {
+            const file = e.target.files[0];
+            if (file) {
+              const reader = new FileReader();
+              reader.onloadend = () => handleProductChange(id, 'photo', reader.result);
+              reader.readAsDataURL(file);
+            }
+          };
+
+          // --- HANDLERS SUPPLY CHAIN ---
+          const addChainStep = (productId) => {
+            setProducts(prev => prev.map(p => p.id === productId ? { ...p, supplyChain: [...p.supplyChain, { stage: '', tempStart: '', tempEnd: '', daysStart: '', daysEnd: '', action: 'none' }] } : p));
+          };
+          const updateChainStep = (productId, index, field, value) => {
+            setProducts(prev => prev.map(p => {
+              if (p.id === productId) {
+                const newChain = [...p.supplyChain]; newChain[index][field] = value; return { ...p, supplyChain: newChain };
+              }
+              return p;
+            }));
+            if (errors.length > 0) setErrors([]);
+          };
+          const removeChainStep = (productId, index) => {
+            setProducts(prev => prev.map(p => p.id === productId ? { ...p, supplyChain: p.supplyChain.filter((_, i) => i !== index) } : p));
+          };
+          const moveChainStep = (productId, index, direction) => {
+            setProducts(prev => prev.map(p => {
+              if (p.id === productId) {
+                const newChain = [...p.supplyChain];
+                if (direction === 'up' && index > 0) { [newChain[index], newChain[index - 1]] = [newChain[index - 1], newChain[index]]; }
+                else if (direction === 'down' && index < newChain.length - 1) { [newChain[index], newChain[index + 1]] = [newChain[index + 1], newChain[index]]; }
+                return { ...p, supplyChain: newChain };
+              }
+              return p;
+            }));
+          };
+
+          // --- VALIDATION & EXPORT ---
+          const validateForm = () => {
+            let newErrors = [];
+            
+            if (!clientInfo.companyName.trim()) newErrors.push(`${t.companyName} ${t.reqField}`);
+            if (!clientInfo.street.trim()) newErrors.push(`${t.street} ${t.reqField}`);
+            if (!clientInfo.houseNumber.trim()) newErrors.push(`${t.houseNumber} ${t.reqField}`);
+            if (!clientInfo.zipCode.trim()) newErrors.push(`${t.zipCode} ${t.reqField}`);
+            if (!clientInfo.city.trim()) newErrors.push(`${t.city} ${t.reqField}`);
+            if (!clientInfo.country.trim()) newErrors.push(`${t.country} ${t.reqField}`);
+            if (!clientInfo.contactName.trim()) newErrors.push(`${t.contactName} ${t.reqField}`);
+            if (!clientInfo.email.trim()) newErrors.push(`${t.email} ${t.reqField}`);
+
+            products.forEach((p, idx) => {
+              const prefix = `${t.reqProd} ${idx + 1} (${p.name || '?'}): `;
+              if (!p.name.trim()) newErrors.push(`${prefix}${t.prodName} ${t.reqField}`);
+              if (!p.material.trim()) newErrors.push(`${prefix}${t.material} ${t.reqField}`);
+              if (!p.length.toString().trim()) newErrors.push(`${prefix}${t.len} ${t.reqField}`);
+              if (!p.width.toString().trim()) newErrors.push(`${prefix}${p.packagingType === 'Pillow Bag' ? t.widSeal : t.wid} ${t.reqField}`);
+              if (p.packagingType !== 'Pillow Bag' && !p.height.toString().trim()) newErrors.push(`${prefix}${t.hei} ${t.reqField}`);
+              if (!p.weight.toString().trim()) newErrors.push(`${prefix}${t.weight} ${t.reqField}`);
+              if (!p.currentChallenge.trim()) newErrors.push(`${prefix}${t.challenge} ${t.reqField}`);
+              if (!p.targetGoal.trim()) newErrors.push(`${prefix}${t.goal} ${t.reqField}`);
+              if (!p.transportMode) newErrors.push(`${prefix}${t.transportModeErr} ${t.reqField}`);
+
+              p.supplyChain.forEach((step, sIdx) => {
+                 if (!step.stage.trim()) newErrors.push(`${prefix}${t.step} ${sIdx + 1} - ${t.phase} ${t.reqField}`);
+                 if (step.tempStart === '') newErrors.push(`${prefix}${t.step} ${sIdx + 1} - ${t.temp} ${t.reqField}`);
+                 if (step.daysStart === '') newErrors.push(`${prefix}${t.step} ${sIdx + 1} - ${t.days} ${t.reqField}`);
+              });
+            });
+
+            setErrors(newErrors);
+            return newErrors.length === 0;
+          };
+
+          const handleExportJSON = () => {
+            const exportData = {
+              isPerfoTecIntake: true,
+              exportDate: new Date().toISOString(),
+              language: lang,
+              client: clientInfo,
+              products: products
+            };
+
+            const cleanCompanyName = clientInfo.companyName.replace(/[^a-z0-9]/gi, '_').toLowerCase() || 'nuevo_cliente';
+            const filename = `perfotec_intake_${cleanCompanyName}.json`;
+
+            if (globalConfig.exportJSON) {
+                globalConfig.exportJSON(exportData, filename);
+            } else {
+                const dataString = JSON.stringify(exportData, null, 2);
+                const blob = new Blob([dataString], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }
+          };
+
+          const handleImportJSON = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            if (globalConfig.importJSON) {
+                globalConfig.importJSON(file, (data) => {
+                    if(data.isPerfoTecIntake) {
+                       if(data.client) setClientInfo(data.client);
+                       if(data.products) setProducts(data.products);
+                       // We veranderen de taal hier niet omdat deze pagina geforceerd ES is.
+                    } else { alert(t.validationErr || "Archivo de ingreso no válido."); }
+                }, (err) => {
+                    alert("Error al cargar el archivo JSON.");
+                });
+            } else {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                  try {
+                    const data = JSON.parse(event.target.result);
+                    if(data.isPerfoTecIntake) {
+                       if(data.client) setClientInfo(data.client);
+                       if(data.products) setProducts(data.products);
+                    } else { alert("Archivo de ingreso no válido."); }
+                  } catch (err) { alert("Error al cargar el archivo JSON."); }
+                };
+                reader.readAsText(file);
+            }
+            e.target.value = null; // Permite cargar el mismo archivo dos veces seguidas
+          };
+
+          const handleSubmit = (e) => {
+            if (e && e.preventDefault) e.preventDefault();
+            
+            if (!validateForm()) {
+               window.scrollTo({ top: 0, behavior: 'smooth' });
+               return;
+            }
+
+            handleExportJSON();
+            
+            const subject = encodeURIComponent(`Nuevo Ingreso PerfoTec - ${clientInfo.companyName}`);
+            const bodyText = `Estimado Luke,\n\nAdjunto encontrará nuestro formulario de ingreso completado (el archivo JSON acaba de descargarse en mi computadora).\n\nAtentamente,\n${clientInfo.contactName}\n${clientInfo.companyName}`;
+            
+            const generatedMailUrl = `mailto:luke.zuijderwijk@perfotec.com?subject=${subject}&body=${encodeURIComponent(bodyText)}`;
+            setMailUrl(generatedMailUrl);
+
+            setIsSuccessModalOpen(true);
+            
+            // Fallback strategy for environments where window.location.href to mailto is blocked
+            setTimeout(() => {
+                try {
+                    const iframe = document.createElement('iframe');
+                    iframe.style.display = 'none';
+                    iframe.src = generatedMailUrl;
+                    document.body.appendChild(iframe);
+                    setTimeout(() => document.body.removeChild(iframe), 3000);
+                } catch(err) {
+                    console.warn('Mailto iframe failed', err);
+                }
+            }, 600);
+          };
+
+          if (isPreview) {
+            return <PrintPreview clientInfo={clientInfo} products={products} t={t} onBack={() => setIsPreview(false)} />;
+          }
+
+          return (
+            <div className="min-h-screen pb-20 font-sans text-slate-800">
+              
+              {/* SUCCESS MODAL (Instructions for Email) */}
+              {isSuccessModalOpen && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+                  <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden p-10 text-center relative border-t-8 border-green-500 transform transition-all">
+                     <div className="w-24 h-24 bg-green-50 rounded-full flex items-center justify-center mx-auto mb-6 shadow-inner">
+                       <Mail size={48} className="text-green-600" />
+                     </div>
+                     <h2 className="text-3xl font-extrabold text-slate-800 mb-4">{t.successTitle}</h2>
+                     <div className="bg-blue-50 border border-blue-100 rounded-2xl p-6 text-left space-y-5 mb-8 shadow-sm">
+                        <p className="flex items-start gap-4 text-slate-700">
+                          <span className="bg-blue-600 text-white w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-sm font-bold shadow-md">1</span>
+                          <span className="pt-0.5 leading-relaxed">{t.successStep1}</span>
+                        </p>
+                        <p className="flex items-start gap-4 text-slate-700">
+                          <span className="bg-blue-600 text-white w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-sm font-bold shadow-md">2</span>
+                          <span className="pt-0.5 leading-relaxed">{t.successStep2}</span>
+                        </p>
+                        <div className="flex items-start gap-4 font-bold text-slate-800 bg-yellow-100/80 p-4 rounded-xl border border-yellow-300">
+                          <span className="bg-yellow-500 text-white w-7 h-7 rounded-full flex items-center justify-center shrink-0 text-sm font-bold shadow-md">!</span>
+                          <span className="pt-0.5 leading-relaxed">{t.successStep3}</span>
+                        </div>
+                     </div>
+                     
+                     <div className="mb-8 p-5 bg-slate-50 border border-slate-200 rounded-xl flex flex-col items-center gap-3">
+                        <p className="text-sm font-medium text-slate-500">{t.fallbackMailText}</p>
+                        <a href={mailUrl !== '#' && mailUrl !== '' ? mailUrl : '#'} onClick={(e) => { if(mailUrl === '#' || mailUrl === '') e.preventDefault(); }} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-full font-bold transition-all flex items-center gap-2 shadow-lg hover:shadow-blue-500/30 hover:-translate-y-0.5">
+                          <Mail size={18} /> {t.fallbackMailBtn}
+                        </a>
+                     </div>
+
+                     <button type="button" onClick={() => setIsSuccessModalOpen(false)} className="bg-slate-800 hover:bg-slate-900 text-white px-8 py-4 rounded-full font-bold w-full transition-all text-lg shadow-xl hover:shadow-slate-500/20 hover:-translate-y-0.5">
+                       {t.closeBtn}
+                     </button>
+                  </div>
+                </div>
+              )}
+
+              {/* HEADER */}
+              <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+                <div className="max-w-6xl mx-auto px-4 md:px-6 py-4 flex justify-between items-center">
+                  <div className="flex items-center gap-4">
+                    <img src={globalConfig.BRAND?.logos?.default || "https://cdn.prod.website-files.com/68b594c756c22085ddc6c1ea/68b59ba2f027bfeecd25261b_PerfoTec%20logo.png"} alt="PerfoTec" className="h-9 md:h-12 object-contain" />
+                    <div className="border-l-2 border-slate-200 pl-4 ml-2 hidden sm:block">
+                      <h1 className="font-extrabold text-2xl tracking-tight leading-none" style={{color: BRAND.colors.blue}}>{t.title}</h1>
+                      <p className="text-xs text-slate-500 font-bold uppercase tracking-widest mt-1">{t.subtitle}</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center bg-slate-100 hover:bg-slate-200 transition-colors rounded-xl px-3 py-2 border border-slate-200 shadow-sm">
+                       <Globe size={18} className="text-slate-500 mr-2" />
+                       <select 
+                         className="bg-transparent text-sm font-bold text-slate-700 outline-none cursor-pointer w-full" 
+                         value="es" 
+                         onChange={(e) => {
+                           const val = e.target.value;
+                           if (val === 'en' || val === 'nl') {
+                              try {
+                                  if(val === 'en') window.location.assign(`intake.html`);
+                                  else window.location.assign(`intake_${val}.html`);
+                              } catch(err) {
+                                  console.warn("Navigation failed", err);
+                              }
+                           }
+                         }}
+                       >
+                         <option value="en">EN</option>
+                         <option value="nl">NL</option>
+                         <option value="es">ES</option>
+                       </select>
+                    </div>
+                    
+                    <div className="h-8 border-l border-slate-300 mx-1 hidden md:block"></div>
+
+                    <label className="cursor-pointer bg-white border border-slate-300 text-slate-700 px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm">
+                      <FolderOpen size={18} className="text-blue-600"/> <span className="hidden md:inline">{t.load}</span>
+                      <input type="file" accept=".json" className="hidden" onChange={handleImportJSON} />
+                    </label>
+                    <button onClick={handleExportJSON} className="bg-white border border-slate-300 text-slate-700 px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm">
+                      <Save size={18} className="text-green-600"/> <span className="hidden md:inline">{t.save}</span>
+                    </button>
+                    <button onClick={() => { if(validateForm()) setIsPreview(true); else window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="bg-blue-600 text-white px-6 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-blue-700 transition-all shadow-md hover:shadow-blue-500/30 ml-2">
+                      <FileText size={18}/> <span className="hidden md:inline">{t.preview}</span>
+                    </button>
+                  </div>
+                </div>
+              </header>
+
+              <main className="max-w-5xl mx-auto p-4 md:p-8 mt-4 space-y-10">
+                
+                {/* BANNERS */}
+                {errors.length > 0 && (
+                  <div className="bg-red-50 border border-red-200 p-6 rounded-2xl shadow-sm animate-pulse">
+                    <h3 className="font-bold text-red-800 text-lg flex items-center gap-2 mb-3"><AlertTriangle size={22}/> {t.validationErr}</h3>
+                    <ul className="list-disc pl-8 text-sm font-medium text-red-700 space-y-1.5">
+                      {errors.map((err, i) => <li key={i}>{err}</li>)}
+                    </ul>
+                  </div>
+                )}
+                
+                {/* INTRO */}
+                <div className="bg-gradient-to-r from-blue-50 to-blue-100/50 border border-blue-100 p-6 md:p-8 rounded-3xl shadow-sm relative overflow-hidden">
+                   <div className="absolute top-0 left-0 w-2 h-full bg-blue-500"></div>
+                   <h2 className="font-extrabold text-2xl text-blue-900 mb-3">{t.introTitle}</h2>
+                   <p className="text-base text-blue-800/80 leading-relaxed max-w-3xl">{t.introText}</p>
+                </div>
+
+                {/* 1. COMPANY DETAILS */}
+                <section className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-1" style={{ backgroundColor: BRAND.colors.green }}></div>
+                  <div className="flex items-center gap-4 border-b-2 border-slate-100 pb-6 mb-8">
+                    <div className="p-3 bg-green-50 rounded-xl">
+                      <Building2 size={28} color={BRAND.colors.green} />
+                    </div>
+                    <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">{t.sec1Title}</h2>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                    <div className="lg:col-span-2 flex flex-col gap-8">
+                      
+                      <div>
+                        <label className={labelClass}>{t.companyName} <span className="text-red-500">*</span></label>
+                        <input type="text" className={`${inputClass} text-lg font-bold`} value={clientInfo.companyName} placeholder="Ej. Fresh Produce Ltd." onChange={e => handleClientChange('companyName', e.target.value)} />
+                      </div>
+
+                      {/* Address Block */}
+                      <div className="bg-slate-50/50 p-6 rounded-2xl border border-slate-200 grid grid-cols-4 gap-5">
+                         <div className="col-span-4 sm:col-span-3">
+                           <label className={labelClass}>{t.street} <span className="text-red-500">*</span></label>
+                           <input type="text" className={inputClass} value={clientInfo.street} onChange={e => handleClientChange('street', e.target.value)} />
+                         </div>
+                         <div className="col-span-4 sm:col-span-1">
+                           <label className={labelClass}>{t.houseNumber} <span className="text-red-500">*</span></label>
+                           <input type="text" className={inputClass} value={clientInfo.houseNumber} onChange={e => handleClientChange('houseNumber', e.target.value)} />
+                         </div>
+                         <div className="col-span-4 sm:col-span-2">
+                           <label className={labelClass}>{t.zipCode} <span className="text-red-500">*</span></label>
+                           <input type="text" className={inputClass} value={clientInfo.zipCode} onChange={e => handleClientChange('zipCode', e.target.value)} />
+                         </div>
+                         <div className="col-span-4 sm:col-span-2">
+                           <label className={labelClass}>{t.city} <span className="text-red-500">*</span></label>
+                           <input type="text" className={inputClass} value={clientInfo.city} onChange={e => handleClientChange('city', e.target.value)} />
+                         </div>
+                         <div className="col-span-4">
+                           <label className={labelClass}>{t.country} <span className="text-red-500">*</span></label>
+                           <input type="text" className={inputClass} value={clientInfo.country} onChange={e => handleClientChange('country', e.target.value)} />
+                         </div>
+                      </div>
+
+                      {/* Contact Info */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                          <div>
+                            <label className={labelClass}>{t.contactName} <span className="text-red-500">*</span></label>
+                            <input type="text" className={inputClass} value={clientInfo.contactName} placeholder="Juan Pérez" onChange={e => handleClientChange('contactName', e.target.value)} />
+                          </div>
+                          <div>
+                            <label className={labelClass}>{t.role}</label>
+                            <input type="text" className={inputClass} value={clientInfo.role} placeholder="Gerente de Calidad" onChange={e => handleClientChange('role', e.target.value)} />
+                          </div>
+                          <div>
+                            <label className={labelClass}>{t.email} <span className="text-red-500">*</span></label>
+                            <input type="email" className={inputClass} value={clientInfo.email} placeholder="juan@ejemplo.es" onChange={e => handleClientChange('email', e.target.value)} />
+                          </div>
+                          <div>
+                            <label className={labelClass}>{t.phone}</label>
+                            <input type="tel" className={inputClass} value={clientInfo.phone} placeholder="+34 6 12345678" onChange={e => handleClientChange('phone', e.target.value)} />
+                          </div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col gap-3 lg:items-center">
+                       <label className={labelClass}>{t.logoUpload}</label>
+                       <label className="border-2 border-dashed border-slate-300 rounded-2xl w-full max-w-[240px] aspect-square flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-blue-50 hover:border-blue-300 transition-all cursor-pointer relative overflow-hidden mt-1 shadow-sm group">
+                          <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={handleLogoUpload} />
+                          {clientInfo.logo ? (
+                            <img src={clientInfo.logo} className="w-full h-full object-contain p-4 group-hover:scale-105 transition-transform" />
+                          ) : (
+                            <div className="p-6 flex flex-col items-center">
+                              <div className="w-16 h-16 bg-white rounded-full shadow-sm flex items-center justify-center mb-4 group-hover:shadow-md transition-all">
+                                 <Upload size={32} className="text-blue-500" />
+                              </div>
+                              <span className="font-bold text-sm text-slate-700 block">{t.clickUpload}</span>
+                              <span className="text-xs text-slate-400 mt-2">{t.uploadDesc}</span>
+                            </div>
+                          )}
+                       </label>
+                    </div>
+                  </div>
+                </section>
+
+                {/* 2. PRODUCTS SECTION HEADER */}
+                <div className="flex items-center gap-4 pb-2 pt-6">
+                  <div className="p-3 bg-blue-100 rounded-xl shadow-sm">
+                    <PackagePlus size={32} color={BRAND.colors.blue} />
+                  </div>
+                  <h2 className="text-3xl font-extrabold text-slate-800 tracking-tight">{t.sec2Title}</h2>
+                </div>
+
+                <div className="space-y-10">
+                  {products.map((product, productIndex) => {
+                    const isPillowBag = product.packagingType === 'Pillow Bag';
+                    const isLargeBulk = product.packagingType === 'Bin crate' || product.packagingType === 'Pallet';
+                    const dimUnit = isLargeBulk ? 'cm' : 'mm';
+                    const weightUnit = isLargeBulk ? 'kg' : 'g';
+
+                    return (
+                      <section key={product.id} className="bg-white rounded-3xl shadow-md border border-slate-200 overflow-hidden relative transition-all hover:shadow-lg">
+                        
+                        {/* PRODUCT HEADER */}
+                        <div className="bg-slate-800 text-white px-6 py-5 flex justify-between items-center">
+                           <div className="flex items-center gap-4">
+                             <div className="bg-blue-500/20 border border-blue-400/30 text-blue-100 w-10 h-10 rounded-full flex items-center justify-center font-bold shadow-inner">
+                                {productIndex + 1}
+                             </div>
+                             <h3 className="font-bold text-xl tracking-wide">
+                               {t.prodDetails} {product.name ? <span className="text-blue-300 font-normal ml-2">/ {product.name}</span> : ''}
+                             </h3>
+                           </div>
+                           
+                           {products.length > 1 && (
+                             <button type="button" onClick={() => removeProduct(product.id)} className="text-red-300 hover:text-white hover:bg-red-500 bg-slate-700/50 p-2.5 rounded-xl transition-all flex items-center gap-2 text-sm font-bold shadow-sm">
+                               <Trash2 size={18} /> <span className="hidden sm:inline">{t.delProd}</span>
+                             </button>
+                           )}
+                        </div>
+
+                        <div className="p-6 md:p-10 space-y-12">
+                          
+                          {/* A. Basic & Packaging */}
+                          <div>
+                            <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-3">
+                               <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center"><Target size={16} className="text-green-700"/></div>
+                               <h4 className="font-extrabold text-lg text-slate-800">{t.secATitle}</h4>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                              <div className="md:col-span-2">
+                                <label className={labelClass}>{t.prodName} <span className="text-red-500">*</span></label>
+                                <input type="text" className={`${inputClass} text-xl font-bold py-4`} value={product.name} placeholder="Ej. Arándanos" onChange={e => handleProductChange(product.id, 'name', e.target.value)} />
+                              </div>
+                              
+                              <div className="md:col-span-1 md:row-span-4 flex flex-col">
+                                 <label className={labelClass}>{t.prodPhoto}</label>
+                                 <div className="border-2 border-dashed border-slate-300 rounded-2xl w-full aspect-square max-w-[240px] flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-blue-50 hover:border-blue-300 transition-all cursor-pointer relative overflow-hidden mx-auto shadow-sm group">
+                                    <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={(e) => handleProductPhotoUpload(e, product.id)} />
+                                    {product.photo ? (
+                                      <img src={product.photo} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                                    ) : (
+                                      <div className="p-4 flex flex-col items-center">
+                                        <div className="w-16 h-16 bg-white rounded-full shadow-sm flex items-center justify-center mb-4 group-hover:shadow-md transition-all">
+                                          <ImageIcon size={32} className="text-blue-500" />
+                                        </div>
+                                        <span className="font-bold text-sm text-slate-700 block">{t.clickUpload}</span>
+                                      </div>
+                                    )}
+                                 </div>
+                              </div>
+                              
+                              <div className="md:col-span-1">
+                                <label className={labelClass}>{t.prodType}</label>
+                                <input type="text" className={inputClass} value={product.type} placeholder="Ej. Duke" onChange={e => handleProductChange(product.id, 'type', e.target.value)} />
+                              </div>
+                              <div className="md:col-span-1">
+                                <label className={labelClass}>{t.origin}</label>
+                                <input type="text" className={inputClass} value={product.origin} placeholder="País" onChange={e => handleProductChange(product.id, 'origin', e.target.value)} />
+                              </div>
+
+                              <div className="md:col-span-2 bg-slate-50 border border-slate-200 p-5 rounded-2xl">
+                                <label className={labelClass}>{t.processingType} <span className="text-red-500">*</span></label>
+                                <div className="flex flex-wrap gap-4 mt-3">
+                                   {['Whole', 'Processed'].map(type => (
+                                     <button
+                                       key={type}
+                                       type="button"
+                                       onClick={() => handleProductChange(product.id, 'processingType', type)}
+                                       className={`px-6 py-3 rounded-xl text-sm font-bold transition-all border shadow-sm flex-1 sm:flex-none ${product.processingType === type ? 'bg-blue-600 text-white border-blue-700 ring-4 ring-blue-600/20 transform scale-[1.02]' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100 hover:border-slate-400'}`}
+                                     >
+                                       {type === 'Whole' ? t.whole : t.processed}
+                                     </button>
+                                   ))}
+                                </div>
+                              </div>
+
+                              <div className="md:col-span-1">
+                                <label className={labelClass}>{t.maturity}</label>
+                                <input type="text" className={inputClass} value={product.maturityStage} onChange={e => handleProductChange(product.id, 'maturityStage', e.target.value)} />
+                              </div>
+                              
+                              <div className="md:col-span-1">
+                                <label className={labelClass}>{t.treatment}</label>
+                                <input type="text" className={inputClass} value={product.postHarvestTreatment} onChange={e => handleProductChange(product.id, 'postHarvestTreatment', e.target.value)} />
+                              </div>
+
+                              {/* ALIGNED PACKAGING, MATERIAL AND WEIGHT ROW */}
+                              <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-8">
+                                 <div>
+                                   <label className={labelClass}>{t.packType} <span className="text-red-500">*</span></label>
+                                   <select className={`${inputClass} cursor-pointer bg-white`} value={product.packagingType} onChange={e => handleProductChange(product.id, 'packagingType', e.target.value)}>
+                                     {PACKAGING_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
+                                   </select>
+                                 </div>
+                                 <div>
+                                   <label className={labelClass}>{t.material} <span className="text-red-500">*</span></label>
+                                   <input type="text" className={inputClass} value={product.material} onChange={e => handleProductChange(product.id, 'material', e.target.value)} />
+                                 </div>
+                                 <div>
+                                   <label className={labelClass}>{t.weight} <span className="text-red-500">*</span></label>
+                                   <div className="relative">
+                                      <input type="number" className={`${inputClass} pr-12`} value={product.weight} onChange={e => handleProductChange(product.id, 'weight', e.target.value)} />
+                                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{weightUnit}</span>
+                                   </div>
+                                 </div>
+                              </div>
+
+                              {/* FULL WIDTH DIMENSIONS */}
+                              <div className="md:col-span-3 bg-gradient-to-br from-slate-50 to-slate-100 p-6 rounded-2xl border border-slate-200 shadow-sm mt-2">
+                                 <label className="block mb-4 text-xs font-extrabold tracking-widest text-blue-800 uppercase border-b border-blue-200 pb-2">{t.dimens}</label>
+                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
+                                   <div>
+                                     <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">{t.len} <span className="text-red-500">*</span></label>
+                                     <div className="relative">
+                                       <input type="number" className={`${inputClass} pl-4 pr-12`} value={product.length} onChange={e => handleProductChange(product.id, 'length', e.target.value)} />
+                                       <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{dimUnit}</span>
+                                     </div>
+                                   </div>
+                                   <div>
+                                     <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">{isPillowBag ? t.widSeal : t.wid} <span className="text-red-500">*</span></label>
+                                     <div className="relative">
+                                       <input type="number" className={`${inputClass} pl-4 pr-12`} value={product.width} onChange={e => handleProductChange(product.id, 'width', e.target.value)} />
+                                       <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{dimUnit}</span>
+                                     </div>
+                                   </div>
+                                   {!isPillowBag && (
+                                     <div className="col-span-2 sm:col-span-1">
+                                       <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">{t.hei} <span className="text-red-500">*</span></label>
+                                       <div className="relative">
+                                          <input type="number" className={`${inputClass} pl-4 pr-12`} value={product.height} onChange={e => handleProductChange(product.id, 'height', e.target.value)} />
+                                          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{dimUnit}</span>
+                                       </div>
+                                     </div>
+                                   )}
+                                 </div>
+                              </div>
+                              
+                              <div className="md:col-span-3 mt-4">
+                                <label className="block mb-2 text-sm font-extrabold tracking-wide text-slate-800 uppercase flex items-center gap-2">
+                                   <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center"><Beaker size={16} className="text-blue-700"/></div>
+                                   {t.qualityCrit}
+                                </label>
+                                <p className="text-sm text-slate-500 mb-4">{t.qualityCritDesc}</p>
+                                <div className="flex flex-wrap gap-3">
+                                   {DEFAULT_CRITERIA.map(crit => {
+                                     const isSelected = product.qualityCriteria.includes(crit);
+                                     return (
+                                       <button 
+                                         key={crit}
+                                         type="button"
+                                         onClick={() => toggleCriteria(product.id, crit)}
+                                         className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-all border shadow-sm flex items-center gap-2 ${isSelected ? 'bg-blue-50 text-blue-800 border-blue-400 ring-2 ring-blue-500/20 transform scale-[1.02]' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300'}`}
+                                       >
+                                         {crit} {isSelected && <CheckCircle size={16} className="text-blue-600" />}
+                                       </button>
+                                     )
+                                   })}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* B. Goal & Challenge */}
+                          <div>
+                            <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-3">
+                               <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center"><AlertCircle size={16} className="text-orange-700"/></div>
+                               <h4 className="font-extrabold text-lg text-slate-800">{t.secBTitle}</h4>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                              <div>
+                                <label className="block mb-3 text-xs font-bold tracking-wide text-orange-700 uppercase flex items-center gap-2"><AlertCircle size={16}/> {t.challenge} <span className="text-red-500">*</span></label>
+                                <textarea rows="5" className={`${inputClass} resize-y focus:ring-orange-500 focus:border-orange-500`} placeholder={t.challengePl} value={product.currentChallenge} onChange={e => handleProductChange(product.id, 'currentChallenge', e.target.value)}></textarea>
+                              </div>
+                              <div>
+                                <label className="block mb-3 text-xs font-bold tracking-wide text-green-700 uppercase flex items-center gap-2"><CheckCircle size={16}/> {t.goal} <span className="text-red-500">*</span></label>
+                                <textarea rows="5" className={`${inputClass} resize-y focus:ring-green-500 focus:border-green-500`} placeholder={t.goalPl} value={product.targetGoal} onChange={e => handleProductChange(product.id, 'targetGoal', e.target.value)}></textarea>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* C. Supply Chain */}
+                          <div>
+                            <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-3">
+                               <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center"><Truck size={16} className="text-indigo-700"/></div>
+                               <h4 className="font-extrabold text-lg text-slate-800">{t.secCTitle}</h4>
+                            </div>
+                            
+                            <div className="mb-8 bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100">
+                              <label className="block mb-3 text-xs font-bold tracking-wide text-indigo-900 uppercase">{t.transportMode} <span className="text-red-500">*</span></label>
+                              <div className="flex flex-wrap gap-4">
+                                 {TRANSPORT_MODES.map(mode => {
+                                    const modeKeys = { 'Air Freight': 'airFreight', 'Sea Freight': 'seaFreight', 'Road Transport': 'roadTransport', 'Storage': 'storage' };
+                                    const isSelected = product.transportMode === mode;
+                                    return (
+                                      <button 
+                                        key={mode}
+                                        type="button"
+                                        onClick={() => handleProductChange(product.id, 'transportMode', isSelected ? '' : mode)}
+                                        className={`px-5 py-3 rounded-xl text-sm font-bold transition-all border shadow-sm flex items-center gap-2 ${isSelected ? 'bg-indigo-600 text-white border-indigo-700 ring-4 ring-indigo-600/20 transform scale-[1.02]' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}
+                                      >
+                                        {t[modeKeys[mode]]} {isSelected && <CheckCircle size={16} className="text-white" />}
+                                      </button>
+                                    )
+                                 })}
+                              </div>
+                            </div>
+                            
+                            {/* --- PERFECT CSS GRID SUPPLY CHAIN FLOW --- */}
+                            <div className="space-y-3">
+                              <label className="block mb-2 text-xs font-bold tracking-wide text-slate-500 uppercase">{t.supplyChainFlow}</label>
+                              
+                              {/* Desktop Header - CSS GRID */}
+                              <div className="hidden lg:grid grid-cols-[80px_1fr_150px_150px_130px_40px] items-center gap-4 px-4 text-xs font-bold text-slate-500 uppercase tracking-widest">
+                                 <div>{t.step}</div>
+                                 <div>{t.phase} <span className="text-red-500">*</span></div>
+                                 <div className="text-center">{t.temp} <span className="text-red-500">*</span></div>
+                                 <div className="text-center">{t.days} <span className="text-red-500">*</span></div>
+                                 <div>{t.action}</div>
+                                 <div></div>
+                              </div>
+
+                              {product.supplyChain.map((step, idx) => (
+                                 <div key={idx} className="grid grid-cols-1 lg:grid-cols-[80px_1fr_150px_150px_130px_40px] items-start lg:items-center gap-4 bg-white hover:bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-sm transition-all group">
+                                    
+                                    {/* Step Controls (Up/Down + Number) */}
+                                    <div className="flex items-center gap-2 justify-between lg:justify-start">
+                                       <div className="flex lg:flex-col gap-1">
+                                          <button type="button" onClick={() => moveChainStep(product.id, idx, 'up')} disabled={idx === 0} className="p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700 rounded disabled:opacity-30 transition-colors"><ChevronUp size={16}/></button>
+                                          <button type="button" onClick={() => moveChainStep(product.id, idx, 'down')} disabled={idx === product.supplyChain.length - 1} className="p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700 rounded disabled:opacity-30 transition-colors"><ChevronDown size={16}/></button>
+                                       </div>
+                                       <div className="w-8 h-8 bg-indigo-100 text-indigo-700 rounded-full flex items-center justify-center font-bold text-sm shadow-sm">
+                                          {idx + 1}
+                                       </div>
+                                       {/* Mobile Delete */}
+                                       <button type="button" onClick={() => removeChainStep(product.id, idx)} className="lg:hidden p-2 text-red-500 hover:bg-red-50 rounded-lg">
+                                          <Trash2 size={18}/>
+                                       </button>
+                                    </div>
+
+                                    {/* Stage Input */}
+                                    <div className="w-full">
+                                       <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">{t.phase} <span className="text-red-500">*</span></label>
+                                       <input type="text" className={`${inputClass} py-2.5 font-bold w-full`} value={step.stage} placeholder="Ej. Granja, Transporte..." onChange={e => updateChainStep(product.id, idx, 'stage', e.target.value)} />
+                                    </div>
+
+                                    {/* Temp Block */}
+                                    <div className="w-full">
+                                       <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">{t.temp} <span className="text-red-500">*</span></label>
+                                       <div className="flex items-center gap-1.5">
+                                          <input type="number" className={`${narrowInputClass} w-full`} value={step.tempStart} placeholder="Min" onChange={e => updateChainStep(product.id, idx, 'tempStart', e.target.value)} />
+                                          <span className="text-slate-400 font-bold shrink-0">-</span>
+                                          <input type="number" className={`${narrowInputClass} w-full`} value={step.tempEnd} placeholder="Max" onChange={e => updateChainStep(product.id, idx, 'tempEnd', e.target.value)} />
+                                       </div>
+                                    </div>
+
+                                    {/* Days Block */}
+                                    <div className="w-full">
+                                       <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">{t.days} <span className="text-red-500">*</span></label>
+                                       <div className="flex items-center gap-1.5">
+                                          <input type="number" className={`${narrowInputClass} w-full`} value={step.daysStart} placeholder="Min" onChange={e => updateChainStep(product.id, idx, 'daysStart', e.target.value)} />
+                                          <span className="text-slate-400 font-bold shrink-0">-</span>
+                                          <input type="number" className={`${narrowInputClass} w-full`} value={step.daysEnd} placeholder="Max" onChange={e => updateChainStep(product.id, idx, 'daysEnd', e.target.value)} />
+                                       </div>
+                                    </div>
+
+                                    {/* Action Block */}
+                                    <div className="w-full">
+                                       <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">{t.action}</label>
+                                       <select className={`${inputClass} py-2.5 font-bold px-2 w-full`} value={step.action} onChange={e => updateChainStep(product.id, idx, 'action', e.target.value)}>
+                                         <option value="none">{t.actNone}</option>
+                                         <option value="pack" className="text-green-700">{t.actPack}</option>
+                                         <option value="unpack" className="text-red-700">{t.actUnpack}</option>
+                                       </select>
+                                    </div>
+
+                                    {/* Desktop Delete */}
+                                    <div className="hidden lg:flex justify-center w-full">
+                                       <button type="button" onClick={() => removeChainStep(product.id, idx)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title={t.removeStep}>
+                                         <Trash2 size={20}/>
+                                       </button>
+                                    </div>
+                                 </div>
+                              ))}
+                              
+                              {/* Add Step Button */}
+                              <button type="button" onClick={() => addChainStep(product.id)} className="w-full py-4 mt-4 border-2 border-dashed border-indigo-200 bg-indigo-50/50 hover:bg-indigo-100 text-indigo-700 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-sm">
+                                <div className="bg-white p-1.5 rounded-lg shadow-sm"><Plus size={16} /></div> 
+                                {t.addStep}
+                              </button>
+                            </div>
+                          </div>
+
+                        </div>
+                      </section>
+                    );
+                  })}
+                </div>
+
+                {/* ADD NEW PRODUCT BUTTON */}
+                <button 
+                  type="button"
+                  onClick={addProduct} 
+                  className="w-full py-6 rounded-3xl font-extrabold border-4 border-dashed border-slate-300 text-xl transition-all flex flex-col items-center justify-center gap-3 bg-white/50 hover:bg-green-50 hover:border-green-400 hover:text-green-700 text-slate-500 shadow-sm hover:shadow-md group" 
+                >
+                  <div className="bg-white p-3 rounded-2xl shadow-sm group-hover:scale-110 transition-transform group-hover:bg-green-500 group-hover:text-white">
+                     <Plus size={32} />
+                  </div>
+                  {t.addProd}
+                </button>
+
+                {/* FINAL SUBMIT BUTTON */}
+                <div className="pt-10 pb-20 flex justify-end">
+                   <button type="button" onClick={handleSubmit} className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white px-10 md:px-14 py-5 rounded-full font-extrabold text-xl shadow-xl shadow-green-500/40 transition-all flex items-center gap-4 transform hover:-translate-y-1 hover:shadow-green-500/60 ring-4 ring-green-500/20">
+                      <Send size={28} />
+                      {t.submitBtn}
+                   </button>
+                </div>
+
+              </main>
+            </div>
+          );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
