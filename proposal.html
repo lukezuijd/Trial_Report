@@ -248,6 +248,397 @@
           )
         };
 
+        // --- PRINT PREVIEW ---
+        const PrintPreview = ({ clientInfo, project, groups, proposal, supplyChain, onBack }) => {
+          let allTemps = [];
+          (supplyChain || []).forEach(s => {
+              const ts = parseFloat(s.tempStart); if(!isNaN(ts)) allTemps.push(ts);
+              const te = parseFloat(s.tempEnd); if(!isNaN(te)) allTemps.push(te);
+          });
+          const minTemp = allTemps.length > 0 ? Math.min(...allTemps) : null;
+          const maxTemp = allTemps.length > 0 ? Math.max(...allTemps) : null;
+          const tempString = allTemps.length > 0 ? (minTemp === maxTemp ? `${minTemp}°C` : `${minTemp}°C - ${maxTemp}°C`) : '-°C';
+          const totalDays = project.totalDuration || (supplyChain || []).reduce((acc,s) => acc + parseFloat(s.daysStart || 0), 0);
+
+          // Reusable class for titles to ensure they stand out even if CSS fails
+          const reportTitleClass = "text-3xl font-extrabold uppercase mb-6 brand-heading break-after-avoid";
+          const reportTitleStyle = { color: BRAND.colors.green, borderBottom: `3px solid ${BRAND.colors.gray}`, paddingBottom: '0.75rem', marginTop: '2rem' };
+
+          const handleWordExport = () => {
+              const content = document.getElementById('print-content').innerHTML;
+              const preHtml = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export HTML To Doc</title><style>body { font-family: 'Arial', sans-serif; } .page-break { page-break-before: always; } table { width: 100%; border-collapse: collapse; margin-bottom: 20px; } th, td { border: 1px solid #ccc; padding: 8px; text-align: left; } th { background-color: #007C27; color: white; } img { max-width: 100%; height: auto; }</style></head><body>`;
+              const postHtml = "</body></html>";
+              const html = preHtml + content + postHtml;
+              const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
+              const url = URL.createObjectURL(blob);
+              const downloadLink = document.createElement("a");
+              document.body.appendChild(downloadLink);
+              downloadLink.href = URL.createObjectURL(blob);
+              downloadLink.download = (project.reportTitle || 'Proposal') + '.doc';
+              downloadLink.click();
+              document.body.removeChild(downloadLink);
+          };
+
+          return (
+            <div className="min-h-screen bg-slate-600 p-0 sm:p-8 overflow-y-auto font-sans print:p-0 print:bg-white no-print-bg selection:bg-blue-200 selection:text-blue-900">
+              <div className="fixed bottom-8 right-8 flex gap-4 no-print z-50">
+                <button onClick={onBack} className="bg-slate-800 text-white px-6 py-3 rounded-full shadow-xl font-bold transition hover:bg-slate-900 flex items-center gap-2"><Edit3 size={18}/> Edit</button>
+                <button onClick={handleWordExport} className="bg-blue-600 text-white px-6 py-3 rounded-full shadow-xl font-bold flex items-center gap-2 hover:bg-blue-700 transition">
+                  <FileArchive size={20} /> Download Word
+                </button>
+                <button onClick={() => window.print()} className="bg-green-600 text-white px-6 py-3 rounded-full shadow-xl font-bold flex items-center gap-2 hover:bg-green-700 transition">
+                  <Printer size={18} /> Download PDF
+                </button>
+              </div>
+
+              <div id="print-content" className="max-w-[21cm] mx-auto bg-white shadow-2xl min-h-[29.7cm] p-12 relative print:shadow-none print:max-w-full print:w-full print:p-0 text-slate-800">
+                
+                {/* --- COVER PAGE --- */}
+                <div className="h-[27cm] flex flex-col justify-between items-center text-center pt-24">
+                   <div className="w-full flex flex-col items-center">
+                      <div className="flex justify-between items-start w-full px-8">
+                          <div className="w-1/2 flex justify-start">
+                            {project.logo && (
+                               <img src={project.logo} alt="PerfoTec Logo" className="h-32 max-w-[400px] object-contain" crossOrigin="anonymous" />
+                            )}
+                          </div>
+                          <div className="w-1/2 flex justify-end">
+                            {project.clientLogo && (
+                               <img src={project.clientLogo} alt="Client Logo" className="h-32 max-w-[400px] object-contain" crossOrigin="anonymous" />
+                            )}
+                          </div>
+                      </div>
+
+                      <h1 className="text-5xl font-bold uppercase mt-16 mb-4 brand-heading" style={{ color: BRAND.colors.green }}>{project.reportTitle || 'Trial Proposal'}</h1>
+                      <h2 className="text-5xl font-light brand-heading text-slate-600 mb-16">{project.productName || '<Product Name>'}</h2>
+                      
+                      <div className="w-full h-[450px] overflow-hidden flex items-center justify-center relative bg-transparent border-none mt-8 rounded-2xl">
+                         {project.coverImage ? <img src={project.coverImage} className="w-full h-full object-contain" crossOrigin="anonymous" /> : project.startImage ? <img src={project.startImage} className="w-full h-full object-contain" crossOrigin="anonymous" /> : <span className="text-slate-300 italic font-medium">No Cover Photo</span>}
+                      </div>
+                   </div>
+                   <div className="w-full flex justify-center items-end pb-4">
+                       <div className="text-sm text-slate-400 font-medium">© {new Date().getFullYear()} PerfoTec B.V.</div>
+                   </div>
+                </div>
+
+                <div className="page-break"></div>
+
+                {/* --- TABLE OF CONTENTS --- */}
+                <div className="min-h-[27cm] flex flex-col pt-12">
+                    <h2 className="text-4xl font-extrabold uppercase mb-8 brand-heading" style={{ color: BRAND.colors.green, borderBottom: `3px solid ${BRAND.colors.gray}`, paddingBottom: '1rem' }}>Table of Contents</h2>
+                    <ul className="text-xl space-y-4 font-medium text-slate-700">
+                        <li className="flex justify-between border-b border-slate-200 pb-2"><span>1. Introduction & Objectives</span></li>
+                        <li className="flex justify-between border-b border-slate-200 pb-2"><span>2. Company & Project Info</span></li>
+                        <li className="flex justify-between border-b border-slate-200 pb-2"><span>3. Product Characteristics & Defect Prevention</span></li>
+                        <li className="flex justify-between border-b border-slate-200 pb-2"><span>4. Simulated Supply Chain</span></li>
+                        <li className="flex justify-between border-b border-slate-200 pb-2"><span>5. Proposed Trial Setup</span></li>
+                        <li className="flex justify-between border-b border-slate-200 pb-2"><span>6. Evaluation Plan</span></li>
+                        <li className="flex justify-between border-b border-slate-200 pb-2"><span>7. Requirements & Agreements</span></li>
+                    </ul>
+                </div>
+
+                <div className="page-break"></div>
+
+                {/* --- PAGE 1: INTRO & SETTING --- */}
+                <div className="pt-4">
+                  <h2 className={reportTitleClass} style={reportTitleStyle}>1. Introduction & Objectives</h2>
+                  <div className="text-base leading-relaxed text-justify text-slate-800 mb-8">
+                     <div className="mb-6 whitespace-pre-wrap pdf-rich-text" dangerouslySetInnerHTML={{ __html: proposal?.intro || '' }}></div>
+                     
+                     {project.currentChallenge && (
+                       <div className="mb-6 bg-orange-50 p-5 rounded-2xl border border-orange-100">
+                         <h4 className="font-bold text-lg mb-2 text-orange-800">Current Challenge:</h4>
+                         <div className="whitespace-pre-wrap text-slate-700">{project.currentChallenge}</div>
+                       </div>
+                     )}
+
+                     {project.trialTarget && (
+                       <div className="mb-6 bg-green-50 p-5 rounded-2xl border border-green-100">
+                         <h4 className="font-bold text-lg mb-2 text-green-800">Trial Target:</h4>
+                         <div className="whitespace-pre-wrap text-slate-700">{project.trialTarget}</div>
+                       </div>
+                     )}
+                     
+                     {proposal?.expectedOutcomes && (
+                       <div className="mb-6">
+                         <h4 className="font-bold text-lg mb-2" style={{color: BRAND.colors.blue}}>Expected Outcomes:</h4>
+                         <div className="whitespace-pre-wrap pdf-rich-text" dangerouslySetInnerHTML={{ __html: proposal.expectedOutcomes }}></div>
+                       </div>
+                     )}
+                  </div>
+                </div>
+
+                <div className="page-break"></div>
+
+                <div className="pt-4">
+                  <h2 className={reportTitleClass} style={reportTitleStyle}>2. Company & Project Info</h2>
+                  <div className="grid grid-cols-[180px_1fr] gap-y-3 text-base text-slate-800 bg-slate-50 p-6 rounded-2xl border border-slate-200">
+                     <div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Product :</div> <div className="font-bold">{project.productName || '-'} {project.type ? `(${project.type})` : ''}</div>
+                     <div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">State of product :</div> <div className="font-medium">{project.processingType === 'Whole' ? 'Whole' : 'Processed / Fresh-cut'}</div>
+                     <div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Product Origin :</div> <div className="font-medium">{project.origin || '-'}</div>
+                     
+                     {(clientInfo.companyName || clientInfo.street || clientInfo.contactName || clientInfo.email || clientInfo.phone) && (
+                       <div className="font-bold col-span-2 mt-4 border-t border-slate-200 pt-4 text-lg" style={{color: BRAND.colors.green}}>Company Info</div>
+                     )}
+                     {clientInfo.companyName && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Company Name :</div> <div className="font-bold">{clientInfo.companyName}</div></>}
+                     
+                     {(() => {
+                       const streetPart = [clientInfo.street, clientInfo.houseNumber].filter(Boolean).join(' ');
+                       const cityPart = [clientInfo.zipCode, clientInfo.city].filter(Boolean).join(' ');
+                       const addressStr = [streetPart, cityPart, clientInfo.country].filter(Boolean).join(', ');
+                       return addressStr ? <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Address :</div> <div className="font-medium">{addressStr}</div></> : null;
+                     })()}
+
+                     {clientInfo.contactName && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Contact Person :</div> <div className="font-medium">{clientInfo.contactName} {clientInfo.role && <span className="text-slate-500">({clientInfo.role})</span>}</div></>}
+                     {(clientInfo.email || clientInfo.phone) && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Contact Details :</div> <div className="font-medium">{[clientInfo.email, clientInfo.phone].filter(Boolean).join(' | ')}</div></>}
+
+                     <div className="font-bold col-span-2 mt-4 border-t border-slate-200 pt-4 text-lg" style={{color: BRAND.colors.green}}>PerfoTec Support</div>
+                     {project.employee && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">PerfoTec Employee :</div> <div className="font-medium">{project.employee}</div></>}
+                     {(project.employeeEmail || project.employeePhone) && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Contact Details :</div> <div className="font-medium">{[project.employeeEmail, project.employeePhone].filter(Boolean).join(' | ')}</div></>}
+                     
+                     <div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-start mt-1">Technology :</div> 
+                     <div className="font-medium">
+                       {project.technologies && project.technologies.length > 0 ? (
+                          <ul className="list-disc pl-4 space-y-1">
+                            {project.technologies.map((t, i) => <li key={i}>{t}</li>)}
+                          </ul>
+                       ) : (
+                          '-'
+                       )}
+                     </div>
+                  </div>
+                </div>
+
+                <div className="page-break"></div>
+
+                {/* --- PAGE 3: PRODUCT CHARACTERISTICS & MATRIX --- */}
+                <div className="pt-4">
+                  <h2 className={reportTitleClass} style={reportTitleStyle}>3. Product Characteristics & Defect Prevention</h2>
+                  
+                  <div className="mb-8 grid grid-cols-4 gap-4 text-sm">
+                      {project.acpO2 && <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 shadow-sm"><strong className="text-blue-800 block mb-1 uppercase tracking-wide text-xs">O₂ min (ACP):</strong><span className="text-xl font-extrabold text-[#004B87]">{project.acpO2}</span></div>}
+                      {project.co2Max && <div className="bg-red-50 p-4 rounded-xl border border-red-100 shadow-sm"><strong className="text-red-800 block mb-1 uppercase tracking-wide text-xs">CO₂ max:</strong><span className="text-xl font-extrabold text-red-600">{project.co2Max}</span></div>}
+                      {project.co2Shock && <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 shadow-sm"><strong className="text-orange-800 block mb-1 uppercase tracking-wide text-xs">CO₂ shock:</strong><span className="text-xl font-extrabold text-orange-600">{project.co2Shock}</span>{project.co2ShockHours && <div className="text-xs text-orange-600/80 mt-1 font-medium leading-tight">Drop &lt; {project.co2Max || 'max'}% within {project.co2ShockHours}h</div>}</div>}
+                      {project.tempMin && <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-sm"><strong className="text-slate-500 block mb-1 uppercase tracking-wide text-xs">Temp min:</strong><span className="text-xl font-extrabold text-slate-800">{project.tempMin}</span></div>}
+                  </div>
+
+                  {project.defectsMatrix && project.defectsMatrix.length > 0 && (
+                      <div className="break-inside-avoid mb-8">
+                          <h3 className="font-bold text-xl mb-4 brand-heading" style={{ color: BRAND.colors.green }}>Defects & Prevention Matrix</h3>
+                          <div className="overflow-hidden rounded-xl border border-slate-200 shadow-sm">
+                              <table className="w-full text-sm border-collapse">
+                                  <thead>
+                                      <tr>
+                                          <th className="p-3 text-left text-white font-bold" style={{backgroundColor: '#004B87'}}>DEFECT</th>
+                                          <th className="p-3 text-left text-white font-bold" style={{backgroundColor: '#004B87'}}>PHYSIOLOGICAL CAUSE</th>
+                                          <th className="p-3 text-left text-white font-bold" style={{backgroundColor: '#5B9BD5'}}>EFFECT MHP (MOISTURE)</th>
+                                          <th className="p-3 text-left text-white font-bold" style={{backgroundColor: '#007C27'}}>EFFECT MAP (GAS)</th>
+                                      </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-200">
+                                      {project.defectsMatrix.map((row, i) => (
+                                          <tr key={row.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                                              <td className="p-3 font-bold text-slate-800">{row.defect}</td>
+                                              <td className="p-3 text-slate-700">{row.cause}</td>
+                                              <td className="p-3 text-slate-700 font-medium">{row.effectMHP}</td>
+                                              <td className="p-3 text-slate-700 font-medium">{row.effectMAP}</td>
+                                          </tr>
+                                      ))}
+                                  </tbody>
+                              </table>
+                          </div>
+                      </div>
+                  )}
+                </div>
+
+                <div className="page-break"></div>
+
+                {/* --- PAGE 4: SUPPLY CHAIN --- */}
+                <div className="pt-4">
+                  <h2 className={reportTitleClass} style={reportTitleStyle}>4. Simulated Supply Chain</h2>
+                  <div className="text-base text-slate-800 mb-8">
+                     <p className="mb-4 leading-relaxed">To ensure the trial is representative of the real-world conditions, we propose to test the product using the following temperature and time profile:</p>
+                     
+                     {project.transportMode && (
+                       <div className="mb-4 inline-block bg-indigo-50 border border-indigo-100 text-indigo-800 px-4 py-2 rounded-lg">
+                         <strong>Transport Mode:</strong> {project.transportMode}
+                       </div>
+                     )}
+                     
+                     <div className="w-full mt-2 break-inside-avoid">
+                       <ProductSupplyChainFlow chain={supplyChain} />
+                     </div>
+                     <div className="mt-6 bg-slate-50 p-4 rounded-xl border border-slate-200 text-sm space-y-2">
+                         <p className="italic text-slate-500">* Temperatures and durations are simulated based on provided information.</p>
+                         <p>Stored at <strong>{tempString}</strong> for <strong>{totalDays} days</strong> total.</p>
+                         <p>The product was packed on <strong>{formatDateToDDMMYYYY(project.packingDate || project.date)}</strong>.</p>
+                         <p>Unpacking moments are specific to each variant and are detailed in the Trial Setup table below.</p>
+                     </div>
+                  </div>
+                </div>
+
+                <div className="page-break"></div>
+
+                <div className="pt-4">
+                  <h2 className={reportTitleClass} style={reportTitleStyle}>5. Proposed Trial Setup</h2>
+                  <div className="text-base text-slate-800 mb-8">
+                      <p className="mb-6 leading-relaxed">The Fast Respiration Meter System will be used to measure the exact product respiration rate. Based on this, we calculate the optimal micro perforation pattern for the PerfoTec variant. The proposed variants to compare are:</p>
+                      
+                      <div className="overflow-hidden rounded-xl border border-slate-200 shadow-sm break-inside-avoid">
+                          <table className="report-table w-full text-sm">
+                            <thead>
+                              <tr>
+                                <th className="w-1/4">Variant</th>
+                                <th className="text-center">Packaging Type</th>
+                                <th className="text-center">Material</th>
+                                <th className="text-center">Dimensions (mm)</th>
+                                <th className="text-center">Netto Weight (g)</th>
+                                <th className="text-center">Transmission Value</th>
+                                <th className="text-center">Evaluation Days</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-200">
+                              {groups.map((g, i) => {
+                                const isLargeBulk = g.specs?.packaging === 'Cube crate' || g.specs?.packaging === 'Pallet';
+                                const dimUnit = isLargeBulk ? 'cm' : 'mm';
+                                const weightUnit = isLargeBulk ? 'kg' : 'g';
+                                return (
+                                  <tr key={g.id} className="bg-white">
+                                    <td className="font-bold py-4" style={{ borderLeft: `4px solid ${CHART_COLORS[i % CHART_COLORS.length].stroke}` }}>
+                                      {g.name}
+                                    </td>
+                                    <td className="text-center py-4">{g.specs?.packaging || '-'}</td>
+                                    <td className="text-center py-4">{g.specs?.material || '-'}</td>
+                                    <td className="text-center py-4">{g.specs?.length || '-'}x{g.specs?.width || '-'}x{g.specs?.height || '-'} {dimUnit}</td>
+                                    <td className="text-center py-4">{project.startWeight || '-'} {weightUnit}</td>
+                                    <td className="text-center py-4 font-bold">{g.specs?.holes || '-'}</td>
+                                    <td className="text-center py-4 font-medium text-slate-500">{g.measurements.filter(m => parseFloat(m.day) > 0).map(m => `P+${m.day}`).join(', ')}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                      </div>
+                      
+                      {/* PREDICTED GAS GRAPHS */}
+                      {groups.some(g => g.predictedImage) && (
+                          <div className="mt-10 break-inside-avoid bg-slate-50 p-8 rounded-2xl border border-slate-200">
+                             <h4 className="font-bold mb-8 text-2xl text-slate-800">Predicted Gas Levels</h4>
+                             <div className="flex flex-col gap-12 w-full">
+                               {groups.map((g, idx) => {
+                                  if (!g.predictedImage) return null;
+                                  return (
+                                     <div key={g.id} className="flex flex-col items-center w-full break-inside-avoid">
+                                        <div className="text-lg font-bold mb-4 text-center text-slate-700 bg-white px-6 py-2 rounded-full shadow-sm border border-slate-200">{g.name || 'Variant'}</div>
+                                        <div className="w-full flex justify-center bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+                                           <img src={g.predictedImage} className="w-full h-auto max-h-[500px] object-contain" crossOrigin="anonymous" />
+                                        </div>
+                                     </div>
+                                  )
+                               })}
+                             </div>
+                          </div>
+                      )}
+
+                  </div>
+                </div>
+
+                <div className="page-break"></div>
+
+                {/* --- PAGE 6: EVALUATION PLAN --- */}
+                <div className="pt-4">
+                  <h2 className={reportTitleClass} style={reportTitleStyle}>6. Evaluation Plan</h2>
+                  <div className="text-base space-y-6 text-slate-800">
+                     <p className="leading-relaxed">During the trial, the product quality and atmospheric conditions will be continuously monitored according to the schedule below.</p>
+                     
+                     <div className="mb-8">
+                       <h3 className="font-bold text-xl mb-6 text-slate-800">Detailed Evaluation Schedule</h3>
+                       {groups.map((g, i) => (
+                         <div key={g.id} className="mb-8 break-inside-avoid shadow-sm rounded-xl overflow-hidden border border-slate-200">
+                           <h4 className="font-bold text-lg text-white p-3" style={{backgroundColor: CHART_COLORS[i % CHART_COLORS.length].stroke}}>{g.name}</h4>
+                           <table className="w-full text-sm text-left bg-white">
+                             <thead>
+                               <tr className="bg-slate-50 text-slate-600 border-b border-slate-200">
+                                 <th className="p-3 w-20 text-center font-bold uppercase tracking-wider text-xs">Day</th>
+                                 <th className="p-3 font-bold uppercase tracking-wider text-xs">Measurements (O₂, CO₂, Weight)</th>
+                                 <th className="p-3 font-bold uppercase tracking-wider text-xs">Opening Moment</th>
+                                 <th className="p-3 font-bold uppercase tracking-wider text-xs">Quality Evaluation</th>
+                               </tr>
+                             </thead>
+                             <tbody className="divide-y divide-slate-100">
+                               {g.measurements.sort((a,b) => parseFloat(a.day) - parseFloat(b.day)).map((m, idx) => (
+                                 <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                                   <td className="p-3 text-center font-extrabold text-slate-700 bg-slate-50/50">P+{m.day}</td>
+                                   <td className="p-3 text-slate-600 font-medium">{(m.measure||[]).length > 0 ? (m.measure||[]).map(s => `S${s}`).join(', ') : '-'}</td>
+                                   <td className="p-3 text-orange-600 font-bold">{(m.open||[]).length > 0 ? (m.open||[]).map(s => `S${s}`).join(', ') : '-'}</td>
+                                   <td className="p-3 text-green-700 font-bold">{(m.evaluate||[]).length > 0 ? (m.evaluate||[]).map(s => `S${s}`).join(', ') : '-'}</td>
+                                 </tr>
+                               ))}
+                             </tbody>
+                           </table>
+                         </div>
+                       ))}
+                     </div>
+
+                     <div className="break-inside-avoid mt-8 pt-6 border-t border-slate-200 bg-slate-50 p-6 rounded-2xl">
+                       <h4 className="font-bold mb-4 text-xl text-slate-800">Methodology</h4>
+                       <ul className="list-disc pl-6 space-y-3 text-slate-700">
+                         <li><strong>Gas Analysis:</strong> Measuring O₂ and CO₂ percentages inside the packaging.</li>
+                         <li><strong>Weight Tracking:</strong> Monitoring moisture/weight loss from Day 0.</li>
+                         <li><strong>Visual Quality:</strong> Taking photographic evidence of the product state.</li>
+                         <li>
+                            <strong>Detailed Quality Assessment:</strong> Scoring the following criteria on a 1-10 scale (where 6+ is acceptable):
+                            <ul className="list-circle pl-6 mt-3 grid grid-cols-2 gap-2 text-sm font-medium text-slate-600">
+                                {(project.criteria || []).map((c, i) => <li key={i}>{c}</li>)}
+                            </ul>
+                         </li>
+                       </ul>
+                     </div>
+
+                  </div>
+                </div>
+
+                <div className="page-break"></div>
+
+                <div className="pt-4">
+                  <h2 className={reportTitleClass} style={reportTitleStyle}>7. Requirements & Agreements</h2>
+                  <div className="text-base space-y-6 text-slate-800">
+                     {proposal?.requirements && (
+                         <div className="break-inside-avoid">
+                             {(() => {
+                               const totalRequiredWeightGrams = groups.reduce((total, g) => {
+                                 const weightPerSample = parseFloat(project.startWeight) || 0;
+                                 const totalSamples = parseFloat(g.specs?.sampleCount) || 0;
+                                 return total + (weightPerSample * totalSamples);
+                               }, 0);
+                               const totalRequiredWeightKg = (totalRequiredWeightGrams / 1000).toFixed(1);
+                               
+                               const totalSamplesCount = groups.reduce((total, g) => {
+                                 return total + (parseFloat(g.specs?.sampleCount) || 0);
+                               }, 0);
+
+                               return (
+                                 <div className="mb-6 bg-blue-50 border border-blue-200 p-5 text-sm text-blue-900 rounded-2xl flex items-start gap-4 shadow-sm">
+                                   <AlertCircle className="text-blue-500 shrink-0 mt-0.5" size={20} />
+                                   <div>
+                                      <strong className="block text-base mb-1 text-blue-950">Required Product</strong> 
+                                      A minimum of <strong>{totalRequiredWeightKg} kg</strong> of fresh product is required to conduct this trial (based on a total of {totalSamplesCount} uniquely tracked physical samples across all variants).
+                                   </div>
+                                 </div>
+                               );
+                             })()}
+
+                             <div className="whitespace-pre-wrap pdf-rich-text bg-slate-50 p-6 rounded-2xl border border-slate-200" dangerouslySetInnerHTML={{ __html: proposal.requirements }}></div>
+                         </div>
+                     )}
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          );
+        };
+
         // --- MAIN APPLICATION ---
         const App = () => {
           const [lang, setLang] = useState(() => {
@@ -289,6 +680,72 @@
               fallbackMailBtn: "Open Email Manually",
               closeBtn: "I understand, close", submitBtn: "Finish & Send",
               removeStep: "Remove Step"
+            },
+            nl: {
+              title: "Klant Intake Formulier", subtitle: "Test Aanvraag Voorbereiding",
+              introTitle: "Welkom bij PerfoTec!",
+              introText: "Vul de bedrijfs- en productgegevens in. Klik op 'Opslaan (.json)' om uw voortgang te bewaren. Klaar? Klik op 'Bekijk Overzicht' om de PDF te controleren en af te drukken of op te slaan.",
+              load: "Laden JSON", save: "Opslaan als...", preview: "Preview Voorstel", print: "Download PDF", back: "Bewerk",
+              sec1Title: "1. Bedrijfs- & Contactgegevens",
+              companyName: "Bedrijfsnaam", street: "Straat", houseNumber: "Huisnr.", zipCode: "Postcode", city: "Plaats / Stad", country: "Land",
+              contactName: "Contactpersoon", role: "Functie", email: "E-mail", phone: "Telefoonnummer",
+              logoUpload: "Bedrijfslogo", clickUpload: "Klik om te uploaden",
+              sec2Title: "2. Product(en) voor de Test", prodDetails: "Details", delProd: "Verwijder Product",
+              secATitle: "A. Product & Verpakking", prodName: "Productnaam", prodType: "Product Type / Variëteit", origin: "Herkomst", prodPhoto: "Foto", processingType: "Staat van het product",
+              whole: "Heel", processed: "Verwerkt / Gesneden",
+              maturity: "Rijpheidsstadium", treatment: "Standaard Behandeling",
+              packType: "Type Verpakking", material: "Materiaal",
+              dimens: "Dimensies", len: "Lengte", wid: "Breedte", widSeal: "Breedte Seal", hei: "Hoogte",
+              weight: "Netto Gewicht",
+              qualityCrit: "Kwaliteitscriteria", qualityCritDesc: "Selecteer de aspecten die u wilt laten beoordelen:",
+              secBTitle: "B. Uitdaging & Doelstelling", challenge: "Huidige Uitdaging", challengePl: "Beschrijf de huidige kwaliteitsproblemen...", goal: "Beoogd Doel", goalPl: "Wat wilt u bereiken?",
+              secCTitle: "C. Huidige Supply Chain", transportMode: "Transport Modus", transportModeErr: "Transportmodus",
+              airFreight: "Luchtvracht", seaFreight: "Zeevracht", roadTransport: "Wegtransport", storage: "Opslag",
+              step: "Stap", phase: "Fase (Activiteit)", temp: "Temp (°C)", to: "Tot", days: "Tijd (Dagen)", action: "Actie",
+              actNone: "- Geen -", actPack: "Inpakken", actUnpack: "Uitpakken", addStep: "Extra Stap Toevoegen", addProd: "Extra product toevoegen",
+              validationErr: "Nog niet alle verplichte velden zijn ingevuld:", reqField: "is verplicht", reqProd: "Product",
+              printTitle: "Test Voorstel",
+              successTitle: "Bijna klaar!",
+              successStep1: "Uw e-mailprogramma is zojuist geopend (gericht aan luke.zuijderwijk@perfotec.com).",
+              successStep2: "Het aanvraagbestand (JSON data) is zojuist gedownload in uw 'Downloads' map.",
+              successStep3: "BELANGRIJK: Sleep het gedownloade bestand in de geopende e-mail als bijlage en klik op verzenden! Gebruik eventueel de 'Print als PDF' functie om het overzicht op te slaan.",
+              fallbackMailText: "Opent de e-mail niet automatisch?",
+              fallbackMailBtn: "Open E-mail Handmatig",
+              closeBtn: "Ik begrijp het, sluiten", submitBtn: "Afronden & Verzenden",
+              removeStep: "Verwijder Stap"
+            },
+            es: {
+              title: "Formulario de Ingreso de Clientes", subtitle: "Preparación de Solicitud de Prueba",
+              introTitle: "¡Bienvenido a PerfoTec!",
+              introText: "Por favor complete los detalles. Haga clic en 'Guardar (.json)' para guardar su progreso. ¿Terminó? Haga clic en 'Ver Resumen' para revisar y guardar como PDF.",
+              load: "Cargar JSON", save: "Guardar como...", preview: "Ver Propuesta", print: "Descargar PDF", back: "Editar",
+              sec1Title: "1. Detalles de la Empresa y Contacto",
+              companyName: "Nombre de la Empresa", street: "Calle", houseNumber: "Número", zipCode: "Código Postal", city: "Ciudad", country: "País",
+              contactName: "Persona Contacto", role: "Cargo", email: "Correo Electrónico", phone: "Teléfono",
+              logoUpload: "Logotipo de la Empresa", clickUpload: "Haga clic para subir",
+              sec2Title: "2. Producto(s) para Prueba", prodDetails: "Detalles", delProd: "Eliminar Producto",
+              secATitle: "A. Producto y Empaque", prodName: "Nombre del Producto", prodType: "Variedad / Tipo", origin: "Origen", prodPhoto: "Foto", processingType: "Estado del producto",
+              whole: "Entero", processed: "Procesado / Cortado",
+              maturity: "Etapa de madurez", treatment: "Tratamiento estándar",
+              packType: "Tipo de Empaque", material: "Material",
+              dimens: "Dimensiones", len: "Longitud", wid: "Ancho", widSeal: "Ancho del Sello", hei: "Altura",
+              weight: "Peso Neto",
+              qualityCrit: "Criterios de calidad", qualityCritDesc: "Seleccione los aspectos a evaluar:",
+              secBTitle: "B. Desafío y Objetivos", challenge: "Desafío Actual", challengePl: "Describa los problemas de calidad actuales...", goal: "Objetivo", goalPl: "¿Qué desea lograr?",
+              secCTitle: "C. Cadena de Suministro Actual", transportMode: "Modo de Transporte", transportModeErr: "Modo de transporte",
+              airFreight: "Flete Aéreo", seaFreight: "Flete Marítimo", roadTransport: "Transporte Terrestre", storage: "Almacenamiento",
+              step: "Paso", phase: "Fase (Actividad)", temp: "Temp (°C)", to: "A", days: "Tiempo (Días)", action: "Acción",
+              actNone: "- Ninguna -", actPack: "Empacar", actUnpack: "Desempacar", addStep: "Añadir Paso", addProd: "Añadir otro producto",
+              validationErr: "No se han completado todos los campos obligatorios:", reqField: "es obligatorio", reqProd: "Producto",
+              printTitle: "Propuesta de Prueba",
+              successTitle: "¡Casi listo!",
+              successStep1: "Su programa de correo electrónico se acaba de abrir (dirigido a luke.zuijderwijk@perfotec.com).",
+              successStep2: "El archivo de solicitud (datos JSON) se acaba de descargar en su carpeta de 'Descargas'.",
+              successStep3: "IMPORTANTE: ¡Por favor, adjunte el archivo descargado al correo electrónico abierto y envíelo! También puede usar la función 'Imprimir como PDF' para guardar el resumen.",
+              fallbackMailText: "¿No se abrió el correo electrónico automáticamente?",
+              fallbackMailBtn: "Abrir Correo Manualmente",
+              closeBtn: "Entendido, cerrar", submitBtn: "Terminar y Enviar",
+              removeStep: "Eliminar Paso"
             }
           };
 
@@ -482,6 +939,20 @@
                        setClientInfo(d.clientInfo);
                    } else if (d.client) {
                        setClientInfo(d.client);
+                   } else if (d.project) {
+                       setClientInfo({
+                         companyName: d.project.company || '', 
+                         street: d.project.street || '', 
+                         houseNumber: d.project.houseNumber || '', 
+                         zipCode: d.project.zipCode || '', 
+                         city: d.project.city || '', 
+                         country: d.project.country || '', 
+                         contactName: d.project.contactName || '', 
+                         role: d.project.contactRole || d.project.role || '', 
+                         email: d.project.contactEmail || d.project.email || '', 
+                         phone: d.project.contactPhone || d.project.phone || '', 
+                         logo: d.project.logo || null
+                       });
                    }
                    if(d.project) {
                        setProject(p => ({
@@ -651,395 +1122,8 @@
               }));
           };
 
-          const handleWordExport = () => {
-              const content = document.getElementById('print-content').innerHTML;
-              const preHtml = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export HTML To Doc</title><style>body { font-family: 'Arial', sans-serif; } .page-break { page-break-before: always; } table { width: 100%; border-collapse: collapse; margin-bottom: 20px; } th, td { border: 1px solid #ccc; padding: 8px; text-align: left; } th { background-color: #007C27; color: white; } img { max-width: 100%; height: auto; }</style></head><body>`;
-              const postHtml = "</body></html>";
-              const html = preHtml + content + postHtml;
-              const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
-              const url = URL.createObjectURL(blob);
-              const downloadLink = document.createElement("a");
-              document.body.appendChild(downloadLink);
-              downloadLink.href = URL.createObjectURL(blob);
-              downloadLink.download = (project.reportTitle || 'Proposal') + '.doc';
-              downloadLink.click();
-              document.body.removeChild(downloadLink);
-          };
-
-          // --- PDF REPORT VIEW ---
           if (isPreview) {
-            let allTemps = [];
-            (supplyChain || []).forEach(s => {
-                const ts = parseFloat(s.tempStart); if(!isNaN(ts)) allTemps.push(ts);
-                const te = parseFloat(s.tempEnd); if(!isNaN(te)) allTemps.push(te);
-            });
-            const minTemp = allTemps.length > 0 ? Math.min(...allTemps) : null;
-            const maxTemp = allTemps.length > 0 ? Math.max(...allTemps) : null;
-            const tempString = allTemps.length > 0 ? (minTemp === maxTemp ? `${minTemp}°C` : `${minTemp}°C - ${maxTemp}°C`) : '-°C';
-            const totalDays = project.totalDuration || (supplyChain || []).reduce((acc,s) => acc + parseFloat(s.daysStart || 0), 0);
-
-            // Reusable class for titles to ensure they stand out even if CSS fails
-            const reportTitleClass = "text-3xl font-extrabold uppercase mb-6 brand-heading break-after-avoid";
-            const reportTitleStyle = { color: BRAND.colors.green, borderBottom: `3px solid ${BRAND.colors.gray}`, paddingBottom: '0.75rem', marginTop: '2rem' };
-
-            return (
-              <div className="min-h-screen bg-slate-600 p-0 sm:p-8 overflow-y-auto font-sans print:p-0 print:bg-white no-print-bg selection:bg-blue-200 selection:text-blue-900">
-                <div className="fixed bottom-8 right-8 flex gap-4 no-print z-50">
-                  <button onClick={() => setIsPreview(false)} className="bg-slate-800 text-white px-6 py-3 rounded-full shadow-xl font-bold transition hover:bg-slate-900 flex items-center gap-2"><Edit3 size={18}/> Edit</button>
-                  <button onClick={handleWordExport} className="bg-blue-600 text-white px-6 py-3 rounded-full shadow-xl font-bold flex items-center gap-2 hover:bg-blue-700 transition">
-                    <FileArchive size={20} /> Download Word
-                  </button>
-                  <button onClick={() => window.print()} className="bg-green-600 text-white px-6 py-3 rounded-full shadow-xl font-bold flex items-center gap-2 hover:bg-green-700 transition">
-                    <Printer size={18} /> Download PDF
-                  </button>
-                </div>
-
-                <div id="print-content" className="max-w-[21cm] mx-auto bg-white shadow-2xl min-h-[29.7cm] p-12 relative print:shadow-none print:max-w-full print:w-full print:p-0 text-slate-800">
-                  
-                  {/* --- COVER PAGE --- */}
-                  <div className="h-[27cm] flex flex-col justify-between items-center text-center pt-24">
-                     <div className="w-full flex flex-col items-center">
-                        <div className="flex justify-between items-start w-full px-8">
-                            <div className="w-1/2 flex justify-start">
-                              {project.logo && (
-                                 <img src={project.logo} alt="PerfoTec Logo" className="h-32 max-w-[400px] object-contain" crossOrigin="anonymous" />
-                              )}
-                            </div>
-                            <div className="w-1/2 flex justify-end">
-                              {project.clientLogo && (
-                                 <img src={project.clientLogo} alt="Client Logo" className="h-32 max-w-[400px] object-contain" crossOrigin="anonymous" />
-                              )}
-                            </div>
-                        </div>
-
-                        <h1 className="text-5xl font-bold uppercase mt-16 mb-4 brand-heading" style={{ color: BRAND.colors.green }}>{project.reportTitle || 'Trial Proposal'}</h1>
-                        <h2 className="text-5xl font-light brand-heading text-slate-600 mb-16">{project.productName || '<Product Name>'}</h2>
-                        
-                        <div className="w-full h-[450px] overflow-hidden flex items-center justify-center relative bg-transparent border-none mt-8 rounded-2xl">
-                           {project.coverImage ? <img src={project.coverImage} className="w-full h-full object-contain" crossOrigin="anonymous" /> : project.startImage ? <img src={project.startImage} className="w-full h-full object-contain" crossOrigin="anonymous" /> : <span className="text-slate-300 italic font-medium">No Cover Photo</span>}
-                        </div>
-                     </div>
-                     <div className="w-full flex justify-center items-end pb-4">
-                         <div className="text-sm text-slate-400 font-medium">© {new Date().getFullYear()} PerfoTec B.V.</div>
-                     </div>
-                  </div>
-
-                  <div className="page-break"></div>
-
-                  {/* --- TABLE OF CONTENTS --- */}
-                  <div className="min-h-[27cm] flex flex-col pt-12">
-                      <h2 className="text-4xl font-extrabold uppercase mb-8 brand-heading" style={{ color: BRAND.colors.green, borderBottom: `3px solid ${BRAND.colors.gray}`, paddingBottom: '1rem' }}>Table of Contents</h2>
-                      <ul className="text-xl space-y-4 font-medium text-slate-700">
-                          <li className="flex justify-between border-b border-slate-200 pb-2"><span>1. Introduction & Objectives</span></li>
-                          <li className="flex justify-between border-b border-slate-200 pb-2"><span>2. Company & Project Info</span></li>
-                          <li className="flex justify-between border-b border-slate-200 pb-2"><span>3. Product Characteristics & Defect Prevention</span></li>
-                          <li className="flex justify-between border-b border-slate-200 pb-2"><span>4. Simulated Supply Chain</span></li>
-                          <li className="flex justify-between border-b border-slate-200 pb-2"><span>5. Proposed Trial Setup</span></li>
-                          <li className="flex justify-between border-b border-slate-200 pb-2"><span>6. Evaluation Plan</span></li>
-                          <li className="flex justify-between border-b border-slate-200 pb-2"><span>7. Requirements & Agreements</span></li>
-                      </ul>
-                  </div>
-
-                  <div className="page-break"></div>
-
-                  {/* --- PAGE 1: INTRO & SETTING --- */}
-                  <div className="pt-4">
-                    <h2 className={reportTitleClass} style={reportTitleStyle}>1. Introduction & Objectives</h2>
-                    <div className="text-base leading-relaxed text-justify text-slate-800 mb-8">
-                       <div className="mb-6 whitespace-pre-wrap pdf-rich-text" dangerouslySetInnerHTML={{ __html: proposal?.intro || '' }}></div>
-                       
-                       {project.currentChallenge && (
-                         <div className="mb-6 bg-orange-50 p-5 rounded-2xl border border-orange-100">
-                           <h4 className="font-bold text-lg mb-2 text-orange-800">Current Challenge:</h4>
-                           <div className="whitespace-pre-wrap text-slate-700">{project.currentChallenge}</div>
-                         </div>
-                       )}
-
-                       {project.trialTarget && (
-                         <div className="mb-6 bg-green-50 p-5 rounded-2xl border border-green-100">
-                           <h4 className="font-bold text-lg mb-2 text-green-800">Trial Target:</h4>
-                           <div className="whitespace-pre-wrap text-slate-700">{project.trialTarget}</div>
-                         </div>
-                       )}
-                       
-                       {proposal?.expectedOutcomes && (
-                         <div className="mb-6">
-                           <h4 className="font-bold text-lg mb-2" style={{color: BRAND.colors.blue}}>Expected Outcomes:</h4>
-                           <div className="whitespace-pre-wrap pdf-rich-text" dangerouslySetInnerHTML={{ __html: proposal.expectedOutcomes }}></div>
-                         </div>
-                       )}
-                    </div>
-                  </div>
-
-                  <div className="page-break"></div>
-
-                  <div className="pt-4">
-                    <h2 className={reportTitleClass} style={reportTitleStyle}>2. Company & Project Info</h2>
-                    <div className="grid grid-cols-[180px_1fr] gap-y-3 text-base text-slate-800 bg-slate-50 p-6 rounded-2xl border border-slate-200">
-                       <div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Product :</div> <div className="font-bold">{project.productName || '-'} {project.type ? `(${project.type})` : ''}</div>
-                       <div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">State of product :</div> <div className="font-medium">{project.processingType === 'Whole' ? 'Whole' : 'Processed / Fresh-cut'}</div>
-                       <div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Product Origin :</div> <div className="font-medium">{project.origin || '-'}</div>
-                       
-                       {(clientInfo.companyName || clientInfo.street || clientInfo.contactName || clientInfo.email || clientInfo.phone) && (
-                         <div className="font-bold col-span-2 mt-4 border-t border-slate-200 pt-4 text-lg" style={{color: BRAND.colors.green}}>Company Info</div>
-                       )}
-                       {clientInfo.companyName && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Company Name :</div> <div className="font-bold">{clientInfo.companyName}</div></>}
-                       
-                       {(() => {
-                         const streetPart = [clientInfo.street, clientInfo.houseNumber].filter(Boolean).join(' ');
-                         const cityPart = [clientInfo.zipCode, clientInfo.city].filter(Boolean).join(' ');
-                         const addressStr = [streetPart, cityPart, clientInfo.country].filter(Boolean).join(', ');
-                         return addressStr ? <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Address :</div> <div className="font-medium">{addressStr}</div></> : null;
-                       })()}
-
-                       {clientInfo.contactName && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Contact Person :</div> <div className="font-medium">{clientInfo.contactName} {clientInfo.role && <span className="text-slate-500">({clientInfo.role})</span>}</div></>}
-                       {(clientInfo.email || clientInfo.phone) && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Contact Details :</div> <div className="font-medium">{[clientInfo.email, clientInfo.phone].filter(Boolean).join(' | ')}</div></>}
-
-                       <div className="font-bold col-span-2 mt-4 border-t border-slate-200 pt-4 text-lg" style={{color: BRAND.colors.green}}>PerfoTec Support</div>
-                       {project.employee && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">PerfoTec Employee :</div> <div className="font-medium">{project.employee}</div></>}
-                       {(project.employeeEmail || project.employeePhone) && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Contact Details :</div> <div className="font-medium">{[project.employeeEmail, project.employeePhone].filter(Boolean).join(' | ')}</div></>}
-                       
-                       <div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-start mt-1">Technology :</div> 
-                       <div className="font-medium">
-                         {project.technologies && project.technologies.length > 0 ? (
-                            <ul className="list-disc pl-4 space-y-1">
-                              {project.technologies.map((t, i) => <li key={i}>{t}</li>)}
-                            </ul>
-                         ) : (
-                            '-'
-                         )}
-                       </div>
-                    </div>
-                  </div>
-
-                  <div className="page-break"></div>
-
-                  {/* --- PAGE 3: PRODUCT CHARACTERISTICS & MATRIX --- */}
-                  <div className="pt-4">
-                    <h2 className={reportTitleClass} style={reportTitleStyle}>3. Product Characteristics & Defect Prevention</h2>
-                    
-                    <div className="mb-8 grid grid-cols-4 gap-4 text-sm">
-                        {project.acpO2 && <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 shadow-sm"><strong className="text-blue-800 block mb-1 uppercase tracking-wide text-xs">O₂ min (ACP):</strong><span className="text-xl font-extrabold text-[#004B87]">{project.acpO2}</span></div>}
-                        {project.co2Max && <div className="bg-red-50 p-4 rounded-xl border border-red-100 shadow-sm"><strong className="text-red-800 block mb-1 uppercase tracking-wide text-xs">CO₂ max:</strong><span className="text-xl font-extrabold text-red-600">{project.co2Max}</span></div>}
-                        {project.co2Shock && <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 shadow-sm"><strong className="text-orange-800 block mb-1 uppercase tracking-wide text-xs">CO₂ shock:</strong><span className="text-xl font-extrabold text-orange-600">{project.co2Shock}</span>{project.co2ShockHours && <div className="text-xs text-orange-600/80 mt-1 font-medium leading-tight">Drop &lt; {project.co2Max || 'max'}% within {project.co2ShockHours}h</div>}</div>}
-                        {project.tempMin && <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-sm"><strong className="text-slate-500 block mb-1 uppercase tracking-wide text-xs">Temp min:</strong><span className="text-xl font-extrabold text-slate-800">{project.tempMin}</span></div>}
-                    </div>
-
-                    {project.defectsMatrix && project.defectsMatrix.length > 0 && (
-                        <div className="break-inside-avoid mb-8">
-                            <h3 className="font-bold text-xl mb-4 brand-heading" style={{ color: BRAND.colors.green }}>Defects & Prevention Matrix</h3>
-                            <div className="overflow-hidden rounded-xl border border-slate-200 shadow-sm">
-                                <table className="w-full text-sm border-collapse">
-                                    <thead>
-                                        <tr>
-                                            <th className="p-3 text-left text-white font-bold" style={{backgroundColor: '#004B87'}}>DEFECT</th>
-                                            <th className="p-3 text-left text-white font-bold" style={{backgroundColor: '#004B87'}}>PHYSIOLOGICAL CAUSE</th>
-                                            <th className="p-3 text-left text-white font-bold" style={{backgroundColor: '#5B9BD5'}}>EFFECT MHP (MOISTURE)</th>
-                                            <th className="p-3 text-left text-white font-bold" style={{backgroundColor: '#007C27'}}>EFFECT MAP (GAS)</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-200">
-                                        {project.defectsMatrix.map((row, i) => (
-                                            <tr key={row.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                                                <td className="p-3 font-bold text-slate-800">{row.defect}</td>
-                                                <td className="p-3 text-slate-700">{row.cause}</td>
-                                                <td className="p-3 text-slate-700 font-medium">{row.effectMHP}</td>
-                                                <td className="p-3 text-slate-700 font-medium">{row.effectMAP}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    )}
-                  </div>
-
-                  <div className="page-break"></div>
-
-                  {/* --- PAGE 4: SUPPLY CHAIN --- */}
-                  <div className="pt-4">
-                    <h2 className={reportTitleClass} style={reportTitleStyle}>4. Simulated Supply Chain</h2>
-                    <div className="text-base text-slate-800 mb-8">
-                       <p className="mb-4 leading-relaxed">To ensure the trial is representative of the real-world conditions, we propose to test the product using the following temperature and time profile:</p>
-                       
-                       {project.transportMode && (
-                         <div className="mb-4 inline-block bg-indigo-50 border border-indigo-100 text-indigo-800 px-4 py-2 rounded-lg">
-                           <strong>Transport Mode:</strong> {project.transportMode}
-                         </div>
-                       )}
-                       
-                       <div className="w-full mt-2 break-inside-avoid">
-                         <ProductSupplyChainFlow chain={supplyChain} />
-                       </div>
-                       <div className="mt-6 bg-slate-50 p-4 rounded-xl border border-slate-200 text-sm space-y-2">
-                           <p className="italic text-slate-500">* Temperatures and durations are simulated based on provided information.</p>
-                           <p>Stored at <strong>{tempString}</strong> for <strong>{totalDays} days</strong> total.</p>
-                           <p>The product was packed on <strong>{formatDateToDDMMYYYY(project.packingDate || project.date)}</strong>.</p>
-                           <p>Unpacking moments are specific to each variant and are detailed in the Trial Setup table below.</p>
-                       </div>
-                    </div>
-                  </div>
-
-                  <div className="page-break"></div>
-
-                  <div className="pt-4">
-                    <h2 className={reportTitleClass} style={reportTitleStyle}>5. Proposed Trial Setup</h2>
-                    <div className="text-base text-slate-800 mb-8">
-                        <p className="mb-6 leading-relaxed">The Fast Respiration Meter System will be used to measure the exact product respiration rate. Based on this, we calculate the optimal micro perforation pattern for the PerfoTec variant. The proposed variants to compare are:</p>
-                        
-                        <div className="overflow-hidden rounded-xl border border-slate-200 shadow-sm break-inside-avoid">
-                            <table className="report-table w-full text-sm">
-                              <thead>
-                                <tr>
-                                  <th className="w-1/4">Variant</th>
-                                  <th className="text-center">Packaging Type</th>
-                                  <th className="text-center">Material</th>
-                                  <th className="text-center">Dimensions (mm)</th>
-                                  <th className="text-center">Netto Weight (g)</th>
-                                  <th className="text-center">Transmission Value</th>
-                                  <th className="text-center">Evaluation Days</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-200">
-                                {groups.map((g, i) => {
-                                  const isLargeBulk = g.specs?.packaging === 'Cube crate' || g.specs?.packaging === 'Pallet';
-                                  const dimUnit = isLargeBulk ? 'cm' : 'mm';
-                                  const weightUnit = isLargeBulk ? 'kg' : 'g';
-                                  return (
-                                    <tr key={g.id} className="bg-white">
-                                      <td className="font-bold py-4" style={{ borderLeft: `4px solid ${CHART_COLORS[i % CHART_COLORS.length].stroke}` }}>
-                                        {g.name}
-                                      </td>
-                                      <td className="text-center py-4">{g.specs?.packaging || '-'}</td>
-                                      <td className="text-center py-4">{g.specs?.material || '-'}</td>
-                                      <td className="text-center py-4">{g.specs?.length || '-'}x{g.specs?.width || '-'}x{g.specs?.height || '-'} {dimUnit}</td>
-                                      <td className="text-center py-4">{project.startWeight || '-'} {weightUnit}</td>
-                                      <td className="text-center py-4 font-bold">{g.specs?.holes || '-'}</td>
-                                      <td className="text-center py-4 font-medium text-slate-500">{g.measurements.filter(m => parseFloat(m.day) > 0).map(m => `P+${m.day}`).join(', ')}</td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                        </div>
-                        
-                        {/* PREDICTED GAS GRAPHS */}
-                        {groups.some(g => g.predictedImage) && (
-                            <div className="mt-10 break-inside-avoid bg-slate-50 p-8 rounded-2xl border border-slate-200">
-                               <h4 className="font-bold mb-8 text-2xl text-slate-800">Predicted Gas Levels</h4>
-                               <div className="flex flex-col gap-12 w-full">
-                                 {groups.map((g, idx) => {
-                                    if (!g.predictedImage) return null;
-                                    return (
-                                       <div key={g.id} className="flex flex-col items-center w-full break-inside-avoid">
-                                          <div className="text-lg font-bold mb-4 text-center text-slate-700 bg-white px-6 py-2 rounded-full shadow-sm border border-slate-200">{g.name || 'Variant'}</div>
-                                          <div className="w-full flex justify-center bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
-                                             <img src={g.predictedImage} className="w-full h-auto object-contain" crossOrigin="anonymous" />
-                                          </div>
-                                       </div>
-                                    )
-                                 })}
-                               </div>
-                            </div>
-                        )}
-
-                    </div>
-                  </div>
-
-                  <div className="page-break"></div>
-
-                  {/* --- PAGE 6: EVALUATION PLAN --- */}
-                  <div className="pt-4">
-                    <h2 className={reportTitleClass} style={reportTitleStyle}>6. Evaluation Plan</h2>
-                    <div className="text-base space-y-6 text-slate-800">
-                       <p className="leading-relaxed">During the trial, the product quality and atmospheric conditions will be continuously monitored according to the schedule below.</p>
-                       
-                       <div className="mb-8">
-                         <h3 className="font-bold text-xl mb-6 text-slate-800">Detailed Evaluation Schedule</h3>
-                         {groups.map((g, i) => (
-                           <div key={g.id} className="mb-8 break-inside-avoid shadow-sm rounded-xl overflow-hidden border border-slate-200">
-                             <h4 className="font-bold text-lg text-white p-3" style={{backgroundColor: CHART_COLORS[i % CHART_COLORS.length].stroke}}>{g.name}</h4>
-                             <table className="w-full text-sm text-left bg-white">
-                               <thead>
-                                 <tr className="bg-slate-50 text-slate-600 border-b border-slate-200">
-                                   <th className="p-3 w-20 text-center font-bold uppercase tracking-wider text-xs">Day</th>
-                                   <th className="p-3 font-bold uppercase tracking-wider text-xs">Measurements (O₂, CO₂, Weight)</th>
-                                   <th className="p-3 font-bold uppercase tracking-wider text-xs">Opening Moment</th>
-                                   <th className="p-3 font-bold uppercase tracking-wider text-xs">Quality Evaluation</th>
-                                 </tr>
-                               </thead>
-                               <tbody className="divide-y divide-slate-100">
-                                 {g.measurements.sort((a,b) => parseFloat(a.day) - parseFloat(b.day)).map((m, idx) => (
-                                   <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                                     <td className="p-3 text-center font-extrabold text-slate-700 bg-slate-50/50">P+{m.day}</td>
-                                     <td className="p-3 text-slate-600 font-medium">{(m.measure||[]).length > 0 ? (m.measure||[]).map(s => `S${s}`).join(', ') : '-'}</td>
-                                     <td className="p-3 text-orange-600 font-bold">{(m.open||[]).length > 0 ? (m.open||[]).map(s => `S${s}`).join(', ') : '-'}</td>
-                                     <td className="p-3 text-green-700 font-bold">{(m.evaluate||[]).length > 0 ? (m.evaluate||[]).map(s => `S${s}`).join(', ') : '-'}</td>
-                                   </tr>
-                                 ))}
-                               </tbody>
-                             </table>
-                           </div>
-                         ))}
-                       </div>
-
-                       <div className="break-inside-avoid mt-8 pt-6 border-t border-slate-200 bg-slate-50 p-6 rounded-2xl">
-                         <h4 className="font-bold mb-4 text-xl text-slate-800">Methodology</h4>
-                         <ul className="list-disc pl-6 space-y-3 text-slate-700">
-                           <li><strong>Gas Analysis:</strong> Measuring O₂ and CO₂ percentages inside the packaging.</li>
-                           <li><strong>Weight Tracking:</strong> Monitoring moisture/weight loss from Day 0.</li>
-                           <li><strong>Visual Quality:</strong> Taking photographic evidence of the product state.</li>
-                           <li>
-                              <strong>Detailed Quality Assessment:</strong> Scoring the following criteria on a 1-10 scale (where 6+ is acceptable):
-                              <ul className="list-circle pl-6 mt-3 grid grid-cols-2 gap-2 text-sm font-medium text-slate-600">
-                                  {(project.criteria || []).map((c, i) => <li key={i}>{c}</li>)}
-                              </ul>
-                           </li>
-                         </ul>
-                       </div>
-
-                    </div>
-                  </div>
-
-                  <div className="page-break"></div>
-
-                  <div className="pt-4">
-                    <h2 className={reportTitleClass} style={reportTitleStyle}>7. Requirements & Agreements</h2>
-                    <div className="text-base space-y-6 text-slate-800">
-                       {proposal?.requirements && (
-                           <div className="break-inside-avoid">
-                               {(() => {
-                                 const totalRequiredWeightGrams = groups.reduce((total, g) => {
-                                   const weightPerSample = parseFloat(project.startWeight) || 0;
-                                   const totalSamples = parseFloat(g.specs?.sampleCount) || 0;
-                                   return total + (weightPerSample * totalSamples);
-                                 }, 0);
-                                 const totalRequiredWeightKg = (totalRequiredWeightGrams / 1000).toFixed(1);
-                                 
-                                 const totalSamplesCount = groups.reduce((total, g) => {
-                                   return total + (parseFloat(g.specs?.sampleCount) || 0);
-                                 }, 0);
-
-                                 return (
-                                   <div className="mb-6 bg-blue-50 border border-blue-200 p-5 text-sm text-blue-900 rounded-2xl flex items-start gap-4 shadow-sm">
-                                     <AlertCircle className="text-blue-500 shrink-0 mt-0.5" size={20} />
-                                     <div>
-                                        <strong className="block text-base mb-1 text-blue-950">Required Product</strong> 
-                                        A minimum of <strong>{totalRequiredWeightKg} kg</strong> of fresh product is required to conduct this trial (based on a total of {totalSamplesCount} uniquely tracked physical samples across all variants).
-                                     </div>
-                                   </div>
-                                 );
-                               })()}
-
-                               <div className="whitespace-pre-wrap pdf-rich-text bg-slate-50 p-6 rounded-2xl border border-slate-200" dangerouslySetInnerHTML={{ __html: proposal.requirements }}></div>
-                           </div>
-                       )}
-                    </div>
-                  </div>
-
-                </div>
-              </div>
-            );
+            return <PrintPreview clientInfo={clientInfo} project={project} groups={groups} proposal={proposal} supplyChain={supplyChain} onBack={() => setIsPreview(false)} />;
           }
 
           // --- EDITOR VIEW ---
@@ -1234,7 +1318,6 @@
                        </div>
                     </div>
 
-                    {/* Supply Chain Editor (Upgraded CSS Grid Layout) */}
                     <div className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200">
                       <h2 className="font-extrabold text-2xl mb-8 text-slate-800 border-b-2 border-slate-100 pb-4 flex items-center gap-3"><Truck size={28} className="text-indigo-600"/> 4. Product Supply Chain</h2>
                       
