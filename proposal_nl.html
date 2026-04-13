@@ -97,12 +97,12 @@
         // --- HELPER FUNCTIONS ---
         const getStageIcon = (name) => {
           const n = name?.toLowerCase() || '';
-          if (n.includes('farm') || n.includes('harvest') || n.includes('oogst')) return <Tractor size={14} color={BRAND.colors.black} />;
-          if (n.includes('sea') || n.includes('zee')) return <Ship size={14} color={BRAND.colors.black} />;
-          if (n.includes('air') || n.includes('lucht')) return <Plane size={14} color={BRAND.colors.black} />;
-          if (n.includes('storage') || n.includes('dc') || n.includes('opslag')) return <Warehouse size={14} color={BRAND.colors.black} />;
-          if (n.includes('store') || n.includes('retail') || n.includes('winkel')) return <Store size={14} color={BRAND.colors.black} />;
-          if (n.includes('consumer') || n.includes('eat') || n.includes('consument')) return <Utensils size={14} color={BRAND.colors.black} />;
+          if (n.includes('farm') || n.includes('harvest') || n.includes('oogst') || n.includes('granja')) return <Tractor size={14} color={BRAND.colors.black} />;
+          if (n.includes('sea') || n.includes('zee') || n.includes('marítimo')) return <Ship size={14} color={BRAND.colors.black} />;
+          if (n.includes('air') || n.includes('lucht') || n.includes('aéreo')) return <Plane size={14} color={BRAND.colors.black} />;
+          if (n.includes('storage') || n.includes('dc') || n.includes('opslag') || n.includes('almacenamiento')) return <Warehouse size={14} color={BRAND.colors.black} />;
+          if (n.includes('store') || n.includes('retail') || n.includes('winkel') || n.includes('tienda')) return <Store size={14} color={BRAND.colors.black} />;
+          if (n.includes('consumer') || n.includes('eat') || n.includes('consument') || n.includes('consumidor')) return <Utensils size={14} color={BRAND.colors.black} />;
           if (n.includes('pack') && !n.includes('transport')) return <Factory size={14} color={BRAND.colors.black} />;
           return <Truck size={14} color={BRAND.colors.black} />;
         };
@@ -161,7 +161,7 @@
           );
         };
 
-        const ProductSupplyChainFlow = ({ chain }) => {
+        const ProductSupplyChainFlow = ({ chain, t }) => {
           if (!chain || chain.length === 0) return null;
           let cumulativeMin = 0;
           let cumulativeMax = 0;
@@ -209,8 +209,8 @@
                       </div>
                       
                       <div className="h-6 w-full flex justify-center items-start mt-1 relative">
-                         {step.action === 'pack' && <div className="flex flex-col items-center"><div className="bg-green-100 text-green-700 rounded-full p-0.5 border border-green-200"><ArrowDown size={10} /></div><span className="text-[6px] font-bold text-green-700 uppercase mt-0.5">Ingepakt</span></div>}
-                         {step.action === 'unpack' && <div className="flex flex-col items-center"><div className="bg-red-100 text-red-700 rounded-full p-0.5 border border-red-200"><ArrowUp size={10} /></div><span className="text-[6px] font-bold text-red-700 uppercase mt-0.5">Geopend</span></div>}
+                         {step.action === 'pack' && <div className="flex flex-col items-center"><div className="bg-green-100 text-green-700 rounded-full p-0.5"><ArrowDown size={10} /></div><span className="text-[6px] font-bold text-green-700 uppercase mt-0.5">{t.actPack}</span></div>}
+                         {step.action === 'unpack' && <div className="flex flex-col items-center"><div className="bg-red-100 text-red-700 rounded-full p-0.5"><ArrowUp size={10} /></div><span className="text-[6px] font-bold text-red-700 uppercase mt-0.5">{t.actUnpack}</span></div>}
                       </div>
                     </div>
                   </React.Fragment>
@@ -220,7 +220,7 @@
           );
         };
 
-        const SampleToggles = ({ max, selected, disabled, onChange, activeClass }) => {
+        const SampleToggles = ({ max, selected, disabled, onChange, activeClass, t }) => {
           const arr = Array.from({length: max}, (_, i) => i + 1);
           return (
             <div className="flex flex-wrap gap-1.5">
@@ -233,7 +233,7 @@
                     type="button"
                     onClick={() => !isDis && onChange(s)}
                     disabled={isDis}
-                    title={isDis ? "Sample is al geopend" : `Kies Sample ${s}`}
+                    title={isDis ? t.sampleAlreadyOpen : `${t.selectSample} ${s}`}
                     className={`w-7 h-7 flex items-center justify-center text-xs font-bold rounded-lg border transition-all ${
                       isDis ? 'bg-slate-100 border-slate-200 text-slate-300 cursor-not-allowed' :
                       isSel ? activeClass : 
@@ -249,7 +249,7 @@
         };
 
         // --- PRINT PREVIEW ---
-        const PrintPreview = ({ clientInfo, project, groups, proposal, supplyChain, onBack }) => {
+        const PrintPreview = ({ clientInfo, project, groups, proposal, supplyChain, onBack, t }) => {
           let allTemps = [];
           (supplyChain || []).forEach(s => {
               const ts = parseFloat(s.tempStart); if(!isNaN(ts)) allTemps.push(ts);
@@ -282,12 +282,12 @@
           return (
             <div className="min-h-screen bg-slate-600 p-0 sm:p-8 overflow-y-auto font-sans print:p-0 print:bg-white no-print-bg selection:bg-blue-200 selection:text-blue-900">
               <div className="fixed bottom-8 right-8 flex gap-4 no-print z-50">
-                <button onClick={onBack} className="bg-slate-800 text-white px-6 py-3 rounded-full shadow-xl font-bold transition hover:bg-slate-900 flex items-center gap-2"><Edit3 size={18}/> Bewerk</button>
+                <button onClick={onBack} className="bg-slate-800 text-white px-6 py-3 rounded-full shadow-xl font-bold transition hover:bg-slate-900 flex items-center gap-2"><Edit3 size={18}/> {t.back}</button>
                 <button onClick={handleWordExport} className="bg-blue-600 text-white px-6 py-3 rounded-full shadow-xl font-bold flex items-center gap-2 hover:bg-blue-700 transition">
-                  <FileArchive size={20} /> Download Word
+                  <FileArchive size={20} /> {t.downloadWord}
                 </button>
                 <button onClick={() => window.print()} className="bg-green-600 text-white px-6 py-3 rounded-full shadow-xl font-bold flex items-center gap-2 hover:bg-green-700 transition">
-                  <Printer size={18} /> Download PDF
+                  <Printer size={18} /> {t.print}
                 </button>
               </div>
 
@@ -309,11 +309,11 @@
                           </div>
                       </div>
 
-                      <h1 className="text-5xl font-bold uppercase mt-16 mb-4 brand-heading" style={{ color: BRAND.colors.green }}>{project.reportTitle || 'Test Voorstel'}</h1>
-                      <h2 className="text-5xl font-light brand-heading text-slate-600 mb-16">{project.productName || '<Productnaam>'}</h2>
+                      <h1 className="text-5xl font-bold uppercase mt-16 mb-4 brand-heading" style={{ color: BRAND.colors.green }}>{project.reportTitle || t.printTitle}</h1>
+                      <h2 className="text-5xl font-light brand-heading text-slate-600 mb-16">{project.productName || t.noProdName}</h2>
                       
                       <div className="w-full h-[450px] overflow-hidden flex items-center justify-center relative bg-transparent border-none mt-8 rounded-2xl">
-                         {project.coverImage ? <img src={project.coverImage} className="w-full h-full object-contain" crossOrigin="anonymous" /> : project.startImage ? <img src={project.startImage} className="w-full h-full object-contain" crossOrigin="anonymous" /> : <span className="text-slate-300 italic font-medium">Geen Omslagfoto</span>}
+                         {project.coverImage ? <img src={project.coverImage} className="w-full h-full object-contain" crossOrigin="anonymous" /> : project.startImage ? <img src={project.startImage} className="w-full h-full object-contain" crossOrigin="anonymous" /> : <span className="text-slate-300 italic font-medium">{t.noCoverPhoto}</span>}
                       </div>
                    </div>
                    <div className="w-full flex justify-center items-end pb-4">
@@ -325,15 +325,15 @@
 
                 {/* --- TABLE OF CONTENTS --- */}
                 <div className="min-h-[27cm] flex flex-col pt-12">
-                    <h2 className="text-4xl font-extrabold uppercase mb-8 brand-heading" style={{ color: BRAND.colors.green, borderBottom: `3px solid ${BRAND.colors.gray}`, paddingBottom: '1rem' }}>Inhoudsopgave</h2>
+                    <h2 className="text-4xl font-extrabold uppercase mb-8 brand-heading" style={{ color: BRAND.colors.green, borderBottom: `3px solid ${BRAND.colors.gray}`, paddingBottom: '1rem' }}>{t.tableOfContents}</h2>
                     <ul className="text-xl space-y-4 font-medium text-slate-700">
-                        <li className="flex justify-between border-b border-slate-200 pb-2"><span>1. Introductie & Doelstellingen</span></li>
-                        <li className="flex justify-between border-b border-slate-200 pb-2"><span>2. Bedrijfs- & Projectinfo</span></li>
-                        <li className="flex justify-between border-b border-slate-200 pb-2"><span>3. Productkenmerken & Defectpreventie</span></li>
-                        <li className="flex justify-between border-b border-slate-200 pb-2"><span>4. Gesimuleerde Supply Chain</span></li>
-                        <li className="flex justify-between border-b border-slate-200 pb-2"><span>5. Voorgestelde Testopzet</span></li>
-                        <li className="flex justify-between border-b border-slate-200 pb-2"><span>6. Evaluatieplan</span></li>
-                        <li className="flex justify-between border-b border-slate-200 pb-2"><span>7. Benodigdheden & Afspraken</span></li>
+                        <li className="flex justify-between border-b border-slate-200 pb-2"><span>{t.toc1}</span></li>
+                        <li className="flex justify-between border-b border-slate-200 pb-2"><span>{t.toc2}</span></li>
+                        <li className="flex justify-between border-b border-slate-200 pb-2"><span>{t.toc3}</span></li>
+                        <li className="flex justify-between border-b border-slate-200 pb-2"><span>{t.toc4}</span></li>
+                        <li className="flex justify-between border-b border-slate-200 pb-2"><span>{t.toc5}</span></li>
+                        <li className="flex justify-between border-b border-slate-200 pb-2"><span>{t.toc6}</span></li>
+                        <li className="flex justify-between border-b border-slate-200 pb-2"><span>{t.toc7}</span></li>
                     </ul>
                 </div>
 
@@ -341,27 +341,27 @@
 
                 {/* --- PAGE 1: INTRO & SETTING --- */}
                 <div className="pt-4">
-                  <h2 className={reportTitleClass} style={reportTitleStyle}>1. Introductie & Doelstellingen</h2>
+                  <h2 className={reportTitleClass} style={reportTitleStyle}>{t.toc1}</h2>
                   <div className="text-base leading-relaxed text-justify text-slate-800 mb-8">
                      <div className="mb-6 whitespace-pre-wrap pdf-rich-text" dangerouslySetInnerHTML={{ __html: proposal?.intro || '' }}></div>
                      
                      {project.currentChallenge && (
                        <div className="mb-6 bg-orange-50 p-5 rounded-2xl border border-orange-100">
-                         <h4 className="font-bold text-lg mb-2 text-orange-800">Huidige Uitdaging:</h4>
+                         <h4 className="font-bold text-lg mb-2 text-orange-800">{t.challengeLabel}:</h4>
                          <div className="whitespace-pre-wrap text-slate-700">{project.currentChallenge}</div>
                        </div>
                      )}
 
                      {project.trialTarget && (
                        <div className="mb-6 bg-green-50 p-5 rounded-2xl border border-green-100">
-                         <h4 className="font-bold text-lg mb-2 text-green-800">Beoogd Doel:</h4>
+                         <h4 className="font-bold text-lg mb-2 text-green-800">{t.goalLabel}:</h4>
                          <div className="whitespace-pre-wrap text-slate-700">{project.trialTarget}</div>
                        </div>
                      )}
                      
                      {proposal?.expectedOutcomes && (
                        <div className="mb-6">
-                         <h4 className="font-bold text-lg mb-2" style={{color: BRAND.colors.blue}}>Verwachte Resultaten:</h4>
+                         <h4 className="font-bold text-lg mb-2" style={{color: BRAND.colors.blue}}>{t.expectedLabel}:</h4>
                          <div className="whitespace-pre-wrap pdf-rich-text" dangerouslySetInnerHTML={{ __html: proposal.expectedOutcomes }}></div>
                        </div>
                      )}
@@ -371,36 +371,36 @@
                 <div className="page-break"></div>
 
                 <div className="pt-4">
-                  <h2 className={reportTitleClass} style={reportTitleStyle}>2. Bedrijfs- & Projectinfo</h2>
+                  <h2 className={reportTitleClass} style={reportTitleStyle}>{t.toc2}</h2>
                   <div className="grid grid-cols-[180px_1fr] gap-y-3 text-base text-slate-800 bg-slate-50 p-6 rounded-2xl border border-slate-200">
-                     <div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Product :</div> <div className="font-bold">{project.productName || '-'} {project.type ? `(${project.type})` : ''}</div>
-                     <div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Staat van product :</div> <div className="font-medium">{project.processingType === 'Whole' ? 'Heel' : 'Verwerkt / Gesneden'}</div>
-                     <div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Herkomst :</div> <div className="font-medium">{project.origin || '-'}</div>
+                     <div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">{t.prodDetails} :</div> <div className="font-bold">{project.productName || '-'} {project.type ? `(${project.type})` : ''}</div>
+                     <div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">{t.processingType} :</div> <div className="font-medium">{project.processingType === 'Whole' ? t.whole : t.processed}</div>
+                     <div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">{t.origin} :</div> <div className="font-medium">{project.origin || '-'}</div>
                      
                      {(clientInfo.companyName || clientInfo.street || clientInfo.contactName || clientInfo.email || clientInfo.phone) && (
-                       <div className="font-bold col-span-2 mt-4 border-t border-slate-200 pt-4 text-lg" style={{color: BRAND.colors.green}}>Bedrijfsgegevens</div>
+                       <div className="font-bold col-span-2 mt-4 border-t border-slate-200 pt-4 text-lg" style={{color: BRAND.colors.green}}>{t.compInfoLabel}</div>
                      )}
-                     {clientInfo.companyName && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Bedrijfsnaam :</div> <div className="font-bold">{clientInfo.companyName}</div></>}
+                     {clientInfo.companyName && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">{t.companyName} :</div> <div className="font-bold">{clientInfo.companyName}</div></>}
                      
                      {(() => {
                        const streetPart = [clientInfo.street, clientInfo.houseNumber].filter(Boolean).join(' ');
                        const cityPart = [clientInfo.zipCode, clientInfo.city].filter(Boolean).join(' ');
                        const addressStr = [streetPart, cityPart, clientInfo.country].filter(Boolean).join(', ');
-                       return addressStr ? <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Adres :</div> <div className="font-medium">{addressStr}</div></> : null;
+                       return addressStr ? <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">{t.addressLabel} :</div> <div className="font-medium">{addressStr}</div></> : null;
                      })()}
 
-                     {clientInfo.contactName && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Contactpersoon :</div> <div className="font-medium">{clientInfo.contactName} {clientInfo.role && <span className="text-slate-500">({clientInfo.role})</span>}</div></>}
-                     {(clientInfo.email || clientInfo.phone) && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Contactgegevens :</div> <div className="font-medium">{[clientInfo.email, clientInfo.phone].filter(Boolean).join(' | ')}</div></>}
+                     {clientInfo.contactName && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">{t.contactName} :</div> <div className="font-medium">{clientInfo.contactName} {clientInfo.role && <span className="text-slate-500">({clientInfo.role})</span>}</div></>}
+                     {(clientInfo.email || clientInfo.phone) && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">{t.contactDetailsLabel} :</div> <div className="font-medium">{[clientInfo.email, clientInfo.phone].filter(Boolean).join(' | ')}</div></>}
 
-                     <div className="font-bold col-span-2 mt-4 border-t border-slate-200 pt-4 text-lg" style={{color: BRAND.colors.green}}>PerfoTec Support</div>
-                     {project.employee && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">PerfoTec Medewerker :</div> <div className="font-medium">{project.employee}</div></>}
-                     {(project.employeeEmail || project.employeePhone) && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Contactgegevens :</div> <div className="font-medium">{[project.employeeEmail, project.employeePhone].filter(Boolean).join(' | ')}</div></>}
+                     <div className="font-bold col-span-2 mt-4 border-t border-slate-200 pt-4 text-lg" style={{color: BRAND.colors.green}}>{t.perfotecSupport}</div>
+                     {project.employee && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">{t.employeeLabel} :</div> <div className="font-medium">{project.employee}</div></>}
+                     {(project.employeeEmail || project.employeePhone) && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">{t.contactDetailsLabel} :</div> <div className="font-medium">{[project.employeeEmail, project.employeePhone].filter(Boolean).join(' | ')}</div></>}
                      
-                     <div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-start mt-1">Technologie :</div> 
+                     <div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-start mt-1">{t.techLabel} :</div> 
                      <div className="font-medium">
                        {project.technologies && project.technologies.length > 0 ? (
                           <ul className="list-disc pl-4 space-y-1">
-                            {project.technologies.map((t, i) => <li key={i}>{t}</li>)}
+                            {project.technologies.map((tech, i) => <li key={i}>{tech}</li>)}
                           </ul>
                        ) : (
                           '-'
@@ -413,26 +413,26 @@
 
                 {/* --- PAGE 3: PRODUCT CHARACTERISTICS & MATRIX --- */}
                 <div className="pt-4">
-                  <h2 className={reportTitleClass} style={reportTitleStyle}>3. Productkenmerken & Defectpreventie</h2>
+                  <h2 className={reportTitleClass} style={reportTitleStyle}>{t.toc3}</h2>
                   
                   <div className="mb-8 grid grid-cols-4 gap-4 text-sm">
                       {project.acpO2 && <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 shadow-sm"><strong className="text-blue-800 block mb-1 uppercase tracking-wide text-xs">O₂ min (ACP):</strong><span className="text-xl font-extrabold text-[#004B87]">{project.acpO2}</span></div>}
                       {project.co2Max && <div className="bg-red-50 p-4 rounded-xl border border-red-100 shadow-sm"><strong className="text-red-800 block mb-1 uppercase tracking-wide text-xs">CO₂ max:</strong><span className="text-xl font-extrabold text-red-600">{project.co2Max}</span></div>}
-                      {project.co2Shock && <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 shadow-sm"><strong className="text-orange-800 block mb-1 uppercase tracking-wide text-xs">CO₂ shock:</strong><span className="text-xl font-extrabold text-orange-600">{project.co2Shock}</span>{project.co2ShockHours && <div className="text-xs text-orange-600/80 mt-1 font-medium leading-tight">Drop &lt; {project.co2Max || 'max'}% binnen {project.co2ShockHours}u</div>}</div>}
+                      {project.co2Shock && <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 shadow-sm"><strong className="text-orange-800 block mb-1 uppercase tracking-wide text-xs">CO₂ shock:</strong><span className="text-xl font-extrabold text-orange-600">{project.co2Shock}</span>{project.co2ShockHours && <div className="text-xs text-orange-600/80 mt-1 font-medium leading-tight">{t.dropBelow} &lt; {project.co2Max || 'max'}% {t.within} {project.co2ShockHours}h</div>}</div>}
                       {project.tempMin && <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-sm"><strong className="text-slate-500 block mb-1 uppercase tracking-wide text-xs">Temp min:</strong><span className="text-xl font-extrabold text-slate-800">{project.tempMin}</span></div>}
                   </div>
 
                   {project.defectsMatrix && project.defectsMatrix.length > 0 && (
                       <div className="break-inside-avoid mb-8">
-                          <h3 className="font-bold text-xl mb-4 brand-heading" style={{ color: BRAND.colors.green }}>Defecten & Preventie Matrix</h3>
+                          <h3 className="font-bold text-xl mb-4 brand-heading" style={{ color: BRAND.colors.green }}>{t.matrixTitle}</h3>
                           <div className="overflow-hidden rounded-xl border border-slate-200 shadow-sm">
                               <table className="w-full text-sm border-collapse">
                                   <thead>
                                       <tr>
-                                          <th className="p-3 text-left text-white font-bold" style={{backgroundColor: '#004B87'}}>DEFECT</th>
-                                          <th className="p-3 text-left text-white font-bold" style={{backgroundColor: '#004B87'}}>FYSIOLOGISCHE OORZAAK</th>
-                                          <th className="p-3 text-left text-white font-bold" style={{backgroundColor: '#5B9BD5'}}>EFFECT MHP (VOCHT)</th>
-                                          <th className="p-3 text-left text-white font-bold" style={{backgroundColor: '#007C27'}}>EFFECT MAP (GAS)</th>
+                                          <th className="p-3 text-left text-white font-bold" style={{backgroundColor: '#004B87'}}>{t.matDefect}</th>
+                                          <th className="p-3 text-left text-white font-bold" style={{backgroundColor: '#004B87'}}>{t.matCause}</th>
+                                          <th className="p-3 text-left text-white font-bold" style={{backgroundColor: '#5B9BD5'}}>{t.matMhp}</th>
+                                          <th className="p-3 text-left text-white font-bold" style={{backgroundColor: '#007C27'}}>{t.matMap}</th>
                                       </tr>
                                   </thead>
                                   <tbody className="divide-y divide-slate-200">
@@ -455,24 +455,24 @@
 
                 {/* --- PAGE 4: SUPPLY CHAIN --- */}
                 <div className="pt-4">
-                  <h2 className={reportTitleClass} style={reportTitleStyle}>4. Gesimuleerde Supply Chain</h2>
+                  <h2 className={reportTitleClass} style={reportTitleStyle}>{t.toc4}</h2>
                   <div className="text-base text-slate-800 mb-8">
-                     <p className="mb-4 leading-relaxed">Om ervoor te zorgen dat de test representatief is voor de praktijkomstandigheden, stellen we voor om het product te testen met het volgende temperatuur- en tijdprofiel:</p>
+                     <p className="mb-4 leading-relaxed">{t.chainIntro}</p>
                      
                      {project.transportMode && (
                        <div className="mb-4 inline-block bg-indigo-50 border border-indigo-100 text-indigo-800 px-4 py-2 rounded-lg">
-                         <strong>Transport Modus:</strong> {project.transportMode}
+                         <strong>{t.transportMode}:</strong> {project.transportMode}
                        </div>
                      )}
                      
                      <div className="w-full mt-2 break-inside-avoid">
-                       <ProductSupplyChainFlow chain={supplyChain} />
+                       <ProductSupplyChainFlow chain={supplyChain} t={t} />
                      </div>
                      <div className="mt-6 bg-slate-50 p-4 rounded-xl border border-slate-200 text-sm space-y-2">
-                         <p className="italic text-slate-500">* Temperaturen en duren zijn gesimuleerd op basis van de verstrekte informatie.</p>
-                         <p>Opgeslagen bij <strong>{tempString}</strong> voor in totaal <strong>{totalDays} dagen</strong>.</p>
-                         <p>Het product is verpakt op <strong>{formatDateToDDMMYYYY(project.packingDate || project.date)}</strong>.</p>
-                         <p>Uitpakmomenten zijn specifiek voor elke variant en worden gedetailleerd beschreven in de Testopzet tabel hieronder.</p>
+                         <p className="italic text-slate-500">* {t.chainNote}</p>
+                         <p>{t.chainStore1} <strong>{tempString}</strong> {t.chainStore2} <strong>{totalDays} {t.daysStr}</strong> {t.chainStore3}.</p>
+                         <p>{t.chainPack} <strong>{formatDateToDDMMYYYY(project.packingDate || project.date)}</strong>.</p>
+                         <p>{t.chainUnpack}</p>
                      </div>
                   </div>
                 </div>
@@ -480,21 +480,21 @@
                 <div className="page-break"></div>
 
                 <div className="pt-4">
-                  <h2 className={reportTitleClass} style={reportTitleStyle}>5. Voorgestelde Testopzet</h2>
+                  <h2 className={reportTitleClass} style={reportTitleStyle}>{t.toc5}</h2>
                   <div className="text-base text-slate-800 mb-8">
-                      <p className="mb-6 leading-relaxed">De Fast Respiration Meter wordt gebruikt om de exacte ademhaling van het product te meten. Op basis hiervan berekenen we het optimale microperforatiepatroon voor de PerfoTec variant. De voorgestelde varianten ter vergelijking zijn:</p>
+                      <p className="mb-6 leading-relaxed">{t.setupIntro}</p>
                       
                       <div className="overflow-hidden rounded-xl border border-slate-200 shadow-sm break-inside-avoid">
                           <table className="report-table w-full text-sm">
                             <thead>
                               <tr>
-                                <th className="w-1/4">Variant</th>
-                                <th className="text-center">Type Verpakking</th>
-                                <th className="text-center">Materiaal</th>
-                                <th className="text-center">Afmetingen (mm)</th>
-                                <th className="text-center">Netto Gewicht (g)</th>
-                                <th className="text-center">Transmissiewaarde</th>
-                                <th className="text-center">Evaluatiedagen</th>
+                                <th className="w-1/4">{t.varName}</th>
+                                <th className="text-center">{t.packType}</th>
+                                <th className="text-center">{t.material}</th>
+                                <th className="text-center">{t.dimensCol}</th>
+                                <th className="text-center">{t.weightCol}</th>
+                                <th className="text-center">{t.transVal}</th>
+                                <th className="text-center">{t.evalDaysCol}</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-200">
@@ -523,13 +523,13 @@
                       {/* PREDICTED GAS GRAPHS */}
                       {groups.some(g => g.predictedImage) && (
                           <div className="mt-10 break-inside-avoid bg-slate-50 p-8 rounded-2xl border border-slate-200">
-                             <h4 className="font-bold mb-8 text-2xl text-slate-800">Voorspelde Gasniveaus</h4>
+                             <h4 className="font-bold mb-8 text-2xl text-slate-800">{t.predGasTitle}</h4>
                              <div className="flex flex-col gap-12 w-full">
                                {groups.map((g, idx) => {
                                   if (!g.predictedImage) return null;
                                   return (
                                      <div key={g.id} className="flex flex-col items-center w-full break-inside-avoid">
-                                        <div className="text-lg font-bold mb-4 text-center text-slate-700 bg-white px-6 py-2 rounded-full shadow-sm border border-slate-200">{g.name || 'Variant'}</div>
+                                        <div className="text-lg font-bold mb-4 text-center text-slate-700 bg-white px-6 py-2 rounded-full shadow-sm border border-slate-200">{g.name || t.varName}</div>
                                         <div className="w-full flex justify-center bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
                                            <img src={g.predictedImage} className="w-full h-auto max-h-[500px] object-contain" crossOrigin="anonymous" />
                                         </div>
@@ -547,22 +547,22 @@
 
                 {/* --- PAGE 6: EVALUATION PLAN --- */}
                 <div className="pt-4">
-                  <h2 className={reportTitleClass} style={reportTitleStyle}>6. Evaluatieplan</h2>
+                  <h2 className={reportTitleClass} style={reportTitleStyle}>{t.toc6}</h2>
                   <div className="text-base space-y-6 text-slate-800">
-                     <p className="leading-relaxed">Tijdens de test worden de productkwaliteit en atmosferische condities continu gemonitord volgens onderstaand schema.</p>
+                     <p className="leading-relaxed">{t.evalIntro}</p>
                      
                      <div className="mb-8">
-                       <h3 className="font-bold text-xl mb-6 text-slate-800">Gedetailleerd Evaluatieschema</h3>
+                       <h3 className="font-bold text-xl mb-6 text-slate-800">{t.evalTableTitle}</h3>
                        {groups.map((g, i) => (
                          <div key={g.id} className="mb-8 break-inside-avoid shadow-sm rounded-xl overflow-hidden border border-slate-200">
                            <h4 className="font-bold text-lg text-white p-3" style={{backgroundColor: CHART_COLORS[i % CHART_COLORS.length].stroke}}>{g.name}</h4>
                            <table className="w-full text-sm text-left bg-white">
                              <thead>
                                <tr className="bg-slate-50 text-slate-600 border-b border-slate-200">
-                                 <th className="p-3 w-20 text-center font-bold uppercase tracking-wider text-xs">Dag</th>
-                                 <th className="p-3 font-bold uppercase tracking-wider text-xs">Metingen (O₂, CO₂, Gewicht)</th>
-                                 <th className="p-3 font-bold uppercase tracking-wider text-xs">Openingsmoment</th>
-                                 <th className="p-3 font-bold uppercase tracking-wider text-xs">Kwaliteitsevaluatie</th>
+                                 <th className="p-3 w-20 text-center font-bold uppercase tracking-wider text-xs">{t.day}</th>
+                                 <th className="p-3 font-bold uppercase tracking-wider text-xs">{t.evalMeas}</th>
+                                 <th className="p-3 font-bold uppercase tracking-wider text-xs">{t.evalOpen}</th>
+                                 <th className="p-3 font-bold uppercase tracking-wider text-xs">{t.evalQual}</th>
                                </tr>
                              </thead>
                              <tbody className="divide-y divide-slate-100">
@@ -581,13 +581,13 @@
                      </div>
 
                      <div className="break-inside-avoid mt-8 pt-6 border-t border-slate-200 bg-slate-50 p-6 rounded-2xl">
-                       <h4 className="font-bold mb-4 text-xl text-slate-800">Methodologie</h4>
+                       <h4 className="font-bold mb-4 text-xl text-slate-800">{t.methTitle}</h4>
                        <ul className="list-disc pl-6 space-y-3 text-slate-700">
-                         <li><strong>Gasanalyse:</strong> Meten van O₂ en CO₂ percentages in de verpakking.</li>
-                         <li><strong>Gewichtsregistratie:</strong> Monitoren van vocht/gewichtsverlies vanaf Dag 0.</li>
-                         <li><strong>Visuele Kwaliteit:</strong> Fotografisch vastleggen van de productstaat.</li>
+                         <li><span dangerouslySetInnerHTML={{ __html: t.meth1 }}></span></li>
+                         <li><span dangerouslySetInnerHTML={{ __html: t.meth2 }}></span></li>
+                         <li><span dangerouslySetInnerHTML={{ __html: t.meth3 }}></span></li>
                          <li>
-                            <strong>Gedetailleerde Kwaliteitsbeoordeling:</strong> Beoordelen van de volgende criteria op een schaal van 1-10 (waarbij 6+ acceptabel is):
+                            <span dangerouslySetInnerHTML={{ __html: t.meth4 }}></span>
                             <ul className="list-circle pl-6 mt-3 grid grid-cols-2 gap-2 text-sm font-medium text-slate-600">
                                 {(project.criteria || []).map((c, i) => <li key={i}>{c}</li>)}
                             </ul>
@@ -601,7 +601,7 @@
                 <div className="page-break"></div>
 
                 <div className="pt-4">
-                  <h2 className={reportTitleClass} style={reportTitleStyle}>7. Benodigdheden & Afspraken</h2>
+                  <h2 className={reportTitleClass} style={reportTitleStyle}>{t.toc7}</h2>
                   <div className="text-base space-y-6 text-slate-800">
                      {proposal?.requirements && (
                          <div className="break-inside-avoid">
@@ -621,8 +621,8 @@
                                  <div className="mb-6 bg-blue-50 border border-blue-200 p-5 text-sm text-blue-900 rounded-2xl flex items-start gap-4 shadow-sm">
                                    <AlertCircle className="text-blue-500 shrink-0 mt-0.5" size={20} />
                                    <div>
-                                      <strong className="block text-base mb-1 text-blue-950">Benodigd Product</strong> 
-                                      Er is minimaal <strong>{totalRequiredWeightKg} kg</strong> vers product nodig om deze test uit te voeren (gebaseerd op een totaal van {totalSamplesCount} uniek gevolgde fysieke samples over alle varianten).
+                                      <strong className="block text-base mb-1 text-blue-950">{t.reqProdBlock}</strong> 
+                                      {t.reqProdDesc1} <strong>{totalRequiredWeightKg} kg</strong> {t.reqProdDesc2} {totalSamplesCount} {t.reqProdDesc3}
                                    </div>
                                  </div>
                                );
@@ -642,7 +642,88 @@
         // --- MAIN APPLICATION ---
         const App = () => {
           // Force language to Dutch for this file
-          const lang = 'nl';
+          const [lang, setLang] = useState('nl');
+
+          useEffect(() => {
+             if (globalConfig.setLanguage) globalConfig.setLanguage('nl');
+          }, []);
+
+          // Define translation object matching the interface
+          const T = {
+            en: {
+              // Same as in english version
+            },
+            nl: {
+              title: "Klant Intake Formulier", subtitle: "Test Aanvraag Voorbereiding",
+              introTitle: "Welkom bij PerfoTec!",
+              introText: "Vul de bedrijfs- en productgegevens in. Klik op 'Opslaan (.json)' om uw voortgang te bewaren. Klaar? Klik op 'Bekijk Overzicht' om de PDF te controleren en af te drukken of op te slaan.",
+              load: "Laden JSON", save: "Opslaan als...", preview: "Preview Voorstel", print: "Download PDF", back: "Bewerk", downloadWord: "Download Word",
+              sec1Title: "1. Bedrijfs- & Contactgegevens",
+              companyName: "Bedrijfsnaam", street: "Straat", houseNumber: "Huisnr.", zipCode: "Postcode", city: "Plaats / Stad", country: "Land",
+              contactName: "Contactpersoon", role: "Functie", email: "E-mail", phone: "Telefoonnummer",
+              logoUpload: "Bedrijfslogo", clickUpload: "Klik om te uploaden",
+              sec2Title: "2. Product(en) voor de Test", prodDetails: "Details", delProd: "Verwijder Product",
+              secATitle: "A. Product & Verpakking", prodName: "Productnaam", prodType: "Product Type / Variëteit", origin: "Herkomst", prodPhoto: "Foto", processingType: "Staat van product",
+              whole: "Heel", processed: "Verwerkt / Gesneden",
+              maturity: "Rijpheidsstadium", treatment: "Standaard Behandeling",
+              packType: "Type Verpakking", material: "Materiaal",
+              dimens: "Afmetingen (mm)", len: "Lengte", wid: "Breedte", widSeal: "Breedte Seal", hei: "Hoogte",
+              weight: "Netto Gewicht",
+              qualityCrit: "Kwaliteitscriteria", qualityCritDesc: "Selecteer de aspecten die u wilt laten beoordelen:",
+              secBTitle: "B. Uitdaging & Doelstelling", challenge: "Huidige Uitdaging", challengePl: "Beschrijf de huidige kwaliteitsproblemen...", goal: "Beoogd Doel", goalPl: "Wat wilt u bereiken?",
+              secCTitle: "C. Huidige Supply Chain", transportMode: "Transport Modus", transportModeErr: "Transportmodus",
+              airFreight: "Luchtvracht", seaFreight: "Zeevracht", roadTransport: "Wegtransport", storage: "Opslag",
+              step: "Stap", phase: "Fase (Activiteit)", temp: "Temp (°C)", to: "Tot", days: "Tijd (Dagen)", action: "Actie",
+              actNone: "- Geen -", actPack: "Inpakken", actUnpack: "Uitpakken", addStep: "Extra Stap Toevoegen", addProd: "Extra product toevoegen",
+              validationErr: "Nog niet alle verplichte velden zijn ingevuld:", reqField: "is verplicht", reqProd: "Product",
+              printTitle: "Test Voorstel",
+              successTitle: "Bijna klaar!",
+              successStep1: "Uw e-mailprogramma is zojuist geopend (gericht aan luke.zuijderwijk@perfotec.com).",
+              successStep2: "Het aanvraagbestand (JSON data) is zojuist gedownload in uw 'Downloads' map.",
+              successStep3: "BELANGRIJK: Sleep het gedownloade bestand in de geopende e-mail als bijlage en klik op verzenden! Gebruik eventueel de 'Print als PDF' functie om het overzicht op te slaan.",
+              fallbackMailText: "Opent de e-mail niet automatisch?",
+              fallbackMailBtn: "Open E-mail Handmatig",
+              closeBtn: "Ik begrijp het, sluiten", submitBtn: "Afronden & Verzenden",
+              removeStep: "Verwijder Stap",
+              // Translation tags for PDF
+              noLogo: "Geen Logo", noProdName: "<Productnaam>", noCoverPhoto: "Geen Omslagfoto",
+              tableOfContents: "Inhoudsopgave",
+              toc1: "1. Introductie & Doelstellingen", toc2: "2. Bedrijfs- & Projectinfo", toc3: "3. Productkenmerken & Defectpreventie",
+              toc4: "4. Gesimuleerde Supply Chain", toc5: "5. Voorgestelde Testopzet", toc6: "6. Evaluatieplan", toc7: "7. Benodigdheden & Afspraken",
+              challengeLabel: "Huidige Uitdaging", goalLabel: "Beoogd Doel", expectedLabel: "Verwachte Resultaten",
+              compInfoLabel: "Bedrijfsgegevens", addressLabel: "Adres", contactDetailsLabel: "Contactgegevens", perfotecSupport: "PerfoTec Support", employeeLabel: "PerfoTec Medewerker", techLabel: "Technologie",
+              dropBelow: "Daling", within: "binnen", matrixTitle: "Defecten & Preventie Matrix", matDefect: "DEFECT", matCause: "FYSIOLOGISCHE OORZAAK", matMhp: "EFFECT MHP (VOCHT)", matMap: "EFFECT MAP (GAS)",
+              chainIntro: "Om ervoor te zorgen dat de test representatief is voor de praktijkomstandigheden, stellen we voor om het product te testen met het volgende temperatuur- en tijdprofiel:",
+              chainNote: "Temperaturen en duren zijn gesimuleerd op basis van de verstrekte informatie.", chainStore1: "Opgeslagen bij", chainStore2: "voor in totaal", chainStore3: "", daysStr: "dagen", chainPack: "Het product is verpakt op", chainUnpack: "Uitpakmomenten zijn specifiek voor elke variant en worden gedetailleerd beschreven in de Testopzet tabel hieronder.",
+              setupIntro: "De Fast Respiration Meter wordt gebruikt om de exacte ademhaling van het product te meten. Op basis hiervan berekenen we het optimale microperforatiepatroon voor de PerfoTec variant. De voorgestelde varianten ter vergelijking zijn:",
+              varName: "Variant", dimensCol: "Afmetingen (mm)", weightCol: "Netto Gewicht (g)", transVal: "Transmissiewaarde", evalDaysCol: "Evaluatiedagen", predGasTitle: "Voorspelde Gasniveaus",
+              evalIntro: "Tijdens de test worden de productkwaliteit en atmosferische condities continu gemonitord volgens onderstaand schema.", evalTableTitle: "Gedetailleerd Evaluatieschema", day: "Dag", evalMeas: "Metingen (O₂, CO₂, Gewicht)", evalOpen: "Openingsmoment", evalQual: "Kwaliteitsevaluatie",
+              methTitle: "Methodologie", meth1: "<strong>Gasanalyse:</strong> Meten van O₂ en CO₂ percentages in de verpakking.", meth2: "<strong>Gewichtsregistratie:</strong> Monitoren van vocht/gewichtsverlies vanaf Dag 0.", meth3: "<strong>Visuele Kwaliteit:</strong> Fotografisch vastleggen van de productstaat.", meth4: "<strong>Gedetailleerde Kwaliteitsbeoordeling:</strong> Beoordelen van de volgende criteria op een schaal van 1-10 (waarbij 6+ acceptabel is):",
+              reqProdBlock: "Benodigd Product", reqProdDesc1: "Er is minimaal", reqProdDesc2: "vers product nodig om deze test uit te voeren (gebaseerd op een totaal van", reqProdDesc3: "uniek gevolgde fysieke samples over alle varianten).",
+              // Interface extra translation
+              warning: "Waarschuwing", warnDesc: "U staat op het punt de huidige Voorspelde Gasgrafiek te overschrijven met een nieuwe afbeelding. Wilt u doorgaan?", cancel: "Annuleren", overwrite: "Overschrijven",
+              toolTitle: "VOORSTEL TOOL", tab1: "Project & Product", tab2: "Varianten & Planning", tab3: "Voorstel Teksten",
+              propTitle: "Voorstel Titel", propDate: "Datum Voorstel", packDate: "Verpakkingsdatum", totalDur: "Totale Duur (Dagen)", simStore: "Retail Simulatie (na openen)",
+              resData: "Respiratie Data", measuredAt: "Gemeten bij (°C)", uploadPerfo: "Upload PerfoTec Logo", uploadClient: "Upload Klant Logo",
+              coverPhoto: "Omslagfoto (Pagina 1)", refPhoto: "Referentiefoto (P+0)",
+              supplyChainFlow: "Product Supply Chain",
+              globCrit: "Globale Kwaliteitscriteria", noCrit: "Geen criteria geselecteerd.", selCrit: "Selecteer standaard criterium...", addCrit: "Criterium Toevoegen",
+              globEval: "Globale Evaluatiedagen", globEvalDesc: "Geef aan op welke dagen de verpakkingen worden geopend en geëvalueerd.", addEval: "Evaluatiedag Toevoegen",
+              perfTech: "PerfoTec Technologie",
+              addVar: "Variant Toevoegen", copy: "Dupliceren",
+              varConf: "Variant Configuratie", packSpecs: "Verpakkingsspecificaties & Samples", sampMeas: "Samples / Meting",
+              timeEv: "Tijdlijn & Gebeurtenissen", timeEvDesc: "Selecteer de specifieke samplenummers (bijv. 1, 2, 3) die de fysieke verpakkingen vertegenwoordigen voor elke actie.",
+              sampleAlreadyOpen: "De sample is al eerder geopend", selectSample: "Kies Sample",
+              warnOpen: "Zodra een sample op een eerdere dag als 'Open' is gemarkeerd, kan deze logischerwijs niet meer gekozen worden voor gas/gewichtsmetingen (de knop wordt grijs en onklikbaar).",
+              predGasGraph: "Voorspelde Gasgrafiek", predGasGraphDesc: "Upload een screenshot van de voorspelling voor deze specifieke variant", uploadImg: "Upload Afbeelding",
+              propEvalTxt: "Voorstel & Evaluatie Teksten", introChal: "Introductie / Huidige Uitdaging", introChalPl: "Beschrijf de uitdaging en waarom we deze test uitvoeren...",
+              goalExp: "Doelen / Verwachte Resultaten", goalExpPl: "Wat hopen we te bereiken met deze test?", reqAgreem: "Benodigdheden & Afspraken", reqAgreemPl: "Wat moet de klant aanleveren? Welke afspraken zijn er gemaakt?",
+              delete: "Verwijderen", dupDesc: "Dupliceren"
+            }
+          };
+
+          // Always resolve to Dutch for this file
+          const t = T['nl'];
 
           const [activeTab, setActiveTab] = useState('setup');
           const [activeGroupId, setActiveGroupId] = useState(1);
@@ -675,7 +756,7 @@
 
           const [groups, setGroups] = useState([
             {
-              id: 1, name: 'Controle',
+              id: 1, name: 'Control',
               specs: { packaging: 'Retail', material: 'BOPP', length: '', width: '', height: '', holes: '2', sampleCount: 3 },
               measurements: [
                 { day: 0, measure: [], open: [], evaluate: [] }, 
@@ -695,9 +776,9 @@
           ]);
 
           const [proposal, setProposal] = useState({ 
-            intro: 'Om de houdbaarheid te verlengen en de optimale kwaliteit van uw product te behouden, stellen wij voor om een vergelijkende MAP (Modified Atmosphere Packaging) test uit te voeren. Door gebruik te maken van de geavanceerde ademhalings- en lasertechnologie van PerfoTec, streven we ernaar het perfecte microklimaat in de verpakking te creëren.', 
+            intro: 'Om de houdbaarheid te verlengen en de optimale kwaliteit van uw product te behouden, stellen we voor om een vergelijkende MAP (Modified Atmosphere Packaging) test uit te voeren. Door gebruik te maken van de geavanceerde ademhalings- en lasertechnologie van PerfoTec, streven we ernaar het perfecte microklimaat in de verpakking te creëren.', 
             expectedOutcomes: '<ul><li>Verlenging van de houdbaarheid met X dagen.</li><li>Vermindering van vochtverlies en gewichtsverlies.</li><li>Behoud van natuurlijke kleur en stevigheid.</li></ul>', 
-            requirements: '<ul><li>Huidig verpakkingsmateriaal aanleveren voor de controlegroep.</li><li>Het product moet onder gekoelde omstandigheden worden vervoerd.</li></ul>' 
+            requirements: '<ul><li>Aanleveren van huidig verpakkingsmateriaal voor de controlegroep.</li><li>Het product moet onder gekoelde omstandigheden worden getransporteerd.</li></ul>' 
           });
           
           const [newCriteria, setNewCriteria] = useState('');
@@ -874,13 +955,13 @@
             };
 
             if (globalConfig.importJSON) {
-                globalConfig.importJSON(file, processData, () => alert("Fout bij inladen JSON bestand."));
+                globalConfig.importJSON(file, processData, () => alert(t.validationErr));
             } else {
                 const reader = new FileReader(); 
                 reader.onload = (ev) => { 
                     try { 
                         processData(JSON.parse(ev.target.result));
-                    } catch(err){ alert("Fout bij inladen bestand."); } 
+                    } catch(err){ alert("Fout bij laden bestand."); } 
                 }; 
                 reader.readAsText(file); 
             }
@@ -1015,7 +1096,7 @@
           };
 
           if (isPreview) {
-            return <PrintPreview clientInfo={clientInfo} project={project} groups={groups} proposal={proposal} supplyChain={supplyChain} onBack={() => setIsPreview(false)} />;
+            return <PrintPreview clientInfo={clientInfo} project={project} groups={groups} proposal={proposal} supplyChain={supplyChain} onBack={() => setIsPreview(false)} t={t} />;
           }
 
           // --- EDITOR VIEW ---
@@ -1027,12 +1108,12 @@
                   <div className="bg-white p-8 rounded-3xl shadow-2xl max-w-sm w-full border-t-8 border-orange-500 transform transition-all">
                      <div className="flex items-center gap-4 mb-6 text-orange-600 bg-orange-50 p-4 rounded-xl">
                         <AlertTriangle size={28} />
-                        <h3 className="font-extrabold text-xl">Waarschuwing</h3>
+                        <h3 className="font-extrabold text-xl">{t.warning}</h3>
                      </div>
-                     <p className="mb-8 text-base text-slate-700 leading-relaxed">U staat op het punt de huidige Voorspelde Gasgrafiek te overschrijven met een nieuwe afbeelding. Wilt u doorgaan?</p>
+                     <p className="mb-8 text-base text-slate-700 leading-relaxed">{t.warnDesc}</p>
                      <div className="flex justify-end gap-3">
-                       <button onClick={() => setPendingImageReplace(null)} className="px-6 py-3 bg-slate-100 text-slate-700 rounded-full hover:bg-slate-200 font-bold transition">Annuleren</button>
-                       <button onClick={confirmReplaceImage} className="px-6 py-3 bg-orange-600 text-white rounded-full hover:bg-orange-700 font-bold shadow-lg shadow-orange-200 transition">Overschrijven</button>
+                       <button onClick={() => setPendingImageReplace(null)} className="px-6 py-3 bg-slate-100 text-slate-700 rounded-full hover:bg-slate-200 font-bold transition">{t.cancel}</button>
+                       <button onClick={confirmReplaceImage} className="px-6 py-3 bg-orange-600 text-white rounded-full hover:bg-orange-700 font-bold shadow-lg shadow-orange-200 transition">{t.overwrite}</button>
                      </div>
                   </div>
                 </div>
@@ -1045,7 +1126,7 @@
                     <img src={BRAND.logos.default} alt="PerfoTec" className="h-9 md:h-12 object-contain" />
                     <div className="border-l-2 border-slate-200 pl-4 ml-2 hidden sm:block">
                       <h1 className="font-extrabold text-2xl tracking-tight leading-none" style={{color: BRAND.colors.blue}}>PerfoTec Manager</h1>
-                      <p className="text-xs text-slate-500 font-bold uppercase tracking-widest mt-1">VOORSTEL TOOL</p>
+                      <p className="text-xs text-slate-500 font-bold uppercase tracking-widest mt-1">{t.toolTitle}</p>
                     </div>
                   </div>
                   
@@ -1057,12 +1138,15 @@
                          value={lang} 
                          onChange={(e) => {
                            const val = e.target.value;
+                           setLang(val);
                            if (globalConfig.setLanguage) globalConfig.setLanguage(val);
                            if (val !== 'nl') {
-                               try { 
-                                   if(val === 'en') window.location.assign('proposal.html');
-                                   else window.location.assign(`proposal_${val}.html`); 
-                               } catch(err) {}
+                               setTimeout(() => {
+                                   try { 
+                                       if(val === 'en') window.location.assign('proposal.html');
+                                       else window.location.assign(`proposal_${val}.html`); 
+                                   } catch(err) {}
+                               }, 100);
                            }
                          }}
                        >
@@ -1077,14 +1161,14 @@
                     <div className="h-8 border-l border-slate-300 mx-1 hidden md:block"></div>
 
                     <label className="cursor-pointer bg-white border border-slate-300 text-slate-700 px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm">
-                      <FolderOpen size={18} className="text-blue-600"/> <span className="hidden md:inline">Laden JSON</span>
+                      <FolderOpen size={18} className="text-blue-600"/> <span className="hidden md:inline">{t.load}</span>
                       <input type="file" accept=".json" className="hidden" onChange={importData} ref={fileInputRef} />
                     </label>
                     <button onClick={exportData} className="bg-white border border-slate-300 text-slate-700 px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm">
-                      <Save size={18} className="text-green-600"/> <span className="hidden md:inline">Opslaan als...</span>
+                      <Save size={18} className="text-green-600"/> <span className="hidden md:inline">{t.save}</span>
                     </button>
                     <button onClick={() => { if(!clientInfo.companyName) alert('Let op: Vul bedrijfsgegevens in!'); setIsPreview(true); }} className="bg-blue-600 text-white px-6 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-blue-700 transition-all shadow-md hover:shadow-blue-500/30 ml-2">
-                      <FileText size={18}/> <span className="hidden md:inline">Preview Voorstel</span>
+                      <FileText size={18}/> <span className="hidden md:inline">{t.preview}</span>
                     </button>
                   </div>
                 </div>
@@ -1095,7 +1179,7 @@
                   {['setup', 'groups', 'proposal'].map(tab => (
                     <button key={tab} onClick={() => setActiveTab(tab)} className={`px-5 sm:px-8 py-3.5 font-bold rounded-t-xl transition-all flex items-center gap-2 ${activeTab === tab ? 'text-white shadow-sm transform scale-105 origin-bottom' : 'bg-white text-slate-500 hover:bg-slate-100 border border-b-0 border-slate-200'}`} style={{ backgroundColor: activeTab === tab ? BRAND.colors.green : undefined }}>
                       {tab === 'setup' && <Settings size={18}/>}{tab === 'groups' && <Package size={18}/>}{tab === 'proposal' && <FileText size={18}/>}
-                      {tab === 'proposal' ? 'Voorstel Teksten' : tab === 'groups' ? 'Varianten & Planning' : 'Project & Product'}
+                      {tab === 'proposal' ? t.tab3 : tab === 'groups' ? t.tab2 : t.tab1}
                     </button>
                   ))}
                 </div>
@@ -1106,20 +1190,20 @@
                     {/* Project & Product Info */}
                     <div className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden">
                        <div className="absolute top-0 left-0 w-full h-1" style={{ backgroundColor: BRAND.colors.green }}></div>
-                       <h2 className="font-extrabold text-2xl mb-8 text-slate-800 border-b-2 border-slate-100 pb-4">1. Project & Product</h2>
+                       <h2 className="font-extrabold text-2xl mb-8 text-slate-800 border-b-2 border-slate-100 pb-4">1. {t.tab1}</h2>
                        
                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
                          <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6">
-                           <div className="sm:col-span-2"><label className={labelClass}>Voorstel Titel</label><input type="text" className={`${inputClass} text-lg font-bold`} value={project.reportTitle || ''} onChange={e => handleProjectChange('reportTitle', e.target.value)} /></div>
-                           <div className="sm:col-span-2"><label className={labelClass}>Productnaam <span className="text-red-500">*</span></label><input type="text" className={`${inputClass} text-lg font-bold`} value={project.productName || ''} onChange={e => handleProjectChange('productName', e.target.value)} /></div>
-                           <div><label className={labelClass}>Datum Voorstel</label><input type="date" className={inputClass} value={project.date || ''} onChange={e => handleProjectChange('date', e.target.value)} /></div>
+                           <div className="sm:col-span-2"><label className={labelClass}>{t.propTitle}</label><input type="text" className={`${inputClass} text-lg font-bold`} value={project.reportTitle || ''} onChange={e => handleProjectChange('reportTitle', e.target.value)} /></div>
+                           <div className="sm:col-span-2"><label className={labelClass}>{t.prodName} <span className="text-red-500">*</span></label><input type="text" className={`${inputClass} text-lg font-bold`} value={project.productName || ''} onChange={e => handleProjectChange('productName', e.target.value)} /></div>
+                           <div><label className={labelClass}>{t.propDate}</label><input type="date" className={inputClass} value={project.date || ''} onChange={e => handleProjectChange('date', e.target.value)} /></div>
                            
-                           <div><label className={labelClass}>Verpakkingsdatum <span className="text-red-500">*</span></label><input type="date" className={`${inputClass} bg-amber-50 focus:bg-white`} value={project.packingDate || ''} onChange={e => handleProjectChange('packingDate', e.target.value)} /></div>
-                           <div><label className={labelClass}>Totale Duur (Dagen) <span className="text-red-500">*</span></label><input type="number" className={`${inputClass} bg-amber-50 focus:bg-white`} value={project.totalDuration || ''} onChange={handleDurationChange} placeholder="bijv. 10" /></div>
-                           <div><label className={labelClass}>Retail Simulatie (na openen)</label><input type="number" className={`${inputClass} bg-blue-50 focus:bg-white`} value={project.retailOpenDays || ''} onChange={e => handleProjectChange('retailOpenDays', e.target.value)} placeholder="bijv. 7" /></div>
+                           <div><label className={labelClass}>{t.packDate} <span className="text-red-500">*</span></label><input type="date" className={`${inputClass} bg-amber-50 focus:bg-white`} value={project.packingDate || ''} onChange={e => handleProjectChange('packingDate', e.target.value)} /></div>
+                           <div><label className={labelClass}>{t.totalDur} <span className="text-red-500">*</span></label><input type="number" className={`${inputClass} bg-amber-50 focus:bg-white`} value={project.totalDuration || ''} onChange={handleDurationChange} placeholder={t['ej. 10']} /></div>
+                           <div><label className={labelClass}>{t.simStore}</label><input type="number" className={`${inputClass} bg-blue-50 focus:bg-white`} value={project.retailOpenDays || ''} onChange={e => handleProjectChange('retailOpenDays', e.target.value)} placeholder="bijv. 7" /></div>
                            
                            <div className="sm:col-span-2 bg-slate-50 border border-slate-200 p-5 rounded-2xl">
-                              <label className={labelClass}>Verwerkingstype <span className="text-red-500">*</span></label>
+                              <label className={labelClass}>{t.processingType} <span className="text-red-500">*</span></label>
                               <div className="flex flex-wrap gap-4 mt-3">
                                  {['Whole', 'Processed'].map(type => (
                                    <button
@@ -1128,32 +1212,32 @@
                                      onClick={() => handleProjectChange('processingType', type)}
                                      className={`px-6 py-3 rounded-xl text-sm font-bold transition-all border shadow-sm flex-1 sm:flex-none ${project.processingType === type ? 'bg-blue-600 text-white border-blue-700 ring-4 ring-blue-600/20 transform scale-[1.02]' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'}`}
                                    >
-                                     {type === 'Whole' ? 'Heel' : 'Verwerkt / Gesneden'}
+                                     {type === 'Whole' ? t.whole : t.processed}
                                    </button>
                                  ))}
                               </div>
                            </div>
 
-                           <div><label className={labelClass}>Product Type / Variëteit</label><input type="text" className={inputClass} value={project.type || ''} onChange={e => handleProjectChange('type', e.target.value)} /></div>
-                           <div><label className={labelClass}>Herkomst</label><input type="text" className={inputClass} value={project.origin || ''} onChange={e => handleProjectChange('origin', e.target.value)} /></div>
+                           <div><label className={labelClass}>{t.prodType}</label><input type="text" className={inputClass} value={project.type || ''} onChange={e => handleProjectChange('type', e.target.value)} /></div>
+                           <div><label className={labelClass}>{t.origin}</label><input type="text" className={inputClass} value={project.origin || ''} onChange={e => handleProjectChange('origin', e.target.value)} /></div>
                            
                            <div>
-                              <label className={labelClass}>Netto Gewicht <span className="text-red-500">*</span></label>
+                              <label className={labelClass}>{t.weight} <span className="text-red-500">*</span></label>
                               <div className="relative">
                                  <input type="number" className={`${inputClass} font-extrabold text-blue-900 pr-12`} value={project.startWeight || ''} onChange={e => handleProjectChange('startWeight', e.target.value)} />
                                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">g/kg</span>
                               </div>
                            </div>
                            
-                           <div><label className={labelClass}>Rijpheidsstadium bij verpakken</label><input type="text" className={inputClass} value={project.maturityStage || ''} onChange={e => handleProjectChange('maturityStage', e.target.value)} /></div>
-                           <div className="sm:col-span-2"><label className={labelClass}>Post-harvest Behandeling</label><input type="text" className={inputClass} value={project.postHarvestTreatment || ''} onChange={e => handleProjectChange('postHarvestTreatment', e.target.value)} /></div>
+                           <div><label className={labelClass}>{t.maturity}</label><input type="text" className={inputClass} value={project.maturityStage || ''} onChange={e => handleProjectChange('maturityStage', e.target.value)} /></div>
+                           <div className="sm:col-span-2"><label className={labelClass}>{t.treatment}</label><input type="text" className={inputClass} value={project.postHarvestTreatment || ''} onChange={e => handleProjectChange('postHarvestTreatment', e.target.value)} /></div>
                            
                            <div className="sm:col-span-2 bg-gradient-to-br from-slate-50 to-slate-100 p-6 rounded-2xl border border-slate-200 shadow-sm mt-2">
-                              <label className="block mb-4 text-xs font-extrabold tracking-widest text-blue-800 uppercase border-b border-blue-200 pb-2">Respiratie Data</label>
+                              <label className="block mb-4 text-xs font-extrabold tracking-widest text-blue-800 uppercase border-b border-blue-200 pb-2">{t.resData}</label>
                               <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                                 <div><label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">RR O₂</label><input type="text" className={inputClass} value={project.rrO2 || ''} onChange={e => handleProjectChange('rrO2', e.target.value)} /></div>
                                 <div><label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">RR CO₂</label><input type="text" className={inputClass} value={project.rrCO2 || ''} onChange={e => handleProjectChange('rrCO2', e.target.value)} /></div>
-                                <div><label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">Gemeten bij (°C)</label><input type="text" className={inputClass} value={project.rrTemp || ''} onChange={e => handleProjectChange('rrTemp', e.target.value)} /></div>
+                                <div><label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">{t.measuredAt}</label><input type="text" className={inputClass} value={project.rrTemp || ''} onChange={e => handleProjectChange('rrTemp', e.target.value)} /></div>
                               </div>
                            </div>
                          </div>
@@ -1161,72 +1245,72 @@
                          <div className="space-y-6">
                             <div className="border-2 border-dashed border-slate-300 rounded-2xl p-6 flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-blue-50 hover:border-blue-300 transition-all cursor-pointer relative overflow-hidden shadow-sm group min-h-[140px]">
                                 <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={(e) => handleImgUpload(e, 'logo')} />
-                                {project.logo ? <img src={project.logo} className="h-full object-contain group-hover:scale-105 transition-transform" /> : <><Upload size={28} color={BRAND.colors.blue} className="mb-3"/><span className="font-bold text-sm text-slate-600 block">Upload PerfoTec Logo</span></>}
+                                {project.logo ? <img src={project.logo} className="h-full object-contain group-hover:scale-105 transition-transform" /> : <><Upload size={28} color={BRAND.colors.blue} className="mb-3"/><span className="font-bold text-sm text-slate-600 block">{t.uploadPerfo}</span></>}
                             </div>
                             <div className="border-2 border-dashed border-slate-300 rounded-2xl p-6 flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-blue-50 hover:border-blue-300 transition-all cursor-pointer relative overflow-hidden shadow-sm group min-h-[140px]">
                                 <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={(e) => handleImgUpload(e, 'clientLogo')} />
-                                {project.clientLogo ? <img src={project.clientLogo} className="h-full object-contain group-hover:scale-105 transition-transform" /> : <><Upload size={28} color={BRAND.colors.green} className="mb-3"/><span className="font-bold text-sm text-slate-600 block">Upload Klant Logo</span></>}
+                                {project.clientLogo ? <img src={project.clientLogo} className="h-full object-contain group-hover:scale-105 transition-transform" /> : <><Upload size={28} color={BRAND.colors.green} className="mb-3"/><span className="font-bold text-sm text-slate-600 block">{t.uploadClient}</span></>}
                             </div>
                             <div className="border-2 border-dashed border-slate-300 rounded-2xl p-6 flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-blue-50 hover:border-blue-300 transition-all cursor-pointer relative overflow-hidden shadow-sm group min-h-[180px]">
                                 <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={(e) => handleImgUpload(e, 'coverImage')} />
-                                {project.coverImage ? <img src={project.coverImage} className="w-full h-full object-cover rounded group-hover:scale-105 transition-transform" /> : <><ImageIcon size={28} color={BRAND.colors.green} className="mb-3"/><span className="font-bold text-sm text-slate-600 block">Omslagfoto (Pagina 1)</span></>}
+                                {project.coverImage ? <img src={project.coverImage} className="w-full h-full object-cover rounded group-hover:scale-105 transition-transform" /> : <><ImageIcon size={28} color={BRAND.colors.green} className="mb-3"/><span className="font-bold text-sm text-slate-600 block">{t.coverPhoto}</span></>}
                             </div>
                             <div className="border-2 border-dashed border-slate-300 rounded-2xl p-6 flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-blue-50 hover:border-blue-300 transition-all cursor-pointer relative overflow-hidden shadow-sm group min-h-[180px]">
                                 <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={(e) => handleImgUpload(e, 'startImage')} />
-                                {project.startImage ? <img src={project.startImage} className="w-full h-full object-cover rounded group-hover:scale-105 transition-transform" /> : <><ImageIcon size={28} color={BRAND.colors.green} className="mb-3"/><span className="font-bold text-sm text-slate-600 block">Referentiefoto (P+0)</span></>}
+                                {project.startImage ? <img src={project.startImage} className="w-full h-full object-cover rounded group-hover:scale-105 transition-transform" /> : <><ImageIcon size={28} color={BRAND.colors.green} className="mb-3"/><span className="font-bold text-sm text-slate-600 block">{t.refPhoto}</span></>}
                             </div>
                          </div>
                        </div>
                     </div>
 
                     <div className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200">
-                       <h2 className="font-extrabold text-2xl mb-8 text-slate-800 border-b-2 border-slate-100 pb-4">2. Bedrijf & Contact</h2>
+                       <h2 className="font-extrabold text-2xl mb-8 text-slate-800 border-b-2 border-slate-100 pb-4">2. {t.sec1Title.replace('1. ', '')}</h2>
                        <div className="grid grid-cols-4 gap-6">
-                         <div className="col-span-4 sm:col-span-2"><label className={labelClass}>Bedrijfsnaam <span className="text-red-500">*</span></label><input type="text" className={`${inputClass} font-bold`} value={clientInfo.companyName || ''} onChange={e => handleClientChange('companyName', e.target.value)} /></div>
-                         <div className="col-span-4 sm:col-span-2"><label className={labelClass}>PerfoTec Medewerker</label><input type="text" className={inputClass} value={project.employee || ''} onChange={e => handleProjectChange('employee', e.target.value)} /></div>
-                         <div className="col-span-4 sm:col-span-2"><label className={labelClass}>E-mail Medewerker</label><input type="email" className={inputClass} value={project.employeeEmail || ''} onChange={e => handleProjectChange('employeeEmail', e.target.value)} /></div>
-                         <div className="col-span-4 sm:col-span-2"><label className={labelClass}>Telefoon Medewerker</label><input type="text" className={inputClass} value={project.employeePhone || ''} onChange={e => handleProjectChange('employeePhone', e.target.value)} /></div>
+                         <div className="col-span-4 sm:col-span-2"><label className={labelClass}>{t.companyName} <span className="text-red-500">*</span></label><input type="text" className={`${inputClass} font-bold`} value={clientInfo.companyName || ''} onChange={e => handleClientChange('companyName', e.target.value)} /></div>
+                         <div className="col-span-4 sm:col-span-2"><label className={labelClass}>{t.employeeLabel}</label><input type="text" className={inputClass} value={project.employee || ''} onChange={e => handleProjectChange('employee', e.target.value)} /></div>
+                         <div className="col-span-4 sm:col-span-2"><label className={labelClass}>{t.email.replace('E-mail', 'E-mail Medewerker')}</label><input type="email" className={inputClass} value={project.employeeEmail || ''} onChange={e => handleProjectChange('employeeEmail', e.target.value)} /></div>
+                         <div className="col-span-4 sm:col-span-2"><label className={labelClass}>{t.phone.replace('Telefoon', 'Telefoon Medewerker')}</label><input type="text" className={inputClass} value={project.employeePhone || ''} onChange={e => handleProjectChange('employeePhone', e.target.value)} /></div>
                          
-                         <div className="col-span-4 sm:col-span-3 mt-4"><label className={labelClass}>Straat</label><input type="text" className={inputClass} value={clientInfo.street || ''} onChange={e => handleClientChange('street', e.target.value)} /></div>
-                         <div className="col-span-4 sm:col-span-1 mt-4"><label className={labelClass}>Huisnr.</label><input type="text" className={inputClass} value={clientInfo.houseNumber || ''} onChange={e => handleClientChange('houseNumber', e.target.value)} /></div>
+                         <div className="col-span-4 sm:col-span-3 mt-4"><label className={labelClass}>{t.street}</label><input type="text" className={inputClass} value={clientInfo.street || ''} onChange={e => handleClientChange('street', e.target.value)} /></div>
+                         <div className="col-span-4 sm:col-span-1 mt-4"><label className={labelClass}>{t.houseNumber}</label><input type="text" className={inputClass} value={clientInfo.houseNumber || ''} onChange={e => handleClientChange('houseNumber', e.target.value)} /></div>
                          
-                         <div className="col-span-4 sm:col-span-1"><label className={labelClass}>Postcode</label><input type="text" className={inputClass} value={clientInfo.zipCode || ''} onChange={e => handleClientChange('zipCode', e.target.value)} /></div>
-                         <div className="col-span-4 sm:col-span-1"><label className={labelClass}>Plaats / Stad</label><input type="text" className={inputClass} value={clientInfo.city || ''} onChange={e => handleClientChange('city', e.target.value)} /></div>
-                         <div className="col-span-4 sm:col-span-2"><label className={labelClass}>Land</label><input type="text" className={inputClass} value={clientInfo.country || ''} onChange={e => handleClientChange('country', e.target.value)} /></div>
+                         <div className="col-span-4 sm:col-span-1"><label className={labelClass}>{t.zipCode}</label><input type="text" className={inputClass} value={clientInfo.zipCode || ''} onChange={e => handleClientChange('zipCode', e.target.value)} /></div>
+                         <div className="col-span-4 sm:col-span-1"><label className={labelClass}>{t.city}</label><input type="text" className={inputClass} value={clientInfo.city || ''} onChange={e => handleClientChange('city', e.target.value)} /></div>
+                         <div className="col-span-4 sm:col-span-2"><label className={labelClass}>{t.country}</label><input type="text" className={inputClass} value={clientInfo.country || ''} onChange={e => handleClientChange('country', e.target.value)} /></div>
 
-                         <div className="col-span-4 sm:col-span-1 mt-4"><label className={labelClass}>Contactpersoon <span className="text-red-500">*</span></label><input type="text" className={inputClass} value={clientInfo.contactName || ''} onChange={e => handleClientChange('contactName', e.target.value)} /></div>
-                         <div className="col-span-4 sm:col-span-1 mt-4"><label className={labelClass}>Functie</label><input type="text" className={inputClass} value={clientInfo.role || ''} onChange={e => handleClientChange('role', e.target.value)} /></div>
-                         <div className="col-span-4 sm:col-span-1 mt-4"><label className={labelClass}>E-mail <span className="text-red-500">*</span></label><input type="email" className={inputClass} value={clientInfo.email || ''} onChange={e => handleClientChange('email', e.target.value)} /></div>
-                         <div className="col-span-4 sm:col-span-1 mt-4"><label className={labelClass}>Telefoon</label><input type="text" className={inputClass} value={clientInfo.phone || ''} onChange={e => handleClientChange('phone', e.target.value)} /></div>
+                         <div className="col-span-4 sm:col-span-1 mt-4"><label className={labelClass}>{t.contactName} <span className="text-red-500">*</span></label><input type="text" className={inputClass} value={clientInfo.contactName || ''} onChange={e => handleClientChange('contactName', e.target.value)} /></div>
+                         <div className="col-span-4 sm:col-span-1 mt-4"><label className={labelClass}>{t.role}</label><input type="text" className={inputClass} value={clientInfo.role || ''} onChange={e => handleClientChange('role', e.target.value)} /></div>
+                         <div className="col-span-4 sm:col-span-1 mt-4"><label className={labelClass}>{t.email} <span className="text-red-500">*</span></label><input type="email" className={inputClass} value={clientInfo.email || ''} onChange={e => handleClientChange('email', e.target.value)} /></div>
+                         <div className="col-span-4 sm:col-span-1 mt-4"><label className={labelClass}>{t.phone}</label><input type="text" className={inputClass} value={clientInfo.phone || ''} onChange={e => handleClientChange('phone', e.target.value)} /></div>
                        </div>
                     </div>
 
                     <div className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200">
-                       <h2 className="font-extrabold text-2xl mb-8 text-slate-800 border-b-2 border-slate-100 pb-4">3. Doelen & Uitdagingen</h2>
+                       <h2 className="font-extrabold text-2xl mb-8 text-slate-800 border-b-2 border-slate-100 pb-4">3. {t.secBTitle.replace('B. ', '')}</h2>
                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                          <div>
-                           <label className="block mb-3 text-xs font-bold tracking-wide text-orange-700 uppercase flex items-center gap-2"><AlertCircle size={16}/> Huidige Uitdaging</label>
+                           <label className="block mb-3 text-xs font-bold tracking-wide text-orange-700 uppercase flex items-center gap-2"><AlertCircle size={16}/> {t.challenge}</label>
                            <textarea rows="4" className={`${inputClass} resize-y focus:ring-orange-500 focus:border-orange-500`} value={project.currentChallenge || ''} onChange={e => handleProjectChange('currentChallenge', e.target.value)} />
                          </div>
                          <div>
-                           <label className="block mb-3 text-xs font-bold tracking-wide text-green-700 uppercase flex items-center gap-2"><CheckCircle size={16}/> Beoogd Doel</label>
+                           <label className="block mb-3 text-xs font-bold tracking-wide text-green-700 uppercase flex items-center gap-2"><CheckCircle size={16}/> {t.goal}</label>
                            <textarea rows="4" className={`${inputClass} resize-y focus:ring-green-500 focus:border-green-500`} value={project.trialTarget || ''} onChange={e => handleProjectChange('trialTarget', e.target.value)} />
                          </div>
                        </div>
                     </div>
 
                     <div className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200">
-                      <h2 className="font-extrabold text-2xl mb-8 text-slate-800 border-b-2 border-slate-100 pb-4 flex items-center gap-3"><Truck size={28} className="text-indigo-600"/> 4. Product Supply Chain</h2>
+                      <h2 className="font-extrabold text-2xl mb-8 text-slate-800 border-b-2 border-slate-100 pb-4 flex items-center gap-3"><Truck size={28} className="text-indigo-600"/> 4. {t.supplyChainFlow}</h2>
                       
                       <div className="mb-8 bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100">
-                        <label className="block mb-3 text-xs font-bold tracking-wide text-indigo-900 uppercase">Transport Modus <span className="text-red-500">*</span></label>
+                        <label className="block mb-3 text-xs font-bold tracking-wide text-indigo-900 uppercase">{t.transportMode} <span className="text-red-500">*</span></label>
                         <div className="flex flex-wrap gap-4">
                           {TRANSPORT_MODES.map(mode => {
                             let modeDisplay = mode;
-                            if(mode === 'Air Freight') modeDisplay = 'Luchtvracht';
-                            if(mode === 'Sea Freight') modeDisplay = 'Zeevracht';
-                            if(mode === 'Road Transport') modeDisplay = 'Wegtransport';
-                            if(mode === 'Storage') modeDisplay = 'Opslag';
+                            if(mode === 'Air Freight') modeDisplay = t.airFreight;
+                            if(mode === 'Sea Freight') modeDisplay = t.seaFreight;
+                            if(mode === 'Road Transport') modeDisplay = t.roadTransport;
+                            if(mode === 'Storage') modeDisplay = t.storage;
 
                             return (
                                 <button 
@@ -1242,15 +1326,15 @@
                       </div>
 
                       <div className="space-y-3">
-                        <label className="block mb-2 text-xs font-bold tracking-wide text-slate-500 uppercase">Supply Chain Overzicht</label>
+                        <label className="block mb-2 text-xs font-bold tracking-wide text-slate-500 uppercase">{t.supplyChainFlow}</label>
                         
                         {/* Desktop Header - CSS GRID */}
                         <div className="hidden lg:grid grid-cols-[80px_1fr_150px_150px_130px_40px] items-center gap-4 px-4 text-xs font-bold text-slate-500 uppercase tracking-widest">
-                           <div>Stap</div>
-                           <div>Fase (Activiteit) <span className="text-red-500">*</span></div>
-                           <div className="text-center">Temp (°C) <span className="text-red-500">*</span></div>
-                           <div className="text-center">Tijd (Dagen) <span className="text-red-500">*</span></div>
-                           <div>Actie</div>
+                           <div>{t.step}</div>
+                           <div>{t.phase} <span className="text-red-500">*</span></div>
+                           <div className="text-center">{t.temp} <span className="text-red-500">*</span></div>
+                           <div className="text-center">{t.days} <span className="text-red-500">*</span></div>
+                           <div>{t.action}</div>
                            <div></div>
                         </div>
 
@@ -1271,19 +1355,19 @@
 
                               {/* Stage Input */}
                               <div className="w-full">
-                                 <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">Fase (Activiteit) <span className="text-red-500">*</span></label>
+                                 <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">{t.phase} <span className="text-red-500">*</span></label>
                                  {idx === 2 ? (
                                     <select className={`${inputClass} py-2.5 font-bold w-full`} value={step.stage || ''} onChange={e => updateChainStep(idx, 'stage', e.target.value)}>
                                       <option>Transport by road</option><option>Seafreight</option><option>Airfreight</option><option>Storage</option>
                                     </select>
                                   ) : (
-                                    <input type="text" className={`${inputClass} py-2.5 font-bold w-full`} value={step.stage || ''} placeholder="bijv. Oogst, Transport..." onChange={e => updateChainStep(idx, 'stage', e.target.value)} />
+                                    <input type="text" className={`${inputClass} py-2.5 font-bold w-full`} value={step.stage || ''} placeholder="bijv. Boerderij, Transport..." onChange={e => updateChainStep(idx, 'stage', e.target.value)} />
                                   )}
                               </div>
 
                               {/* Temp Block */}
                               <div className="w-full">
-                                 <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">Temp (°C) <span className="text-red-500">*</span></label>
+                                 <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">{t.temp} <span className="text-red-500">*</span></label>
                                  <div className="flex items-center gap-1.5">
                                     <input type="number" className={`${narrowInputClass} w-full`} value={step.tempStart || ''} placeholder="Min" onChange={e => updateChainStep(idx, 'tempStart', e.target.value)} />
                                     <span className="text-slate-400 font-bold shrink-0">-</span>
@@ -1293,7 +1377,7 @@
 
                               {/* Days Block */}
                               <div className="w-full">
-                                 <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">Tijd (Dagen) <span className="text-red-500">*</span></label>
+                                 <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">{t.days} <span className="text-red-500">*</span></label>
                                  <div className="flex items-center gap-1.5">
                                     <input type="number" className={`${narrowInputClass} w-full`} value={step.daysStart || ''} placeholder="Min" onChange={e => updateChainStep(idx, 'daysStart', e.target.value)} />
                                     <span className="text-slate-400 font-bold shrink-0">-</span>
@@ -1303,17 +1387,17 @@
 
                               {/* Action Block */}
                               <div className="w-full">
-                                 <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">Actie</label>
+                                 <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">{t.action}</label>
                                  <select className={`${inputClass} py-2.5 font-bold px-2 w-full text-slate-700`} value={step.action || 'none'} onChange={e => updateChainStep(idx, 'action', e.target.value)}>
-                                   <option value="none">- Geen -</option>
-                                   <option value="pack" className="text-green-700">Inpakken</option>
-                                   <option value="unpack" className="text-red-700">Uitpakken</option>
+                                   <option value="none">{t.actNone}</option>
+                                   <option value="pack" className="text-green-700">{t.actPack}</option>
+                                   <option value="unpack" className="text-red-700">{t.actUnpack}</option>
                                  </select>
                               </div>
 
                               {/* Desktop Delete */}
                               <div className="hidden lg:flex justify-center w-full">
-                                 <button onClick={() => removeChainStep(idx)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Verwijder Stap">
+                                 <button onClick={() => removeChainStep(idx)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title={t.removeStep}>
                                    <Trash2 size={20}/>
                                  </button>
                               </div>
@@ -1322,7 +1406,7 @@
                         
                         <button onClick={addChainStep} className="w-full py-4 mt-4 border-2 border-dashed border-indigo-200 bg-indigo-50/50 hover:bg-indigo-100 text-indigo-700 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-sm">
                           <div className="bg-white p-1.5 rounded-lg shadow-sm"><Plus size={16} /></div> 
-                          Extra Stap Toevoegen
+                          {t.addStep}
                         </button>
                       </div>
                     </div>
@@ -1340,45 +1424,45 @@
                            
                            {/* Criteria */}
                            <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col h-full">
-                              <label className="block mb-4 font-extrabold text-slate-800 text-lg border-b border-slate-100 pb-3">Globale Kwaliteitscriteria</label>
+                              <label className="block mb-4 font-extrabold text-slate-800 text-lg border-b border-slate-100 pb-3">{t.globCrit}</label>
                               <div className="flex flex-wrap gap-2 mb-6 flex-1">
-                                {(!project.criteria || project.criteria.length === 0) && <span className="text-sm text-gray-400 italic">Geen criteria geselecteerd.</span>}
+                                {(!project.criteria || project.criteria.length === 0) && <span className="text-sm text-gray-400 italic">{t.noCrit}</span>}
                                 {(project.criteria || []).map(c => (
                                   <span key={c} className="bg-slate-50 border border-slate-300 text-slate-700 text-sm px-3 py-1.5 rounded-lg flex items-center gap-2 whitespace-nowrap shadow-sm font-medium">{c} <button onClick={() => toggleCriteria(c)} className="text-red-400 hover:text-red-600 font-bold ml-1">×</button></span>
                                 ))}
                               </div>
                               <div className="flex flex-col sm:flex-row gap-3 mt-auto">
                                 <select className={`${inputClass} flex-1`} value={newCriteria || ''} onChange={e => setNewCriteria(e.target.value)}>
-                                   <option value="">Selecteer standaard criterium...</option>
+                                   <option value="">{t.selCrit}</option>
                                    {DEFAULT_CRITERIA.filter(c => !(project.criteria || []).includes(c)).map(c => <option key={c}>{c}</option>)}
                                 </select>
-                                <button onClick={addNewCriteria} className="bg-slate-800 text-white px-5 py-3 rounded-lg hover:bg-slate-900 flex justify-center items-center font-bold shadow-sm transition-colors shrink-0 gap-2 whitespace-nowrap"><Plus size={18}/> Criterium Toevoegen</button>
+                                <button onClick={addNewCriteria} className="bg-slate-800 text-white px-5 py-3 rounded-lg hover:bg-slate-900 flex justify-center items-center font-bold shadow-sm transition-colors shrink-0 gap-2 whitespace-nowrap"><Plus size={18}/> {t.addCrit}</button>
                               </div>
                            </div>
 
                            {/* Evaluation Days */}
                            <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col h-full">
-                              <label className="block mb-2 font-extrabold text-slate-800 text-lg">Globale Evaluatiedagen</label>
-                              <p className="text-sm text-slate-500 mb-6">Geef aan op welke dagen de verpakkingen worden geopend en geëvalueerd.</p>
+                              <label className="block mb-2 font-extrabold text-slate-800 text-lg">{t.globEval}</label>
+                              <p className="text-sm text-slate-500 mb-6">{t.globEvalDesc}</p>
                               
                               <div className="flex flex-wrap gap-3 mb-6 flex-1 items-start">
                                   {(groups[0]?.measurements || []).map((m, i) => (
                                       <div key={i} className="flex gap-2 items-center bg-slate-50 p-2 rounded-xl border border-slate-200 shadow-sm">
-                                          <span className="text-sm font-extrabold text-slate-600 ml-2">Dag</span>
+                                          <span className="text-sm font-extrabold text-slate-600 ml-2">{t.day}</span>
                                           <input type="number" className="w-16 bg-white border border-slate-300 text-blue-700 text-center text-lg font-bold rounded-lg py-1 focus:ring-2 focus:ring-blue-500 outline-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" value={m.day} onChange={e => updateEvaluationDay(groups[0].id, m.day, e.target.value)} />
                                           {i > 0 && <button onClick={() => removeEvaluationDay(groups[0].id, m.day)} className="text-red-400 hover:text-red-600 p-1.5 bg-white rounded-lg border shadow-sm"><X size={16}/></button>}
                                       </div>
                                   ))}
                               </div>
                               <div className="mt-auto">
-                                  <button onClick={() => addEvaluationDay(groups[0].id)} className="w-full sm:w-auto text-sm bg-blue-50 text-blue-700 px-5 py-3 rounded-xl font-bold border border-blue-200 hover:bg-blue-100 transition-colors inline-flex justify-center items-center gap-2"><Plus size={18}/> Evaluatiedag Toevoegen</button>
+                                  <button onClick={() => addEvaluationDay(groups[0].id)} className="w-full sm:w-auto text-sm bg-blue-50 text-blue-700 px-5 py-3 rounded-xl font-bold border border-blue-200 hover:bg-blue-100 transition-colors inline-flex justify-center items-center gap-2"><Plus size={18}/> {t.addEval}</button>
                               </div>
                            </div>
                         </div>
 
                         {/* PerfoTec Technology */}
                         <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col h-full">
-                            <label className="block mb-4 font-extrabold text-slate-800 text-lg border-b border-slate-100 pb-3">PerfoTec Technologie</label>
+                            <label className="block mb-4 font-extrabold text-slate-800 text-lg border-b border-slate-100 pb-3">{t.perfTech}</label>
                             <div className="flex flex-wrap gap-3">
                                 {PERFOTEC_TECHNOLOGIES.map(tech => {
                                     const isSelected = project.technologies?.includes(tech);
@@ -1404,7 +1488,7 @@
                        <div className="lg:col-span-3 space-y-4">
                            <button onClick={addNewVariant} className="w-full py-4 rounded-2xl font-extrabold border-2 border-dashed border-green-300 hover:border-green-500 bg-green-50/50 hover:bg-green-50 text-green-700 transition flex items-center justify-center gap-2 shadow-sm mb-2">
                               <div className="bg-white p-1 rounded-md shadow-sm"><Plus size={18}/></div>
-                              Variant Toevoegen
+                              {t.addVar}
                            </button>
 
                            <div className="space-y-3">
@@ -1412,7 +1496,7 @@
                                <div key={g.id} onClick={() => setActiveGroupId(g.id)} className={`p-4 rounded-xl border-2 cursor-pointer transition-all relative group shadow-sm ${activeGroupId === g.id ? 'bg-white border-green-500 transform scale-[1.02]' : 'bg-slate-50 border-slate-200 hover:bg-white hover:border-slate-300'}`}>
                                  <div className="flex items-center gap-3 font-extrabold text-base text-slate-800">
                                    <div className="w-4 h-4 rounded-full shrink-0 shadow-sm" style={{ backgroundColor: CHART_COLORS[idx % CHART_COLORS.length].stroke }}></div>
-                                   <span className="truncate">{g.name || 'Variant'}</span>
+                                   <span className="truncate">{g.name || t.varName}</span>
                                  </div>
                                  <div className="absolute top-2 right-2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <div className="flex gap-1">
@@ -1420,8 +1504,8 @@
                                       <button onClick={(e) => { e.stopPropagation(); moveGroup(g.id, 'down'); }} className="p-1.5 bg-white border border-slate-200 text-slate-500 rounded-lg hover:bg-slate-100 shadow-sm"><ChevronDown size={16}/></button>
                                     </div>
                                     <div className="flex gap-1 mt-1">
-                                      <button onClick={(e) => { e.stopPropagation(); duplicateGroup(g.id); }} className="p-1.5 bg-blue-50 text-blue-600 border border-blue-100 rounded-lg hover:bg-blue-100 shadow-sm" title="Dupliceren"><Copy size={16} /></button>
-                                      <button onClick={(e) => { e.stopPropagation(); removeGroup(g.id); }} className="p-1.5 bg-red-50 text-red-600 border border-red-100 rounded-lg hover:bg-red-100 shadow-sm" title="Verwijderen"><Trash2 size={16} /></button>
+                                      <button onClick={(e) => { e.stopPropagation(); duplicateGroup(g.id); }} className="p-1.5 bg-blue-50 text-blue-600 border border-blue-100 rounded-lg hover:bg-blue-100 shadow-sm" title={t.dupDesc}><Copy size={16} /></button>
+                                      <button onClick={(e) => { e.stopPropagation(); removeGroup(g.id); }} className="p-1.5 bg-red-50 text-red-600 border border-red-100 rounded-lg hover:bg-red-100 shadow-sm" title={t.delete}><Trash2 size={16} /></button>
                                     </div>
                                  </div>
                                </div>
@@ -1435,40 +1519,40 @@
                            {groups.find(g => g.id === activeGroupId) && (
                              <>
                                <div>
-                                 <h3 className="font-extrabold text-2xl mb-8 text-slate-800 border-b-2 border-slate-100 pb-4">Variant Configuratie</h3>
+                                 <h3 className="font-extrabold text-2xl mb-8 text-slate-800 border-b-2 border-slate-100 pb-4">{t.varConf}</h3>
                                  
                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
-                                   <div><label className={labelClass}>Variant Naam</label><input type="text" className={`${inputClass} text-lg font-bold`} value={groups.find(g => g.id === activeGroupId).name || ''} onChange={(e) => handleGroupChange(activeGroupId, 'name', null, e.target.value)} /></div>
-                                   <div><label className={labelClass}>Type Verpakking</label><select className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.packaging || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'packaging', e.target.value)}>{PACKAGING_TYPES.map(t => <option key={t}>{t}</option>)}</select></div>
+                                   <div><label className={labelClass}>{t.varName}</label><input type="text" className={`${inputClass} text-lg font-bold`} value={groups.find(g => g.id === activeGroupId).name || ''} onChange={(e) => handleGroupChange(activeGroupId, 'name', null, e.target.value)} /></div>
+                                   <div><label className={labelClass}>{t.packType}</label><select className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.packaging || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'packaging', e.target.value)}>{PACKAGING_TYPES.map(type => <option key={type}>{type}</option>)}</select></div>
                                  </div>
                                  
                                  <div className="bg-gradient-to-br from-slate-50 to-slate-100 p-8 rounded-2xl border border-slate-200 shadow-sm mb-10">
-                                   <label className="block mb-6 text-sm font-extrabold tracking-widest text-blue-900 uppercase border-b border-blue-200 pb-2">Verpakkingsspecificaties & Samples</label>
+                                   <label className="block mb-6 text-sm font-extrabold tracking-widest text-blue-900 uppercase border-b border-blue-200 pb-2">{t.packSpecs}</label>
                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-6">
-                                      <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">Lengte (mm)</label><input type="number" className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.length || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'length', e.target.value)} /></div>
-                                      <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">Breedte (mm)</label><input type="number" className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.width || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'width', e.target.value)} /></div>
-                                      <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">Hoogte (mm)</label><input type="number" className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.height || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'height', e.target.value)} /></div>
+                                      <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">{t.len}</label><input type="number" className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.length || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'length', e.target.value)} /></div>
+                                      <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">{t.wid}</label><input type="number" className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.width || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'width', e.target.value)} /></div>
+                                      <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">{t.hei}</label><input type="number" className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.height || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'height', e.target.value)} /></div>
                                    </div>
                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                                     <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">Materiaal</label><input className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.material || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'material', e.target.value)} /></div>
-                                     <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">Transmissiewaarde</label><input type="text" className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.holes || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'holes', e.target.value)} /></div>
-                                     <div><label className="text-xs text-blue-700 font-extrabold uppercase tracking-wider mb-2 block">Samples / Meting</label><input type="number" min="1" className={`${inputClass} bg-white border-blue-300 ring-2 ring-blue-50 font-extrabold text-blue-900 text-lg`} value={groups.find(g => g.id === activeGroupId).specs.sampleCount || 3} onChange={(e) => handleSampleCountChange(activeGroupId, parseInt(e.target.value))} /></div>
+                                     <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">{t.material}</label><input className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.material || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'material', e.target.value)} /></div>
+                                     <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">{t.transVal}</label><input type="text" className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.holes || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'holes', e.target.value)} /></div>
+                                     <div><label className="text-xs text-blue-700 font-extrabold uppercase tracking-wider mb-2 block">{t.sampMeas}</label><input type="number" min="1" className={`${inputClass} bg-white border-blue-300 ring-2 ring-blue-50 font-extrabold text-blue-900 text-lg`} value={groups.find(g => g.id === activeGroupId).specs.sampleCount || 3} onChange={(e) => handleSampleCountChange(activeGroupId, parseInt(e.target.value))} /></div>
                                    </div>
                                  </div>
                                  
                                  <div className="bg-slate-50 p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm mb-10">
                                     <div className="flex flex-col mb-6">
-                                      <h4 className="font-extrabold text-xl text-slate-800 mb-1">Tijdlijn & Gebeurtenissen</h4>
-                                      <p className="text-sm text-slate-500">Selecteer de specifieke samplenummers (bijv. 1, 2, 3) die de fysieke verpakkingen vertegenwoordigen voor elke actie.</p>
+                                      <h4 className="font-extrabold text-xl text-slate-800 mb-1">{t.timeEv}</h4>
+                                      <p className="text-sm text-slate-500">{t.timeEvDesc}</p>
                                     </div>
                                     <div className="overflow-x-auto rounded-xl border border-slate-200">
                                       <table className="w-full text-sm bg-white">
                                         <thead className="bg-slate-100 border-b border-slate-200">
                                           <tr className="text-left text-slate-600 uppercase tracking-wider text-[10px] font-bold">
-                                            <th className="p-4 w-20 text-center">Dag</th>
-                                            <th className="p-4 border-l border-slate-200">Meten Gas/Gewicht</th>
-                                            <th className="p-4 border-l border-slate-200 text-orange-700">Open Verpakking</th>
-                                            <th className="p-4 border-l border-slate-200 text-green-700">Kwaliteit Evalueren</th>
+                                            <th className="p-4 w-20 text-center">{t.day}</th>
+                                            <th className="p-4 border-l border-slate-200">{t.evalMeas}</th>
+                                            <th className="p-4 border-l border-slate-200 text-orange-700">{t.evalOpen}</th>
+                                            <th className="p-4 border-l border-slate-200 text-green-700">{t.evalQual}</th>
                                           </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
@@ -1485,13 +1569,13 @@
                                                   P+{m.day}
                                                 </td>
                                                 <td className="p-4 border-l border-slate-100">
-                                                  <SampleToggles max={sCount} selected={m.measure||[]} disabled={disabledForMeasure} activeClass="bg-blue-500 border-blue-600 text-white shadow-sm transform scale-105" onChange={s => toggleEvent(activeGroupId, m.day, 'measure', s)} />
+                                                  <SampleToggles t={t} max={sCount} selected={m.measure||[]} disabled={disabledForMeasure} activeClass="bg-blue-500 border-blue-600 text-white shadow-sm transform scale-105" onChange={s => toggleEvent(activeGroupId, m.day, 'measure', s)} />
                                                 </td>
                                                 <td className="p-4 border-l border-slate-100">
-                                                  <SampleToggles max={sCount} selected={m.open||[]} disabled={[]} activeClass="bg-orange-500 border-orange-600 text-white shadow-sm transform scale-105" onChange={s => toggleEvent(activeGroupId, m.day, 'open', s)} />
+                                                  <SampleToggles t={t} max={sCount} selected={m.open||[]} disabled={[]} activeClass="bg-orange-500 border-orange-600 text-white shadow-sm transform scale-105" onChange={s => toggleEvent(activeGroupId, m.day, 'open', s)} />
                                                 </td>
                                                 <td className="p-4 border-l border-slate-100">
-                                                  <SampleToggles max={sCount} selected={m.evaluate||[]} disabled={[]} activeClass="bg-green-500 border-green-600 text-white shadow-sm transform scale-105" onChange={s => toggleEvent(activeGroupId, m.day, 'evaluate', s)} />
+                                                  <SampleToggles t={t} max={sCount} selected={m.evaluate||[]} disabled={[]} activeClass="bg-green-500 border-green-600 text-white shadow-sm transform scale-105" onChange={s => toggleEvent(activeGroupId, m.day, 'evaluate', s)} />
                                                 </td>
                                               </tr>
                                             )
@@ -1501,7 +1585,7 @@
                                     </div>
                                     <div className="mt-4 text-sm font-medium text-slate-500 bg-white p-4 rounded-lg border border-slate-100 inline-flex items-start gap-3">
                                        <AlertCircle size={18} className="text-blue-400 shrink-0 mt-0.5" />
-                                       <span>Zodra een sample op een eerdere dag als 'Open' is gemarkeerd, kan deze logischerwijs niet meer gekozen worden voor gas/gewichtsmetingen (de knop wordt grijs en onklikbaar).</span>
+                                       <span>{t.warnOpen}</span>
                                     </div>
                                  </div>
 
@@ -1511,12 +1595,12 @@
                                           <LineChart size={28} className="text-blue-500" />
                                        </div>
                                        <div>
-                                         <div className="font-extrabold text-lg text-blue-950 mb-1">Voorspelde Gasgrafiek</div>
-                                         <div className="text-sm font-medium text-blue-700">Upload een screenshot van de voorspelling voor deze specifieke variant</div>
+                                         <div className="font-extrabold text-lg text-blue-950 mb-1">{t.predGasGraph}</div>
+                                         <div className="text-sm font-medium text-blue-700">{t.predGasGraphDesc}</div>
                                        </div>
                                     </div>
                                     <label className="cursor-pointer bg-white border border-blue-200 text-blue-700 px-6 py-3 rounded-xl font-bold text-sm hover:bg-blue-100 hover:border-blue-300 transition-all shrink-0 whitespace-nowrap shadow-sm">
-                                       Upload Afbeelding
+                                       {t.uploadImg}
                                        <input 
                                          type="file" 
                                          accept="image/*" 
@@ -1556,34 +1640,34 @@
                        <div className="md:col-span-2 border-b-2 border-slate-100 pb-4">
                           <h2 className="font-extrabold text-2xl text-slate-800 flex items-center gap-3">
                              <FileText className="text-blue-600" size={28}/>
-                             Voorstel & Evaluatie Teksten
+                             {t.propEvalTxt}
                           </h2>
                        </div>
                        
                        <div className="md:col-span-2">
-                          <label className={`${labelClass} text-sm mb-3`}>Introductie / Huidige Uitdaging</label>
+                          <label className={`${labelClass} text-sm mb-3`}>{t.introChal}</label>
                           <RichTextEditor 
                              value={proposal.intro} 
                              onChange={(val) => setProposal(prev => ({...prev, intro: val}))} 
-                             placeholder="Beschrijf de uitdaging en waarom we deze test uitvoeren..."
+                             placeholder={t.introChalPl}
                           />
                        </div>
                        
                        <div className="md:col-span-2">
-                          <label className={`${labelClass} text-sm mb-3`}>Doelen / Verwachte Resultaten</label>
+                          <label className={`${labelClass} text-sm mb-3`}>{t.goalExp}</label>
                           <RichTextEditor 
                              value={proposal.expectedOutcomes} 
                              onChange={(val) => setProposal(prev => ({...prev, expectedOutcomes: val}))} 
-                             placeholder="Wat hopen we te bereiken met deze test?"
+                             placeholder={t.goalExpPl}
                           />
                        </div>
                        
                        <div className="md:col-span-2">
-                          <label className={`${labelClass} text-sm mb-3`}>Benodigdheden & Afspraken</label>
+                          <label className={`${labelClass} text-sm mb-3`}>{t.reqAgreem}</label>
                           <RichTextEditor 
                              value={proposal.requirements} 
                              onChange={(val) => setProposal(prev => ({...prev, requirements: val}))} 
-                             placeholder="Wat moet de klant aanleveren? Welke afspraken zijn er gemaakt?"
+                             placeholder={t.reqAgreemPl}
                           />
                        </div>
                     </div>
