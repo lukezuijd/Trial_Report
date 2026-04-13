@@ -97,12 +97,12 @@
         // --- HELPER FUNCTIONS ---
         const getStageIcon = (name) => {
           const n = name?.toLowerCase() || '';
-          if (n.includes('farm') || n.includes('harvest') || n.includes('oogst')) return <Tractor size={14} color={BRAND.colors.black} />;
-          if (n.includes('sea')) return <Ship size={14} color={BRAND.colors.black} />;
-          if (n.includes('air')) return <Plane size={14} color={BRAND.colors.black} />;
-          if (n.includes('storage') || n.includes('dc')) return <Warehouse size={14} color={BRAND.colors.black} />;
-          if (n.includes('store') || n.includes('retail')) return <Store size={14} color={BRAND.colors.black} />;
-          if (n.includes('consumer') || n.includes('eat')) return <Utensils size={14} color={BRAND.colors.black} />;
+          if (n.includes('farm') || n.includes('harvest') || n.includes('oogst') || n.includes('granja')) return <Tractor size={14} color={BRAND.colors.black} />;
+          if (n.includes('sea') || n.includes('zee') || n.includes('marítimo')) return <Ship size={14} color={BRAND.colors.black} />;
+          if (n.includes('air') || n.includes('lucht') || n.includes('aéreo')) return <Plane size={14} color={BRAND.colors.black} />;
+          if (n.includes('storage') || n.includes('dc') || n.includes('opslag') || n.includes('almacenamiento')) return <Warehouse size={14} color={BRAND.colors.black} />;
+          if (n.includes('store') || n.includes('retail') || n.includes('winkel') || n.includes('tienda')) return <Store size={14} color={BRAND.colors.black} />;
+          if (n.includes('consumer') || n.includes('eat') || n.includes('consument') || n.includes('consumidor')) return <Utensils size={14} color={BRAND.colors.black} />;
           if (n.includes('pack') && !n.includes('transport')) return <Factory size={14} color={BRAND.colors.black} />;
           return <Truck size={14} color={BRAND.colors.black} />;
         };
@@ -531,7 +531,7 @@
                                      <div key={g.id} className="flex flex-col items-center w-full break-inside-avoid">
                                         <div className="text-lg font-bold mb-4 text-center text-slate-700 bg-white px-6 py-2 rounded-full shadow-sm border border-slate-200">{g.name || 'Variant'}</div>
                                         <div className="w-full flex justify-center bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
-                                           <img src={g.predictedImage} className="w-full h-auto max-h-[500px] object-contain" crossOrigin="anonymous" />
+                                           <img src={g.predictedImage} className="w-full h-auto object-contain" crossOrigin="anonymous" />
                                         </div>
                                      </div>
                                   )
@@ -641,10 +641,12 @@
 
         // --- MAIN APPLICATION ---
         const App = () => {
-          const [lang, setLang] = useState(() => {
-              if (globalConfig.getLanguage) return globalConfig.getLanguage();
-              return 'en';
-          });
+          // Force language to English for this file
+          const [lang, setLang] = useState('en');
+
+          useEffect(() => {
+             if (globalConfig.setLanguage) globalConfig.setLanguage('en');
+          }, []);
 
           // Define translation object matching the interface
           const T = {
@@ -749,7 +751,7 @@
             }
           };
 
-          // Always resolve to english for this file
+          // Always resolve to English for this file
           const t = T['en'];
 
           const [activeTab, setActiveTab] = useState('setup');
@@ -1165,8 +1167,17 @@
                          value={lang} 
                          onChange={(e) => {
                            const val = e.target.value;
-                           if (globalConfig.setLanguage) globalConfig.setLanguage(val);
                            setLang(val);
+                           if (globalConfig.setLanguage) globalConfig.setLanguage(val);
+                           if (val !== 'en') {
+                               setTimeout(() => {
+                                   try { 
+                                       window.location.assign(`proposal_${val}.html`); 
+                                   } catch(err) {
+                                       console.warn("Navigation failed", err);
+                                   }
+                               }, 100);
+                           }
                          }}
                        >
                          {globalConfig.LANGUAGES ? globalConfig.LANGUAGES.map(l => (
@@ -1324,15 +1335,23 @@
                       <div className="mb-8 bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100">
                         <label className="block mb-3 text-xs font-bold tracking-wide text-indigo-900 uppercase">Transport Mode <span className="text-red-500">*</span></label>
                         <div className="flex flex-wrap gap-4">
-                          {TRANSPORT_MODES.map(mode => (
-                            <button 
-                              key={mode} 
-                              onClick={() => handleTransportModeToggle(mode)}
-                              className={`px-5 py-3 rounded-xl text-sm font-bold transition-all border shadow-sm flex items-center gap-2 ${project.transportMode === mode || project.transportModes?.includes(mode) ? 'bg-indigo-600 text-white border-indigo-700 ring-4 ring-indigo-600/20 transform scale-[1.02]' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}
-                            >
-                              {mode} {(project.transportMode === mode || project.transportModes?.includes(mode)) && <CheckCircle size={16} className="text-white"/>}
-                            </button>
-                          ))}
+                          {TRANSPORT_MODES.map(mode => {
+                            let modeDisplay = mode;
+                            if(mode === 'Air Freight') modeDisplay = 'Air Freight';
+                            if(mode === 'Sea Freight') modeDisplay = 'Sea Freight';
+                            if(mode === 'Road Transport') modeDisplay = 'Transport by road';
+                            if(mode === 'Storage') modeDisplay = 'Storage';
+
+                            return (
+                                <button 
+                                key={mode} 
+                                onClick={() => handleTransportModeToggle(mode)}
+                                className={`px-5 py-3 rounded-xl text-sm font-bold transition-all border shadow-sm flex items-center gap-2 ${project.transportMode === mode || project.transportModes?.includes(mode) ? 'bg-indigo-600 text-white border-indigo-700 ring-4 ring-indigo-600/20 transform scale-[1.02]' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}
+                                >
+                                {modeDisplay} {(project.transportMode === mode || project.transportModes?.includes(mode)) && <CheckCircle size={16} className="text-white"/>}
+                                </button>
+                            );
+                          })}
                         </div>
                       </div>
 
