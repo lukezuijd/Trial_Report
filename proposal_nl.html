@@ -1,0 +1,1602 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PerfoTec Voorstel Tool</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Babel compiler for in-browser React (JSX) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- LOAD CENTRAL STYLING & CONFIGURATION -->
+    <link rel="stylesheet" href="style.css">
+    <script src="config.js"></script>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased selection:bg-blue-200 selection:text-blue-900">
+    <div id="root">
+        <div style="padding: 2rem; text-align: center; font-family: sans-serif; color: #666;">
+            Voorstel Tool wordt geladen... Zorg ervoor dat 'style.css' en 'config.js' in dezelfde map staan.
+        </div>
+    </div>
+
+    <script type="text/babel" data-type="module">
+        import React, { useState, useRef, useEffect } from 'https://esm.sh/react@18.2.0';
+        import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
+        
+        // --- FIXED IMPORT LIST ---
+        import { 
+          Printer, FileText, Settings, Layout, CheckCircle, 
+          ArrowRight, Copy, Trash2, Plus, Scale, Upload, Truck, 
+          Thermometer, Clock, Image as ImageIcon, ChevronRight, 
+          Save, FolderOpen, Tractor, Ship, Plane, Warehouse, Store, 
+          Utensils, Factory, ArrowDown, ArrowUp, ChevronUp, ChevronDown, 
+          Bold, Italic, Underline, List, AlertTriangle, Package, PackagePlus,
+          X, Edit3, Camera, FileArchive, LineChart, Globe, AlertCircle,
+          Building2, Target, Beaker, Send, Mail
+        } from 'https://esm.sh/lucide-react@0.292.0';
+
+        // --- LINK WITH CONFIG.JS ---
+        const globalConfig = window.PERFOTEC_CONFIG || {};
+
+        const BRAND = {
+          colors: { 
+            green: globalConfig.BRAND?.colors?.primary?.green || '#007C27', 
+            blue: globalConfig.BRAND?.colors?.primary?.blue || '#054E9A', 
+            black: globalConfig.BRAND?.colors?.neutral?.black || '#211A1A' 
+          },
+          logos: {
+            default: globalConfig.BRAND?.logos?.default || 'https://cdn.prod.website-files.com/68b594c756c22085ddc6c1ea/68b59ba2f027bfeecd25261b_PerfoTec%20logo.png'
+          }
+        };
+
+        const CHART_COLORS = globalConfig.CHART_COLORS || [
+          { stroke: '#054E9A', fill: '#dbeafe', name: 'Electric Blue' },    
+          { stroke: '#007C27', fill: '#dcfce7', name: 'La Salle Green' },     
+          { stroke: '#211A1A', fill: '#f3f4f6', name: 'Eerie Black' },   
+          { stroke: '#ea580c', fill: '#ffedd5', name: 'Orange' },  
+          { stroke: '#9333ea', fill: '#f3e8ff', name: 'Purple' }   
+        ];
+
+        const PACKAGING_TYPES = globalConfig.PACKAGING_TYPES || ['Retail', 'Box/ Crate', 'Cube crate', 'Pallet', 'Punnets', 'Pillow Bag'];
+        const TRANSPORT_MODES = globalConfig.TRANSPORT_MODES || ['Air Freight', 'Sea Freight', 'Road Transport', 'Storage'];
+
+        const DEFAULT_CRITERIA = globalConfig.DEFAULT_CRITERIA || [
+          'General Quality', 'Taste', 'Visual Appearance', 'Color',
+          'Smell / Aroma', 'Texture / Firmness', 'Humidity / Condensation',
+          'Dehydration / Shriveling', 'Moulds / Decay', 'Internal Browning'
+        ];
+
+        const PERFOTEC_TECHNOLOGIES = [
+          'Respiration Measurement (FRM)',
+          'Laser Micro Perforation',
+          'Laser Nano Perforation',
+          'Gas Flush (O2 Control)',
+          'CO2 Shock',
+          'PerfoTec Retail Film',
+          'PerfoTec Liner',
+          'PerfoTec Pallet Cover'
+        ];
+
+        const DEFAULT_SUPPLY_CHAIN = globalConfig.DEFAULT_SUPPLY_CHAIN || [
+          { stage: 'Farm / Harvest', tempStart: '15', tempEnd: '', daysStart: '0.5', daysEnd: '', action: 'none' },
+          { stage: 'Packing House', tempStart: '12', tempEnd: '', daysStart: '1', daysEnd: '', action: 'pack' },
+          { stage: 'Transport by road', tempStart: '6', tempEnd: '', daysStart: '2', daysEnd: '', action: 'none' },
+          { stage: 'Importer / Processor', tempStart: '8', tempEnd: '', daysStart: '1', daysEnd: '', action: 'none' },
+          { stage: 'Retail Store', tempStart: '18', tempEnd: '', daysStart: '4', daysEnd: '', action: 'none' },
+          { stage: 'Consumer (Open Pack)', tempStart: '20', tempEnd: '', daysStart: '2', daysEnd: '', action: 'unpack' }
+        ];
+
+        // --- HELPER CLASSES ---
+        const inputClass = "w-full bg-slate-50 border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block p-3 shadow-sm transition-all hover:bg-slate-100 focus:bg-white";
+        const narrowInputClass = "w-full bg-slate-50 border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block py-2.5 px-1 text-center shadow-sm transition-all hover:bg-slate-100 focus:bg-white [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] min-w-0";
+        const labelClass = "block mb-2 text-xs font-bold tracking-wide text-slate-600 uppercase";
+
+        // --- HELPER FUNCTIONS ---
+        const getStageIcon = (name) => {
+          const n = name?.toLowerCase() || '';
+          if (n.includes('farm') || n.includes('harvest') || n.includes('oogst')) return <Tractor size={14} color={BRAND.colors.black} />;
+          if (n.includes('sea') || n.includes('zee')) return <Ship size={14} color={BRAND.colors.black} />;
+          if (n.includes('air') || n.includes('lucht')) return <Plane size={14} color={BRAND.colors.black} />;
+          if (n.includes('storage') || n.includes('dc') || n.includes('opslag')) return <Warehouse size={14} color={BRAND.colors.black} />;
+          if (n.includes('store') || n.includes('retail') || n.includes('winkel')) return <Store size={14} color={BRAND.colors.black} />;
+          if (n.includes('consumer') || n.includes('eat') || n.includes('consument')) return <Utensils size={14} color={BRAND.colors.black} />;
+          if (n.includes('pack') && !n.includes('transport')) return <Factory size={14} color={BRAND.colors.black} />;
+          return <Truck size={14} color={BRAND.colors.black} />;
+        };
+
+        const formatRange = (start, end, unit) => {
+          if (start && end && start !== end) return `${start}-${end}${unit}`;
+          if (start) return `${start}${unit}`;
+          return `-`;
+        };
+
+        const formatDateToDDMMYYYY = (dateStr) => {
+          if (!dateStr) return '-';
+          const parts = dateStr.split('-');
+          if (parts.length !== 3) return dateStr;
+          return `${parts[2]}/${parts[1]}/${parts[0]}`;
+        };
+
+        // --- COMPONENTS ---
+        const RichTextEditor = ({ value, onChange, placeholder }) => {
+          const editorRef = useRef(null);
+
+          useEffect(() => {
+            if (editorRef.current && value !== editorRef.current.innerHTML) {
+              editorRef.current.innerHTML = value || '';
+            }
+          }, [value]);
+
+          const handleInput = () => {
+            if (editorRef.current) onChange(editorRef.current.innerHTML);
+          };
+
+          const execCmd = (cmd) => {
+            document.execCommand(cmd, false, null);
+            editorRef.current.focus();
+            handleInput();
+          };
+
+          return (
+            <div className="border border-slate-300 rounded-xl overflow-hidden bg-white focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/50 transition flex flex-col h-full min-h-[140px] shadow-sm">
+              <div className="bg-slate-50 border-b border-slate-200 p-1.5 flex gap-1.5 shrink-0">
+                <button type="button" onClick={() => execCmd('bold')} className="p-2 hover:bg-slate-200 rounded-lg text-slate-700 w-9 flex justify-center items-center transition-colors"><Bold size={18}/></button>
+                <button type="button" onClick={() => execCmd('italic')} className="p-2 hover:bg-slate-200 rounded-lg text-slate-700 w-9 flex justify-center items-center transition-colors"><Italic size={18}/></button>
+                <button type="button" onClick={() => execCmd('underline')} className="p-2 hover:bg-slate-200 rounded-lg text-slate-700 w-9 flex justify-center items-center transition-colors"><Underline size={18}/></button>
+                <div className="w-px bg-slate-300 mx-1 my-1"></div>
+                <button type="button" onClick={() => execCmd('insertUnorderedList')} className="p-2 hover:bg-slate-200 rounded-lg text-slate-700 w-9 flex justify-center items-center transition-colors"><List size={18}/></button>
+              </div>
+              <div
+                ref={editorRef}
+                contentEditable
+                onInput={handleInput}
+                onBlur={handleInput}
+                className="p-5 outline-none rich-text-editor text-sm font-sans flex-1 overflow-y-auto min-h-[100px] leading-relaxed"
+                data-placeholder={placeholder}
+              />
+            </div>
+          );
+        };
+
+        const ProductSupplyChainFlow = ({ chain }) => {
+          if (!chain || chain.length === 0) return null;
+          let cumulativeMin = 0;
+          let cumulativeMax = 0;
+
+          return (
+            <div className="flex w-full gap-1 items-start justify-between mt-2 mb-2 font-sans overflow-hidden">
+              {chain.map((step, idx) => {
+                const minD = parseFloat(step.daysStart) || 0;
+                const maxD = step.daysEnd ? parseFloat(step.daysEnd) : minD;
+                cumulativeMin += minD;
+                cumulativeMax += maxD;
+                
+                const cumStr = cumulativeMin === cumulativeMax ? `${cumulativeMin}` : `${cumulativeMin}-${cumulativeMax}`;
+
+                return (
+                  <React.Fragment key={idx}>
+                    {idx > 0 && <div className="h-16 flex items-center justify-center"><ChevronRight size={14} className="text-gray-300 flex-shrink-0" /></div>}
+                    
+                    <div className="flex flex-col items-center flex-1 min-w-0">
+                      <div className="w-full flex flex-col items-center bg-white border border-gray-200 rounded shadow-sm p-1.5 relative">
+                         <div className="absolute top-0 left-0 w-full h-1" style={{backgroundColor: idx % 2 === 0 ? BRAND.colors.green : BRAND.colors.blue}}></div>
+                         
+                         <div className="bg-gray-50 p-1.5 rounded-full mb-1 flex-shrink-0 mt-1">
+                            {getStageIcon(step.stage)}
+                         </div>
+                         
+                         <div className="text-[8px] font-bold text-center uppercase mb-1 min-h-[24px] py-0.5 flex items-center justify-center leading-tight w-full break-words px-0.5">
+                           {step.stage}
+                         </div>
+                         
+                         <div className="w-full border-t border-dotted border-gray-200 my-0.5"></div>
+                         
+                         <div className="flex flex-col justify-center w-full text-[8px] gap-0.5 pb-0.5">
+                            <span className="flex items-center justify-center gap-0.5 font-bold text-gray-700 whitespace-nowrap">
+                              <Thermometer size={8} className="text-red-500"/> {formatRange(step.tempStart, step.tempEnd, '°C')}
+                            </span>
+                            <span className="flex items-center justify-center gap-0.5 text-gray-500 whitespace-nowrap">
+                              <Clock size={8}/> {formatRange(step.daysStart, step.daysEnd, 'd')}
+                            </span>
+                         </div>
+                         
+                         <div className="mt-1 bg-blue-50 text-blue-700 border border-blue-100 text-[7px] font-bold px-1 rounded whitespace-nowrap">
+                            ∑ {cumStr}d
+                         </div>
+                      </div>
+                      
+                      <div className="h-6 w-full flex justify-center items-start mt-1 relative">
+                         {step.action === 'pack' && <div className="flex flex-col items-center"><div className="bg-green-100 text-green-700 rounded-full p-0.5 border border-green-200"><ArrowDown size={10} /></div><span className="text-[6px] font-bold text-green-700 uppercase mt-0.5">Ingepakt</span></div>}
+                         {step.action === 'unpack' && <div className="flex flex-col items-center"><div className="bg-red-100 text-red-700 rounded-full p-0.5 border border-red-200"><ArrowUp size={10} /></div><span className="text-[6px] font-bold text-red-700 uppercase mt-0.5">Geopend</span></div>}
+                      </div>
+                    </div>
+                  </React.Fragment>
+                );
+              })}
+            </div>
+          );
+        };
+
+        const SampleToggles = ({ max, selected, disabled, onChange, activeClass }) => {
+          const arr = Array.from({length: max}, (_, i) => i + 1);
+          return (
+            <div className="flex flex-wrap gap-1.5">
+              {arr.map(s => {
+                const isSel = selected.includes(s);
+                const isDis = disabled.includes(s);
+                return (
+                  <button 
+                    key={s}
+                    type="button"
+                    onClick={() => !isDis && onChange(s)}
+                    disabled={isDis}
+                    title={isDis ? "Sample is al geopend" : `Kies Sample ${s}`}
+                    className={`w-7 h-7 flex items-center justify-center text-xs font-bold rounded-lg border transition-all ${
+                      isDis ? 'bg-slate-100 border-slate-200 text-slate-300 cursor-not-allowed' :
+                      isSel ? activeClass : 
+                      'bg-white border-slate-300 text-slate-500 hover:bg-slate-50 hover:border-slate-400'
+                    }`}
+                  >
+                    {s}
+                  </button>
+                )
+              })}
+            </div>
+          )
+        };
+
+        // --- PRINT PREVIEW ---
+        const PrintPreview = ({ clientInfo, project, groups, proposal, supplyChain, onBack }) => {
+          let allTemps = [];
+          (supplyChain || []).forEach(s => {
+              const ts = parseFloat(s.tempStart); if(!isNaN(ts)) allTemps.push(ts);
+              const te = parseFloat(s.tempEnd); if(!isNaN(te)) allTemps.push(te);
+          });
+          const minTemp = allTemps.length > 0 ? Math.min(...allTemps) : null;
+          const maxTemp = allTemps.length > 0 ? Math.max(...allTemps) : null;
+          const tempString = allTemps.length > 0 ? (minTemp === maxTemp ? `${minTemp}°C` : `${minTemp}°C - ${maxTemp}°C`) : '-°C';
+          const totalDays = project.totalDuration || (supplyChain || []).reduce((acc,s) => acc + parseFloat(s.daysStart || 0), 0);
+
+          // Reusable class for titles to ensure they stand out even if CSS fails
+          const reportTitleClass = "text-3xl font-extrabold uppercase mb-6 brand-heading break-after-avoid";
+          const reportTitleStyle = { color: BRAND.colors.green, borderBottom: `3px solid ${BRAND.colors.gray}`, paddingBottom: '0.75rem', marginTop: '2rem' };
+
+          const handleWordExport = () => {
+              const content = document.getElementById('print-content').innerHTML;
+              const preHtml = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export HTML To Doc</title><style>body { font-family: 'Arial', sans-serif; } .page-break { page-break-before: always; } table { width: 100%; border-collapse: collapse; margin-bottom: 20px; } th, td { border: 1px solid #ccc; padding: 8px; text-align: left; } th { background-color: #007C27; color: white; } img { max-width: 100%; height: auto; }</style></head><body>`;
+              const postHtml = "</body></html>";
+              const html = preHtml + content + postHtml;
+              const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
+              const url = URL.createObjectURL(blob);
+              const downloadLink = document.createElement("a");
+              document.body.appendChild(downloadLink);
+              downloadLink.href = URL.createObjectURL(blob);
+              downloadLink.download = (project.reportTitle || 'Voorstel') + '.doc';
+              downloadLink.click();
+              document.body.removeChild(downloadLink);
+          };
+
+          return (
+            <div className="min-h-screen bg-slate-600 p-0 sm:p-8 overflow-y-auto font-sans print:p-0 print:bg-white no-print-bg selection:bg-blue-200 selection:text-blue-900">
+              <div className="fixed bottom-8 right-8 flex gap-4 no-print z-50">
+                <button onClick={onBack} className="bg-slate-800 text-white px-6 py-3 rounded-full shadow-xl font-bold transition hover:bg-slate-900 flex items-center gap-2"><Edit3 size={18}/> Bewerk</button>
+                <button onClick={handleWordExport} className="bg-blue-600 text-white px-6 py-3 rounded-full shadow-xl font-bold flex items-center gap-2 hover:bg-blue-700 transition">
+                  <FileArchive size={20} /> Download Word
+                </button>
+                <button onClick={() => window.print()} className="bg-green-600 text-white px-6 py-3 rounded-full shadow-xl font-bold flex items-center gap-2 hover:bg-green-700 transition">
+                  <Printer size={18} /> Download PDF
+                </button>
+              </div>
+
+              <div id="print-content" className="max-w-[21cm] mx-auto bg-white shadow-2xl min-h-[29.7cm] p-12 relative print:shadow-none print:max-w-full print:w-full print:p-0 text-slate-800">
+                
+                {/* --- COVER PAGE --- */}
+                <div className="h-[27cm] flex flex-col justify-between items-center text-center pt-24">
+                   <div className="w-full flex flex-col items-center">
+                      <div className="flex justify-between items-start w-full px-8">
+                          <div className="w-1/2 flex justify-start">
+                            {project.logo && (
+                               <img src={project.logo} alt="PerfoTec Logo" className="h-32 max-w-[400px] object-contain" crossOrigin="anonymous" />
+                            )}
+                          </div>
+                          <div className="w-1/2 flex justify-end">
+                            {project.clientLogo && (
+                               <img src={project.clientLogo} alt="Client Logo" className="h-32 max-w-[400px] object-contain" crossOrigin="anonymous" />
+                            )}
+                          </div>
+                      </div>
+
+                      <h1 className="text-5xl font-bold uppercase mt-16 mb-4 brand-heading" style={{ color: BRAND.colors.green }}>{project.reportTitle || 'Test Voorstel'}</h1>
+                      <h2 className="text-5xl font-light brand-heading text-slate-600 mb-16">{project.productName || '<Productnaam>'}</h2>
+                      
+                      <div className="w-full h-[450px] overflow-hidden flex items-center justify-center relative bg-transparent border-none mt-8 rounded-2xl">
+                         {project.coverImage ? <img src={project.coverImage} className="w-full h-full object-contain" crossOrigin="anonymous" /> : project.startImage ? <img src={project.startImage} className="w-full h-full object-contain" crossOrigin="anonymous" /> : <span className="text-slate-300 italic font-medium">Geen Omslagfoto</span>}
+                      </div>
+                   </div>
+                   <div className="w-full flex justify-center items-end pb-4">
+                       <div className="text-sm text-slate-400 font-medium">© {new Date().getFullYear()} PerfoTec B.V.</div>
+                   </div>
+                </div>
+
+                <div className="page-break"></div>
+
+                {/* --- TABLE OF CONTENTS --- */}
+                <div className="min-h-[27cm] flex flex-col pt-12">
+                    <h2 className="text-4xl font-extrabold uppercase mb-8 brand-heading" style={{ color: BRAND.colors.green, borderBottom: `3px solid ${BRAND.colors.gray}`, paddingBottom: '1rem' }}>Inhoudsopgave</h2>
+                    <ul className="text-xl space-y-4 font-medium text-slate-700">
+                        <li className="flex justify-between border-b border-slate-200 pb-2"><span>1. Introductie & Doelstellingen</span></li>
+                        <li className="flex justify-between border-b border-slate-200 pb-2"><span>2. Bedrijfs- & Projectinfo</span></li>
+                        <li className="flex justify-between border-b border-slate-200 pb-2"><span>3. Productkenmerken & Defectpreventie</span></li>
+                        <li className="flex justify-between border-b border-slate-200 pb-2"><span>4. Gesimuleerde Supply Chain</span></li>
+                        <li className="flex justify-between border-b border-slate-200 pb-2"><span>5. Voorgestelde Testopzet</span></li>
+                        <li className="flex justify-between border-b border-slate-200 pb-2"><span>6. Evaluatieplan</span></li>
+                        <li className="flex justify-between border-b border-slate-200 pb-2"><span>7. Benodigdheden & Afspraken</span></li>
+                    </ul>
+                </div>
+
+                <div className="page-break"></div>
+
+                {/* --- PAGE 1: INTRO & SETTING --- */}
+                <div className="pt-4">
+                  <h2 className={reportTitleClass} style={reportTitleStyle}>1. Introductie & Doelstellingen</h2>
+                  <div className="text-base leading-relaxed text-justify text-slate-800 mb-8">
+                     <div className="mb-6 whitespace-pre-wrap pdf-rich-text" dangerouslySetInnerHTML={{ __html: proposal?.intro || '' }}></div>
+                     
+                     {project.currentChallenge && (
+                       <div className="mb-6 bg-orange-50 p-5 rounded-2xl border border-orange-100">
+                         <h4 className="font-bold text-lg mb-2 text-orange-800">Huidige Uitdaging:</h4>
+                         <div className="whitespace-pre-wrap text-slate-700">{project.currentChallenge}</div>
+                       </div>
+                     )}
+
+                     {project.trialTarget && (
+                       <div className="mb-6 bg-green-50 p-5 rounded-2xl border border-green-100">
+                         <h4 className="font-bold text-lg mb-2 text-green-800">Beoogd Doel:</h4>
+                         <div className="whitespace-pre-wrap text-slate-700">{project.trialTarget}</div>
+                       </div>
+                     )}
+                     
+                     {proposal?.expectedOutcomes && (
+                       <div className="mb-6">
+                         <h4 className="font-bold text-lg mb-2" style={{color: BRAND.colors.blue}}>Verwachte Resultaten:</h4>
+                         <div className="whitespace-pre-wrap pdf-rich-text" dangerouslySetInnerHTML={{ __html: proposal.expectedOutcomes }}></div>
+                       </div>
+                     )}
+                  </div>
+                </div>
+
+                <div className="page-break"></div>
+
+                <div className="pt-4">
+                  <h2 className={reportTitleClass} style={reportTitleStyle}>2. Bedrijfs- & Projectinfo</h2>
+                  <div className="grid grid-cols-[180px_1fr] gap-y-3 text-base text-slate-800 bg-slate-50 p-6 rounded-2xl border border-slate-200">
+                     <div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Product :</div> <div className="font-bold">{project.productName || '-'} {project.type ? `(${project.type})` : ''}</div>
+                     <div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Staat van product :</div> <div className="font-medium">{project.processingType === 'Whole' ? 'Heel' : 'Verwerkt / Gesneden'}</div>
+                     <div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Herkomst :</div> <div className="font-medium">{project.origin || '-'}</div>
+                     
+                     {(clientInfo.companyName || clientInfo.street || clientInfo.contactName || clientInfo.email || clientInfo.phone) && (
+                       <div className="font-bold col-span-2 mt-4 border-t border-slate-200 pt-4 text-lg" style={{color: BRAND.colors.green}}>Bedrijfsgegevens</div>
+                     )}
+                     {clientInfo.companyName && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Bedrijfsnaam :</div> <div className="font-bold">{clientInfo.companyName}</div></>}
+                     
+                     {(() => {
+                       const streetPart = [clientInfo.street, clientInfo.houseNumber].filter(Boolean).join(' ');
+                       const cityPart = [clientInfo.zipCode, clientInfo.city].filter(Boolean).join(' ');
+                       const addressStr = [streetPart, cityPart, clientInfo.country].filter(Boolean).join(', ');
+                       return addressStr ? <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Adres :</div> <div className="font-medium">{addressStr}</div></> : null;
+                     })()}
+
+                     {clientInfo.contactName && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Contactpersoon :</div> <div className="font-medium">{clientInfo.contactName} {clientInfo.role && <span className="text-slate-500">({clientInfo.role})</span>}</div></>}
+                     {(clientInfo.email || clientInfo.phone) && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Contactgegevens :</div> <div className="font-medium">{[clientInfo.email, clientInfo.phone].filter(Boolean).join(' | ')}</div></>}
+
+                     <div className="font-bold col-span-2 mt-4 border-t border-slate-200 pt-4 text-lg" style={{color: BRAND.colors.green}}>PerfoTec Support</div>
+                     {project.employee && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">PerfoTec Medewerker :</div> <div className="font-medium">{project.employee}</div></>}
+                     {(project.employeeEmail || project.employeePhone) && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Contactgegevens :</div> <div className="font-medium">{[project.employeeEmail, project.employeePhone].filter(Boolean).join(' | ')}</div></>}
+                     
+                     <div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-start mt-1">Technologie :</div> 
+                     <div className="font-medium">
+                       {project.technologies && project.technologies.length > 0 ? (
+                          <ul className="list-disc pl-4 space-y-1">
+                            {project.technologies.map((t, i) => <li key={i}>{t}</li>)}
+                          </ul>
+                       ) : (
+                          '-'
+                       )}
+                     </div>
+                  </div>
+                </div>
+
+                <div className="page-break"></div>
+
+                {/* --- PAGE 3: PRODUCT CHARACTERISTICS & MATRIX --- */}
+                <div className="pt-4">
+                  <h2 className={reportTitleClass} style={reportTitleStyle}>3. Productkenmerken & Defectpreventie</h2>
+                  
+                  <div className="mb-8 grid grid-cols-4 gap-4 text-sm">
+                      {project.acpO2 && <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 shadow-sm"><strong className="text-blue-800 block mb-1 uppercase tracking-wide text-xs">O₂ min (ACP):</strong><span className="text-xl font-extrabold text-[#004B87]">{project.acpO2}</span></div>}
+                      {project.co2Max && <div className="bg-red-50 p-4 rounded-xl border border-red-100 shadow-sm"><strong className="text-red-800 block mb-1 uppercase tracking-wide text-xs">CO₂ max:</strong><span className="text-xl font-extrabold text-red-600">{project.co2Max}</span></div>}
+                      {project.co2Shock && <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 shadow-sm"><strong className="text-orange-800 block mb-1 uppercase tracking-wide text-xs">CO₂ shock:</strong><span className="text-xl font-extrabold text-orange-600">{project.co2Shock}</span>{project.co2ShockHours && <div className="text-xs text-orange-600/80 mt-1 font-medium leading-tight">Drop &lt; {project.co2Max || 'max'}% binnen {project.co2ShockHours}u</div>}</div>}
+                      {project.tempMin && <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-sm"><strong className="text-slate-500 block mb-1 uppercase tracking-wide text-xs">Temp min:</strong><span className="text-xl font-extrabold text-slate-800">{project.tempMin}</span></div>}
+                  </div>
+
+                  {project.defectsMatrix && project.defectsMatrix.length > 0 && (
+                      <div className="break-inside-avoid mb-8">
+                          <h3 className="font-bold text-xl mb-4 brand-heading" style={{ color: BRAND.colors.green }}>Defecten & Preventie Matrix</h3>
+                          <div className="overflow-hidden rounded-xl border border-slate-200 shadow-sm">
+                              <table className="w-full text-sm border-collapse">
+                                  <thead>
+                                      <tr>
+                                          <th className="p-3 text-left text-white font-bold" style={{backgroundColor: '#004B87'}}>DEFECT</th>
+                                          <th className="p-3 text-left text-white font-bold" style={{backgroundColor: '#004B87'}}>FYSIOLOGISCHE OORZAAK</th>
+                                          <th className="p-3 text-left text-white font-bold" style={{backgroundColor: '#5B9BD5'}}>EFFECT MHP (VOCHT)</th>
+                                          <th className="p-3 text-left text-white font-bold" style={{backgroundColor: '#007C27'}}>EFFECT MAP (GAS)</th>
+                                      </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-200">
+                                      {project.defectsMatrix.map((row, i) => (
+                                          <tr key={row.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                                              <td className="p-3 font-bold text-slate-800">{row.defect}</td>
+                                              <td className="p-3 text-slate-700">{row.cause}</td>
+                                              <td className="p-3 text-slate-700 font-medium">{row.effectMHP}</td>
+                                              <td className="p-3 text-slate-700 font-medium">{row.effectMAP}</td>
+                                          </tr>
+                                      ))}
+                                  </tbody>
+                              </table>
+                          </div>
+                      </div>
+                  )}
+                </div>
+
+                <div className="page-break"></div>
+
+                {/* --- PAGE 4: SUPPLY CHAIN --- */}
+                <div className="pt-4">
+                  <h2 className={reportTitleClass} style={reportTitleStyle}>4. Gesimuleerde Supply Chain</h2>
+                  <div className="text-base text-slate-800 mb-8">
+                     <p className="mb-4 leading-relaxed">Om ervoor te zorgen dat de test representatief is voor de praktijkomstandigheden, stellen we voor om het product te testen met het volgende temperatuur- en tijdprofiel:</p>
+                     
+                     {project.transportMode && (
+                       <div className="mb-4 inline-block bg-indigo-50 border border-indigo-100 text-indigo-800 px-4 py-2 rounded-lg">
+                         <strong>Transport Modus:</strong> {project.transportMode}
+                       </div>
+                     )}
+                     
+                     <div className="w-full mt-2 break-inside-avoid">
+                       <ProductSupplyChainFlow chain={supplyChain} />
+                     </div>
+                     <div className="mt-6 bg-slate-50 p-4 rounded-xl border border-slate-200 text-sm space-y-2">
+                         <p className="italic text-slate-500">* Temperaturen en duren zijn gesimuleerd op basis van de verstrekte informatie.</p>
+                         <p>Opgeslagen bij <strong>{tempString}</strong> voor in totaal <strong>{totalDays} dagen</strong>.</p>
+                         <p>Het product is verpakt op <strong>{formatDateToDDMMYYYY(project.packingDate || project.date)}</strong>.</p>
+                         <p>Uitpakmomenten zijn specifiek voor elke variant en worden gedetailleerd beschreven in de Testopzet tabel hieronder.</p>
+                     </div>
+                  </div>
+                </div>
+
+                <div className="page-break"></div>
+
+                <div className="pt-4">
+                  <h2 className={reportTitleClass} style={reportTitleStyle}>5. Voorgestelde Testopzet</h2>
+                  <div className="text-base text-slate-800 mb-8">
+                      <p className="mb-6 leading-relaxed">De Fast Respiration Meter wordt gebruikt om de exacte ademhaling van het product te meten. Op basis hiervan berekenen we het optimale microperforatiepatroon voor de PerfoTec variant. De voorgestelde varianten ter vergelijking zijn:</p>
+                      
+                      <div className="overflow-hidden rounded-xl border border-slate-200 shadow-sm break-inside-avoid">
+                          <table className="report-table w-full text-sm">
+                            <thead>
+                              <tr>
+                                <th className="w-1/4">Variant</th>
+                                <th className="text-center">Type Verpakking</th>
+                                <th className="text-center">Materiaal</th>
+                                <th className="text-center">Afmetingen (mm)</th>
+                                <th className="text-center">Netto Gewicht (g)</th>
+                                <th className="text-center">Transmissiewaarde</th>
+                                <th className="text-center">Evaluatiedagen</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-200">
+                              {groups.map((g, i) => {
+                                const isLargeBulk = g.specs?.packaging === 'Cube crate' || g.specs?.packaging === 'Pallet';
+                                const dimUnit = isLargeBulk ? 'cm' : 'mm';
+                                const weightUnit = isLargeBulk ? 'kg' : 'g';
+                                return (
+                                  <tr key={g.id} className="bg-white">
+                                    <td className="font-bold py-4" style={{ borderLeft: `4px solid ${CHART_COLORS[i % CHART_COLORS.length].stroke}` }}>
+                                      {g.name}
+                                    </td>
+                                    <td className="text-center py-4">{g.specs?.packaging || '-'}</td>
+                                    <td className="text-center py-4">{g.specs?.material || '-'}</td>
+                                    <td className="text-center py-4">{g.specs?.length || '-'}x{g.specs?.width || '-'}x{g.specs?.height || '-'} {dimUnit}</td>
+                                    <td className="text-center py-4">{project.startWeight || '-'} {weightUnit}</td>
+                                    <td className="text-center py-4 font-bold">{g.specs?.holes || '-'}</td>
+                                    <td className="text-center py-4 font-medium text-slate-500">{g.measurements.filter(m => parseFloat(m.day) > 0).map(m => `P+${m.day}`).join(', ')}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                      </div>
+                      
+                      {/* PREDICTED GAS GRAPHS */}
+                      {groups.some(g => g.predictedImage) && (
+                          <div className="mt-10 break-inside-avoid bg-slate-50 p-8 rounded-2xl border border-slate-200">
+                             <h4 className="font-bold mb-8 text-2xl text-slate-800">Voorspelde Gasniveaus</h4>
+                             <div className="flex flex-col gap-12 w-full">
+                               {groups.map((g, idx) => {
+                                  if (!g.predictedImage) return null;
+                                  return (
+                                     <div key={g.id} className="flex flex-col items-center w-full break-inside-avoid">
+                                        <div className="text-lg font-bold mb-4 text-center text-slate-700 bg-white px-6 py-2 rounded-full shadow-sm border border-slate-200">{g.name || 'Variant'}</div>
+                                        <div className="w-full flex justify-center bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+                                           <img src={g.predictedImage} className="w-full h-auto max-h-[500px] object-contain" crossOrigin="anonymous" />
+                                        </div>
+                                     </div>
+                                  )
+                               })}
+                             </div>
+                          </div>
+                      )}
+
+                  </div>
+                </div>
+
+                <div className="page-break"></div>
+
+                {/* --- PAGE 6: EVALUATION PLAN --- */}
+                <div className="pt-4">
+                  <h2 className={reportTitleClass} style={reportTitleStyle}>6. Evaluatieplan</h2>
+                  <div className="text-base space-y-6 text-slate-800">
+                     <p className="leading-relaxed">Tijdens de test worden de productkwaliteit en atmosferische condities continu gemonitord volgens onderstaand schema.</p>
+                     
+                     <div className="mb-8">
+                       <h3 className="font-bold text-xl mb-6 text-slate-800">Gedetailleerd Evaluatieschema</h3>
+                       {groups.map((g, i) => (
+                         <div key={g.id} className="mb-8 break-inside-avoid shadow-sm rounded-xl overflow-hidden border border-slate-200">
+                           <h4 className="font-bold text-lg text-white p-3" style={{backgroundColor: CHART_COLORS[i % CHART_COLORS.length].stroke}}>{g.name}</h4>
+                           <table className="w-full text-sm text-left bg-white">
+                             <thead>
+                               <tr className="bg-slate-50 text-slate-600 border-b border-slate-200">
+                                 <th className="p-3 w-20 text-center font-bold uppercase tracking-wider text-xs">Dag</th>
+                                 <th className="p-3 font-bold uppercase tracking-wider text-xs">Metingen (O₂, CO₂, Gewicht)</th>
+                                 <th className="p-3 font-bold uppercase tracking-wider text-xs">Openingsmoment</th>
+                                 <th className="p-3 font-bold uppercase tracking-wider text-xs">Kwaliteitsevaluatie</th>
+                               </tr>
+                             </thead>
+                             <tbody className="divide-y divide-slate-100">
+                               {g.measurements.sort((a,b) => parseFloat(a.day) - parseFloat(b.day)).map((m, idx) => (
+                                 <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                                   <td className="p-3 text-center font-extrabold text-slate-700 bg-slate-50/50">P+{m.day}</td>
+                                   <td className="p-3 text-slate-600 font-medium">{(m.measure||[]).length > 0 ? (m.measure||[]).map(s => `S${s}`).join(', ') : '-'}</td>
+                                   <td className="p-3 text-orange-600 font-bold">{(m.open||[]).length > 0 ? (m.open||[]).map(s => `S${s}`).join(', ') : '-'}</td>
+                                   <td className="p-3 text-green-700 font-bold">{(m.evaluate||[]).length > 0 ? (m.evaluate||[]).map(s => `S${s}`).join(', ') : '-'}</td>
+                                 </tr>
+                               ))}
+                             </tbody>
+                           </table>
+                         </div>
+                       ))}
+                     </div>
+
+                     <div className="break-inside-avoid mt-8 pt-6 border-t border-slate-200 bg-slate-50 p-6 rounded-2xl">
+                       <h4 className="font-bold mb-4 text-xl text-slate-800">Methodologie</h4>
+                       <ul className="list-disc pl-6 space-y-3 text-slate-700">
+                         <li><strong>Gasanalyse:</strong> Meten van O₂ en CO₂ percentages in de verpakking.</li>
+                         <li><strong>Gewichtsregistratie:</strong> Monitoren van vocht/gewichtsverlies vanaf Dag 0.</li>
+                         <li><strong>Visuele Kwaliteit:</strong> Fotografisch vastleggen van de productstaat.</li>
+                         <li>
+                            <strong>Gedetailleerde Kwaliteitsbeoordeling:</strong> Beoordelen van de volgende criteria op een schaal van 1-10 (waarbij 6+ acceptabel is):
+                            <ul className="list-circle pl-6 mt-3 grid grid-cols-2 gap-2 text-sm font-medium text-slate-600">
+                                {(project.criteria || []).map((c, i) => <li key={i}>{c}</li>)}
+                            </ul>
+                         </li>
+                       </ul>
+                     </div>
+
+                  </div>
+                </div>
+
+                <div className="page-break"></div>
+
+                <div className="pt-4">
+                  <h2 className={reportTitleClass} style={reportTitleStyle}>7. Benodigdheden & Afspraken</h2>
+                  <div className="text-base space-y-6 text-slate-800">
+                     {proposal?.requirements && (
+                         <div className="break-inside-avoid">
+                             {(() => {
+                               const totalRequiredWeightGrams = groups.reduce((total, g) => {
+                                 const weightPerSample = parseFloat(project.startWeight) || 0;
+                                 const totalSamples = parseFloat(g.specs?.sampleCount) || 0;
+                                 return total + (weightPerSample * totalSamples);
+                               }, 0);
+                               const totalRequiredWeightKg = (totalRequiredWeightGrams / 1000).toFixed(1);
+                               
+                               const totalSamplesCount = groups.reduce((total, g) => {
+                                 return total + (parseFloat(g.specs?.sampleCount) || 0);
+                               }, 0);
+
+                               return (
+                                 <div className="mb-6 bg-blue-50 border border-blue-200 p-5 text-sm text-blue-900 rounded-2xl flex items-start gap-4 shadow-sm">
+                                   <AlertCircle className="text-blue-500 shrink-0 mt-0.5" size={20} />
+                                   <div>
+                                      <strong className="block text-base mb-1 text-blue-950">Benodigd Product</strong> 
+                                      Er is minimaal <strong>{totalRequiredWeightKg} kg</strong> vers product nodig om deze test uit te voeren (gebaseerd op een totaal van {totalSamplesCount} uniek gevolgde fysieke samples over alle varianten).
+                                   </div>
+                                 </div>
+                               );
+                             })()}
+
+                             <div className="whitespace-pre-wrap pdf-rich-text bg-slate-50 p-6 rounded-2xl border border-slate-200" dangerouslySetInnerHTML={{ __html: proposal.requirements }}></div>
+                         </div>
+                     )}
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          );
+        };
+
+        // --- MAIN APPLICATION ---
+        const App = () => {
+          // Force language to Dutch for this file
+          const lang = 'nl';
+
+          const [activeTab, setActiveTab] = useState('setup');
+          const [activeGroupId, setActiveGroupId] = useState(1);
+          const [isPreview, setIsPreview] = useState(false);
+          const fileInputRef = useRef(null);
+
+          const [pendingImageReplace, setPendingImageReplace] = useState(null);
+
+          // --- DATA STATE ---
+          const [clientInfo, setClientInfo] = useState({
+            companyName: '', street: '', houseNumber: '', zipCode: '', city: '', country: '',
+            contactName: '', role: '', email: '', phone: '', logo: null
+          });
+
+          const [project, setProject] = useState({
+            reportTitle: 'Test Voorstel', 
+            productName: '', processingType: 'Whole', type: '', origin: '', company: '', contactName: '', contactEmail: '', contactPhone: '', employee: '', employeeEmail: '', employeePhone: '', trialTarget: '', currentChallenge: '',
+            rrO2: '', rrCO2: '', rrTemp: '', startWeight: '', 
+            acpO2: '', co2Max: '', co2Shock: '', co2ShockHours: '', tempMin: '', 
+            totalDuration: '', transportMode: '',
+            criteria: [],
+            technologies: [],
+            date: new Date().toISOString().split('T')[0], packingDate: new Date().toISOString().split('T')[0],
+            logo: BRAND.logos.default, clientLogo: null, startImage: null, coverImage: null,
+            maturityStage: '', postHarvestTreatment: '',
+            defectsMatrix: [] 
+          });
+
+          const [supplyChain, setSupplyChain] = useState(JSON.parse(JSON.stringify(DEFAULT_SUPPLY_CHAIN)));
+
+          const [groups, setGroups] = useState([
+            {
+              id: 1, name: 'Controle',
+              specs: { packaging: 'Retail', material: 'BOPP', length: '', width: '', height: '', holes: '2', sampleCount: 3 },
+              measurements: [
+                { day: 0, measure: [], open: [], evaluate: [] }, 
+                { day: 5, measure: [], open: [], evaluate: [] }
+              ],
+              predictedImage: null 
+            },
+            {
+              id: 2, name: 'PerfoTec Laser',
+              specs: { packaging: 'Retail', material: 'BOPP', length: '', width: '', height: '', holes: '4', sampleCount: 3 },
+              measurements: [
+                { day: 0, measure: [], open: [], evaluate: [] }, 
+                { day: 5, measure: [], open: [], evaluate: [] }
+              ],
+              predictedImage: null 
+            }
+          ]);
+
+          const [proposal, setProposal] = useState({ 
+            intro: 'Om de houdbaarheid te verlengen en de optimale kwaliteit van uw product te behouden, stellen wij voor om een vergelijkende MAP (Modified Atmosphere Packaging) test uit te voeren. Door gebruik te maken van de geavanceerde ademhalings- en lasertechnologie van PerfoTec, streven we ernaar het perfecte microklimaat in de verpakking te creëren.', 
+            expectedOutcomes: '<ul><li>Verlenging van de houdbaarheid met X dagen.</li><li>Vermindering van vochtverlies en gewichtsverlies.</li><li>Behoud van natuurlijke kleur en stevigheid.</li></ul>', 
+            requirements: '<ul><li>Huidig verpakkingsmateriaal aanleveren voor de controlegroep.</li><li>Het product moet onder gekoelde omstandigheden worden vervoerd.</li></ul>' 
+          });
+          
+          const [newCriteria, setNewCriteria] = useState('');
+
+          const calcUnpackingDate = () => {
+            const baseDate = project.packingDate || project.date;
+            const duration = parseInt(project.totalDuration) || 0;
+            if (baseDate && duration) {
+               const d = new Date(baseDate);
+               d.setDate(d.getDate() + duration);
+               const day = String(d.getDate()).padStart(2, '0');
+               const month = String(d.getMonth() + 1).padStart(2, '0');
+               const year = d.getFullYear();
+               return `${day}/${month}/${year}`; 
+            }
+            return '-';
+          };
+          
+          const calcRetailDate = () => {
+            const baseDate = project.packingDate || project.date;
+            const duration = parseInt(project.totalDuration) || 0;
+            const retailDays = parseInt(project.retailOpenDays) || 0;
+            if (baseDate && (duration || retailDays)) {
+               const d = new Date(baseDate);
+               d.setDate(d.getDate() + duration + retailDays);
+               const day = String(d.getDate()).padStart(2, '0');
+               const month = String(d.getMonth() + 1).padStart(2, '0');
+               const year = d.getFullYear();
+               return `${day}/${month}/${year}`; 
+            }
+            return '-';
+          };
+
+          // --- HANDLERS ---
+          const handleClientChange = (field, value) => {
+            setClientInfo(prev => ({ ...prev, [field]: value }));
+          };
+
+          const handleImgUpload = (e, field) => { 
+             const f = e.target.files[0]; 
+             if(f) { 
+                const r = new FileReader(); 
+                r.onloadend = () => { setProject(p => ({...p, [field]: r.result})); }; 
+                r.readAsDataURL(f); 
+             }
+          };
+
+          const handlePredictedImageUpload = (e, groupId) => { 
+            const file = e.target.files[0]; 
+            if(file) { 
+              const group = groups.find(g => g.id === groupId);
+              const reader = new FileReader(); 
+              reader.onloadend = () => {
+                 if (group && group.predictedImage) {
+                    setPendingImageReplace({ groupId: groupId, result: reader.result });
+                 } else {
+                    setGroups(prev => prev.map(g => g.id === groupId ? { ...g, predictedImage: reader.result } : g)); 
+                 }
+              };
+              reader.readAsDataURL(file); 
+              e.target.value = '';
+            }
+          };
+
+          const confirmReplaceImage = () => {
+            setGroups(prev => prev.map(g => g.id === pendingImageReplace.groupId ? { ...g, predictedImage: pendingImageReplace.result } : g));
+            setPendingImageReplace(null);
+          };
+
+          const removePredictedImage = (groupId) => {
+            setGroups(prev => prev.map(g => g.id === groupId ? { ...g, predictedImage: null } : g));
+          };
+
+          const handleProjectChange = (f, v) => setProject(p => ({...p, [f]: v}));
+          
+          const handleDurationChange = (e) => {
+            setProject(p => ({...p, totalDuration: e.target.value}));
+          };
+
+          const exportData = async () => {
+            const exportGroups = groups.map(g => ({
+              ...g,
+              specs: { ...g.specs, startWeight: project.startWeight }, 
+              measurements: (g.measurements || []).map(m => ({
+                 day: m.day,
+                 samples: Array.from({length: g.specs?.sampleCount || 3}, (_, i) => ({ id: Date.now()+i, o2: '', co2: '', weight: '' })),
+                 quality: 9,
+                 notes: '',
+                 images: [],
+                 qualityParams: [],
+                 evaluateQuality: true,
+                 measure: m.measure || [],
+                 open: m.open || [],
+                 evaluate: m.evaluate || []
+              }))
+            }));
+
+            const data = { project, clientInfo, supplyChain, groups: exportGroups, proposal };
+            const cleanCompanyName = clientInfo.companyName ? clientInfo.companyName.replace(/[^a-z0-9]/gi, '_').toLowerCase() : 'klant';
+            const filename = `perfotec_voorstel_${cleanCompanyName}.json`; 
+            
+            if (globalConfig.exportJSON) {
+                globalConfig.exportJSON(data, filename);
+            } else {
+                const jsonString = JSON.stringify(data, null, 2);
+                const blob = new Blob([jsonString], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = url; a.download = filename; a.click();
+                URL.revokeObjectURL(url);
+            }
+          };
+
+          const importData = (e) => { 
+            const file = e.target.files[0]; if(!file) return; 
+            
+            const processData = (d) => {
+                if(d.isPerfoTecIntake) {
+                   const client = d.client || {}; const prod = d.products?.[0] || {};
+                   setClientInfo({
+                     companyName: client.companyName||'', street: client.street||'', houseNumber: client.houseNumber||'', zipCode: client.zipCode||'', city: client.city||'', country: client.country||'', contactName: client.contactName||'', role: client.role||'', email: client.email||'', phone: client.phone||'', logo: client.logo||null
+                   });
+                   setProject(p => ({ ...p, 
+                     productName: prod.name||'', processingType: prod.processingType||'Whole', type: prod.type||'', origin: prod.origin||'', maturityStage: prod.maturityStage||'', postHarvestTreatment: prod.postHarvestTreatment||'', currentChallenge: prod.currentChallenge||'', trialTarget: prod.targetGoal||'', transportMode: prod.transportMode || (prod.transportModes?.[0] || ''), criteria: prod.qualityCriteria||[], startImage: prod.photo||null,
+                     startWeight: prod.weight || p.startWeight,
+                     technologies: prod.technologies || p.technologies || []
+                   }));
+                   if (prod.supplyChain) setSupplyChain(prod.supplyChain);
+                   setGroups(p => { const ug = [...p]; if(ug[0]) { ug[0].specs = { ...ug[0].specs, packaging: prod.packagingType||'Retail', material: prod.material||'', length: prod.length||'', width: prod.width||'', height: prod.height||'' }; } return ug; });
+                } else {
+                   if(d.clientInfo) {
+                       setClientInfo(d.clientInfo);
+                   } else if (d.client) {
+                       setClientInfo(d.client);
+                   } else if (d.project) {
+                       setClientInfo({
+                         companyName: d.project.company || '', 
+                         street: d.project.street || '', 
+                         houseNumber: d.project.houseNumber || '', 
+                         zipCode: d.project.zipCode || '', 
+                         city: d.project.city || '', 
+                         country: d.project.country || '', 
+                         contactName: d.project.contactName || '', 
+                         role: d.project.contactRole || d.project.role || '', 
+                         email: d.project.contactEmail || d.project.email || '', 
+                         phone: d.project.contactPhone || d.project.phone || '', 
+                         logo: d.project.logo || null
+                       });
+                   }
+                   if(d.project) {
+                       setProject(p => ({
+                           ...p, 
+                           ...d.project, 
+                           packingDate: d.project.packingDate || d.project.date || new Date().toISOString().split('T')[0], 
+                           transportMode: d.project.transportMode || '',
+                           startWeight: d.project.startWeight || d.groups?.[0]?.specs?.startWeight || '',
+                           technologies: d.project.technologies || []
+                       })); 
+                   }
+                   if(d.supplyChain) setSupplyChain(d.supplyChain); 
+                   if(d.groups) {
+                       const proposalGroups = d.groups.map(g => ({
+                           ...g,
+                           measurements: (g.measurements || []).map(m => ({ 
+                               day: m.day,
+                               measure: m.measure || [],
+                               open: m.open || [],
+                               evaluate: m.evaluate || []
+                           }))
+                       }));
+                       setGroups(proposalGroups);
+                   }
+                   if(d.proposal) setProposal(d.proposal);
+                }
+            };
+
+            if (globalConfig.importJSON) {
+                globalConfig.importJSON(file, processData, () => alert("Fout bij inladen JSON bestand."));
+            } else {
+                const reader = new FileReader(); 
+                reader.onload = (ev) => { 
+                    try { 
+                        processData(JSON.parse(ev.target.result));
+                    } catch(err){ alert("Fout bij inladen bestand."); } 
+                }; 
+                reader.readAsText(file); 
+            }
+            e.target.value = '';
+          };
+
+          const handleGroupChange = (id, section, field, value) => {
+            setGroups(prev => prev.map(g => {
+              if (g.id !== id) return g;
+              if (section === 'name') return { ...g, name: value };
+              if (section === 'specs') return { ...g, specs: { ...g.specs, [field]: value } };
+              return g;
+            }));
+          };
+
+          const handleSampleCountChange = (groupId, num) => {
+            let c = isNaN(num) || num < 1 ? 1 : num > 50 ? 50 : num;
+            setGroups(prev => prev.map(g => {
+              if (g.id !== groupId) return g;
+              return { ...g, specs: { ...g.specs, sampleCount: c }};
+            }));
+          };
+
+          const toggleCriteria = (c) => setProject(p => ({ ...p, criteria: p.criteria?.includes(c) ? p.criteria.filter(x => x !== c) : [...(p.criteria||[]), c] }));
+          const addNewCriteria = () => { if(newCriteria && !(project.criteria||[]).includes(newCriteria)) { toggleCriteria(newCriteria); setNewCriteria(''); }};
+          const handleTransportModeToggle = (mode) => {
+            setProject(p => ({ ...p, transportMode: p.transportMode === mode ? '' : mode }));
+          };
+          const toggleTechnology = (tech) => {
+            setProject(p => ({ 
+                ...p, 
+                technologies: p.technologies?.includes(tech) ? p.technologies.filter(t => t !== tech) : [...(p.technologies || []), tech] 
+            }));
+          };
+
+          // Supply Chain
+          const addChainStep = () => setSupplyChain([...supplyChain, { stage: '', tempStart: '', tempEnd: '', daysStart: '', daysEnd: '', action: 'none' }]);
+          const updateChainStep = (i, f, v) => { const n = [...supplyChain]; n[i][f] = v; setSupplyChain(n); };
+          const removeChainStep = (i) => setSupplyChain(supplyChain.filter((_, idx) => idx !== i));
+          const moveChainStep = (i, dir) => { const n = [...supplyChain]; if(dir==='up' && i>0){ [n[i], n[i-1]] = [n[i-1], n[i]]; } else if(dir==='down' && i<n.length-1){ [n[i], n[i+1]] = [n[i+1], n[i]]; } setSupplyChain(n); };
+
+          // Group Handling
+          const addNewVariant = () => {
+            const newId = Math.max(...groups.map(g => g.id), 0) + 1;
+            
+            setGroups([...groups, { 
+                id: newId, 
+                name: `Variant ${groups.length + 1}`, 
+                specs: { ...groups[0].specs }, 
+                measurements: [
+                   { day: 0, measure: [], open: [], evaluate: [] }
+                ],
+                predictedImage: null
+            }]);
+            setActiveGroupId(newId);
+          };
+
+          const duplicateGroup = (id) => { 
+            const org = groups.find(g => g.id === id); 
+            const newId = Math.max(...groups.map(g => g.id), 0) + 1; 
+            setGroups(p => [...p, { 
+              ...org, 
+              id: newId, 
+              name: `${org.name} (Kopie)`,
+              measurements: org.measurements.map(m => ({...m}))
+            }]); 
+            setActiveGroupId(newId); 
+          };
+          
+          const removeGroup = (id) => { 
+            if(groups.length > 1) { 
+                setGroups(p => {
+                    const newGroups = p.filter(g => g.id !== id);
+                    if (activeGroupId === id) setActiveGroupId(newGroups[0].id);
+                    return newGroups;
+                });
+            }
+          };
+
+          // Timeline Events Handling
+          const addEvaluationDay = (groupId) => {
+              setGroups(prev => prev.map(g => {
+                  if (g.id !== groupId) return g;
+                  const lastDay = g.measurements?.length > 0 ? Math.max(...g.measurements.map(m => parseFloat(m.day))) : 0;
+                  
+                  return {
+                      ...g,
+                      measurements: [...(g.measurements || []), { 
+                          day: lastDay + 1,
+                          measure: [],
+                          open: [],
+                          evaluate: []
+                      }].sort((a,b) => parseFloat(a.day) - parseFloat(b.day))
+                  };
+              }));
+          };
+
+          const removeEvaluationDay = (groupId, dayToRemove) => {
+              setGroups(prev => prev.map(g => {
+                  if (g.id !== groupId) return g;
+                  return {
+                      ...g,
+                      measurements: (g.measurements || []).filter(m => parseFloat(m.day) !== parseFloat(dayToRemove))
+                  };
+              }));
+          };
+          
+          const updateEvaluationDay = (groupId, oldDay, newDayValue) => {
+              const newD = parseFloat(newDayValue) || 0;
+              setGroups(prev => prev.map(g => {
+                  if (g.id !== groupId) return g;
+                  return {
+                      ...g,
+                      measurements: (g.measurements || []).map(m => parseFloat(m.day) === parseFloat(oldDay) ? { ...m, day: newD } : m).sort((a,b) => parseFloat(a.day) - parseFloat(b.day))
+                  };
+              }));
+          };
+
+          const toggleEvent = (groupId, day, field, sampleNum) => {
+              setGroups(prev => prev.map(g => {
+                  if (g.id !== groupId) return g;
+                  const newM = g.measurements.map(m => {
+                      if (parseFloat(m.day) === parseFloat(day)) {
+                          const arr = m[field] || [];
+                          const newArr = arr.includes(sampleNum) ? arr.filter(x => x !== sampleNum) : [...arr, sampleNum].sort((a,b)=>a-b);
+                          return { ...m, [field]: newArr };
+                      }
+                      return m;
+                  });
+                  return { ...g, measurements: newM };
+              }));
+          };
+
+          if (isPreview) {
+            return <PrintPreview clientInfo={clientInfo} project={project} groups={groups} proposal={proposal} supplyChain={supplyChain} onBack={() => setIsPreview(false)} />;
+          }
+
+          // --- EDITOR VIEW ---
+          return (
+            <div className="min-h-screen pb-20 font-sans text-slate-800">
+              
+              {pendingImageReplace && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
+                  <div className="bg-white p-8 rounded-3xl shadow-2xl max-w-sm w-full border-t-8 border-orange-500 transform transition-all">
+                     <div className="flex items-center gap-4 mb-6 text-orange-600 bg-orange-50 p-4 rounded-xl">
+                        <AlertTriangle size={28} />
+                        <h3 className="font-extrabold text-xl">Waarschuwing</h3>
+                     </div>
+                     <p className="mb-8 text-base text-slate-700 leading-relaxed">U staat op het punt de huidige Voorspelde Gasgrafiek te overschrijven met een nieuwe afbeelding. Wilt u doorgaan?</p>
+                     <div className="flex justify-end gap-3">
+                       <button onClick={() => setPendingImageReplace(null)} className="px-6 py-3 bg-slate-100 text-slate-700 rounded-full hover:bg-slate-200 font-bold transition">Annuleren</button>
+                       <button onClick={confirmReplaceImage} className="px-6 py-3 bg-orange-600 text-white rounded-full hover:bg-orange-700 font-bold shadow-lg shadow-orange-200 transition">Overschrijven</button>
+                     </div>
+                  </div>
+                </div>
+              )}
+              
+              {/* HEADER */}
+              <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40 shadow-sm">
+                <div className="max-w-7xl mx-auto px-4 md:px-6 py-4 flex justify-between items-center">
+                  <div className="flex items-center gap-4">
+                    <img src={BRAND.logos.default} alt="PerfoTec" className="h-9 md:h-12 object-contain" />
+                    <div className="border-l-2 border-slate-200 pl-4 ml-2 hidden sm:block">
+                      <h1 className="font-extrabold text-2xl tracking-tight leading-none" style={{color: BRAND.colors.blue}}>PerfoTec Manager</h1>
+                      <p className="text-xs text-slate-500 font-bold uppercase tracking-widest mt-1">VOORSTEL TOOL</p>
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center bg-slate-100 hover:bg-slate-200 transition-colors rounded-xl px-3 py-2 border border-slate-200 shadow-sm">
+                       <Globe size={18} className="text-slate-500 mr-2" />
+                       <select 
+                         className="bg-transparent text-sm font-bold text-slate-700 outline-none cursor-pointer w-full" 
+                         value={lang} 
+                         onChange={(e) => {
+                           const val = e.target.value;
+                           if (globalConfig.setLanguage) globalConfig.setLanguage(val);
+                           if (val !== 'nl') {
+                               try { 
+                                   if(val === 'en') window.location.assign('proposal.html');
+                                   else window.location.assign(`proposal_${val}.html`); 
+                               } catch(err) {}
+                           }
+                         }}
+                       >
+                         {globalConfig.LANGUAGES ? globalConfig.LANGUAGES.map(l => (
+                             <option key={l.code} value={l.code}>{l.label}</option>
+                         )) : (
+                             <option value="nl">NL</option>
+                         )}
+                       </select>
+                    </div>
+                    
+                    <div className="h-8 border-l border-slate-300 mx-1 hidden md:block"></div>
+
+                    <label className="cursor-pointer bg-white border border-slate-300 text-slate-700 px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm">
+                      <FolderOpen size={18} className="text-blue-600"/> <span className="hidden md:inline">Laden JSON</span>
+                      <input type="file" accept=".json" className="hidden" onChange={importData} ref={fileInputRef} />
+                    </label>
+                    <button onClick={exportData} className="bg-white border border-slate-300 text-slate-700 px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm">
+                      <Save size={18} className="text-green-600"/> <span className="hidden md:inline">Opslaan als...</span>
+                    </button>
+                    <button onClick={() => { if(!clientInfo.companyName) alert('Let op: Vul bedrijfsgegevens in!'); setIsPreview(true); }} className="bg-blue-600 text-white px-6 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-blue-700 transition-all shadow-md hover:shadow-blue-500/30 ml-2">
+                      <FileText size={18}/> <span className="hidden md:inline">Preview Voorstel</span>
+                    </button>
+                  </div>
+                </div>
+              </header>
+
+              <main className="max-w-7xl mx-auto p-4 sm:p-6 grid grid-cols-1 md:grid-cols-12 gap-6">
+                <div className="col-span-1 md:col-span-12 flex flex-wrap gap-2 border-b border-slate-200 pb-1 mb-2">
+                  {['setup', 'groups', 'proposal'].map(tab => (
+                    <button key={tab} onClick={() => setActiveTab(tab)} className={`px-5 sm:px-8 py-3.5 font-bold rounded-t-xl transition-all flex items-center gap-2 ${activeTab === tab ? 'text-white shadow-sm transform scale-105 origin-bottom' : 'bg-white text-slate-500 hover:bg-slate-100 border border-b-0 border-slate-200'}`} style={{ backgroundColor: activeTab === tab ? BRAND.colors.green : undefined }}>
+                      {tab === 'setup' && <Settings size={18}/>}{tab === 'groups' && <Package size={18}/>}{tab === 'proposal' && <FileText size={18}/>}
+                      {tab === 'proposal' ? 'Voorstel Teksten' : tab === 'groups' ? 'Varianten & Planning' : 'Project & Product'}
+                    </button>
+                  ))}
+                </div>
+
+                {/* 1. SETUP TAB */}
+                {activeTab === 'setup' && (
+                  <div className="col-span-1 md:col-span-12 space-y-8">
+                    {/* Project & Product Info */}
+                    <div className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden">
+                       <div className="absolute top-0 left-0 w-full h-1" style={{ backgroundColor: BRAND.colors.green }}></div>
+                       <h2 className="font-extrabold text-2xl mb-8 text-slate-800 border-b-2 border-slate-100 pb-4">1. Project & Product</h2>
+                       
+                       <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                         <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6">
+                           <div className="sm:col-span-2"><label className={labelClass}>Voorstel Titel</label><input type="text" className={`${inputClass} text-lg font-bold`} value={project.reportTitle || ''} onChange={e => handleProjectChange('reportTitle', e.target.value)} /></div>
+                           <div className="sm:col-span-2"><label className={labelClass}>Productnaam <span className="text-red-500">*</span></label><input type="text" className={`${inputClass} text-lg font-bold`} value={project.productName || ''} onChange={e => handleProjectChange('productName', e.target.value)} /></div>
+                           <div><label className={labelClass}>Datum Voorstel</label><input type="date" className={inputClass} value={project.date || ''} onChange={e => handleProjectChange('date', e.target.value)} /></div>
+                           
+                           <div><label className={labelClass}>Verpakkingsdatum <span className="text-red-500">*</span></label><input type="date" className={`${inputClass} bg-amber-50 focus:bg-white`} value={project.packingDate || ''} onChange={e => handleProjectChange('packingDate', e.target.value)} /></div>
+                           <div><label className={labelClass}>Totale Duur (Dagen) <span className="text-red-500">*</span></label><input type="number" className={`${inputClass} bg-amber-50 focus:bg-white`} value={project.totalDuration || ''} onChange={handleDurationChange} placeholder="bijv. 10" /></div>
+                           <div><label className={labelClass}>Retail Simulatie (na openen)</label><input type="number" className={`${inputClass} bg-blue-50 focus:bg-white`} value={project.retailOpenDays || ''} onChange={e => handleProjectChange('retailOpenDays', e.target.value)} placeholder="bijv. 7" /></div>
+                           
+                           <div className="sm:col-span-2 bg-slate-50 border border-slate-200 p-5 rounded-2xl">
+                              <label className={labelClass}>Verwerkingstype <span className="text-red-500">*</span></label>
+                              <div className="flex flex-wrap gap-4 mt-3">
+                                 {['Whole', 'Processed'].map(type => (
+                                   <button
+                                     key={type}
+                                     type="button"
+                                     onClick={() => handleProjectChange('processingType', type)}
+                                     className={`px-6 py-3 rounded-xl text-sm font-bold transition-all border shadow-sm flex-1 sm:flex-none ${project.processingType === type ? 'bg-blue-600 text-white border-blue-700 ring-4 ring-blue-600/20 transform scale-[1.02]' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'}`}
+                                   >
+                                     {type === 'Whole' ? 'Heel' : 'Verwerkt / Gesneden'}
+                                   </button>
+                                 ))}
+                              </div>
+                           </div>
+
+                           <div><label className={labelClass}>Product Type / Variëteit</label><input type="text" className={inputClass} value={project.type || ''} onChange={e => handleProjectChange('type', e.target.value)} /></div>
+                           <div><label className={labelClass}>Herkomst</label><input type="text" className={inputClass} value={project.origin || ''} onChange={e => handleProjectChange('origin', e.target.value)} /></div>
+                           
+                           <div>
+                              <label className={labelClass}>Netto Gewicht <span className="text-red-500">*</span></label>
+                              <div className="relative">
+                                 <input type="number" className={`${inputClass} font-extrabold text-blue-900 pr-12`} value={project.startWeight || ''} onChange={e => handleProjectChange('startWeight', e.target.value)} />
+                                 <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">g/kg</span>
+                              </div>
+                           </div>
+                           
+                           <div><label className={labelClass}>Rijpheidsstadium bij verpakken</label><input type="text" className={inputClass} value={project.maturityStage || ''} onChange={e => handleProjectChange('maturityStage', e.target.value)} /></div>
+                           <div className="sm:col-span-2"><label className={labelClass}>Post-harvest Behandeling</label><input type="text" className={inputClass} value={project.postHarvestTreatment || ''} onChange={e => handleProjectChange('postHarvestTreatment', e.target.value)} /></div>
+                           
+                           <div className="sm:col-span-2 bg-gradient-to-br from-slate-50 to-slate-100 p-6 rounded-2xl border border-slate-200 shadow-sm mt-2">
+                              <label className="block mb-4 text-xs font-extrabold tracking-widest text-blue-800 uppercase border-b border-blue-200 pb-2">Respiratie Data</label>
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                                <div><label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">RR O₂</label><input type="text" className={inputClass} value={project.rrO2 || ''} onChange={e => handleProjectChange('rrO2', e.target.value)} /></div>
+                                <div><label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">RR CO₂</label><input type="text" className={inputClass} value={project.rrCO2 || ''} onChange={e => handleProjectChange('rrCO2', e.target.value)} /></div>
+                                <div><label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">Gemeten bij (°C)</label><input type="text" className={inputClass} value={project.rrTemp || ''} onChange={e => handleProjectChange('rrTemp', e.target.value)} /></div>
+                              </div>
+                           </div>
+                         </div>
+                         
+                         <div className="space-y-6">
+                            <div className="border-2 border-dashed border-slate-300 rounded-2xl p-6 flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-blue-50 hover:border-blue-300 transition-all cursor-pointer relative overflow-hidden shadow-sm group min-h-[140px]">
+                                <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={(e) => handleImgUpload(e, 'logo')} />
+                                {project.logo ? <img src={project.logo} className="h-full object-contain group-hover:scale-105 transition-transform" /> : <><Upload size={28} color={BRAND.colors.blue} className="mb-3"/><span className="font-bold text-sm text-slate-600 block">Upload PerfoTec Logo</span></>}
+                            </div>
+                            <div className="border-2 border-dashed border-slate-300 rounded-2xl p-6 flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-blue-50 hover:border-blue-300 transition-all cursor-pointer relative overflow-hidden shadow-sm group min-h-[140px]">
+                                <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={(e) => handleImgUpload(e, 'clientLogo')} />
+                                {project.clientLogo ? <img src={project.clientLogo} className="h-full object-contain group-hover:scale-105 transition-transform" /> : <><Upload size={28} color={BRAND.colors.green} className="mb-3"/><span className="font-bold text-sm text-slate-600 block">Upload Klant Logo</span></>}
+                            </div>
+                            <div className="border-2 border-dashed border-slate-300 rounded-2xl p-6 flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-blue-50 hover:border-blue-300 transition-all cursor-pointer relative overflow-hidden shadow-sm group min-h-[180px]">
+                                <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={(e) => handleImgUpload(e, 'coverImage')} />
+                                {project.coverImage ? <img src={project.coverImage} className="w-full h-full object-cover rounded group-hover:scale-105 transition-transform" /> : <><ImageIcon size={28} color={BRAND.colors.green} className="mb-3"/><span className="font-bold text-sm text-slate-600 block">Omslagfoto (Pagina 1)</span></>}
+                            </div>
+                            <div className="border-2 border-dashed border-slate-300 rounded-2xl p-6 flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-blue-50 hover:border-blue-300 transition-all cursor-pointer relative overflow-hidden shadow-sm group min-h-[180px]">
+                                <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={(e) => handleImgUpload(e, 'startImage')} />
+                                {project.startImage ? <img src={project.startImage} className="w-full h-full object-cover rounded group-hover:scale-105 transition-transform" /> : <><ImageIcon size={28} color={BRAND.colors.green} className="mb-3"/><span className="font-bold text-sm text-slate-600 block">Referentiefoto (P+0)</span></>}
+                            </div>
+                         </div>
+                       </div>
+                    </div>
+
+                    <div className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200">
+                       <h2 className="font-extrabold text-2xl mb-8 text-slate-800 border-b-2 border-slate-100 pb-4">2. Bedrijf & Contact</h2>
+                       <div className="grid grid-cols-4 gap-6">
+                         <div className="col-span-4 sm:col-span-2"><label className={labelClass}>Bedrijfsnaam <span className="text-red-500">*</span></label><input type="text" className={`${inputClass} font-bold`} value={clientInfo.companyName || ''} onChange={e => handleClientChange('companyName', e.target.value)} /></div>
+                         <div className="col-span-4 sm:col-span-2"><label className={labelClass}>PerfoTec Medewerker</label><input type="text" className={inputClass} value={project.employee || ''} onChange={e => handleProjectChange('employee', e.target.value)} /></div>
+                         <div className="col-span-4 sm:col-span-2"><label className={labelClass}>E-mail Medewerker</label><input type="email" className={inputClass} value={project.employeeEmail || ''} onChange={e => handleProjectChange('employeeEmail', e.target.value)} /></div>
+                         <div className="col-span-4 sm:col-span-2"><label className={labelClass}>Telefoon Medewerker</label><input type="text" className={inputClass} value={project.employeePhone || ''} onChange={e => handleProjectChange('employeePhone', e.target.value)} /></div>
+                         
+                         <div className="col-span-4 sm:col-span-3 mt-4"><label className={labelClass}>Straat</label><input type="text" className={inputClass} value={clientInfo.street || ''} onChange={e => handleClientChange('street', e.target.value)} /></div>
+                         <div className="col-span-4 sm:col-span-1 mt-4"><label className={labelClass}>Huisnr.</label><input type="text" className={inputClass} value={clientInfo.houseNumber || ''} onChange={e => handleClientChange('houseNumber', e.target.value)} /></div>
+                         
+                         <div className="col-span-4 sm:col-span-1"><label className={labelClass}>Postcode</label><input type="text" className={inputClass} value={clientInfo.zipCode || ''} onChange={e => handleClientChange('zipCode', e.target.value)} /></div>
+                         <div className="col-span-4 sm:col-span-1"><label className={labelClass}>Plaats / Stad</label><input type="text" className={inputClass} value={clientInfo.city || ''} onChange={e => handleClientChange('city', e.target.value)} /></div>
+                         <div className="col-span-4 sm:col-span-2"><label className={labelClass}>Land</label><input type="text" className={inputClass} value={clientInfo.country || ''} onChange={e => handleClientChange('country', e.target.value)} /></div>
+
+                         <div className="col-span-4 sm:col-span-1 mt-4"><label className={labelClass}>Contactpersoon <span className="text-red-500">*</span></label><input type="text" className={inputClass} value={clientInfo.contactName || ''} onChange={e => handleClientChange('contactName', e.target.value)} /></div>
+                         <div className="col-span-4 sm:col-span-1 mt-4"><label className={labelClass}>Functie</label><input type="text" className={inputClass} value={clientInfo.role || ''} onChange={e => handleClientChange('role', e.target.value)} /></div>
+                         <div className="col-span-4 sm:col-span-1 mt-4"><label className={labelClass}>E-mail <span className="text-red-500">*</span></label><input type="email" className={inputClass} value={clientInfo.email || ''} onChange={e => handleClientChange('email', e.target.value)} /></div>
+                         <div className="col-span-4 sm:col-span-1 mt-4"><label className={labelClass}>Telefoon</label><input type="text" className={inputClass} value={clientInfo.phone || ''} onChange={e => handleClientChange('phone', e.target.value)} /></div>
+                       </div>
+                    </div>
+
+                    <div className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200">
+                       <h2 className="font-extrabold text-2xl mb-8 text-slate-800 border-b-2 border-slate-100 pb-4">3. Doelen & Uitdagingen</h2>
+                       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                         <div>
+                           <label className="block mb-3 text-xs font-bold tracking-wide text-orange-700 uppercase flex items-center gap-2"><AlertCircle size={16}/> Huidige Uitdaging</label>
+                           <textarea rows="4" className={`${inputClass} resize-y focus:ring-orange-500 focus:border-orange-500`} value={project.currentChallenge || ''} onChange={e => handleProjectChange('currentChallenge', e.target.value)} />
+                         </div>
+                         <div>
+                           <label className="block mb-3 text-xs font-bold tracking-wide text-green-700 uppercase flex items-center gap-2"><CheckCircle size={16}/> Beoogd Doel</label>
+                           <textarea rows="4" className={`${inputClass} resize-y focus:ring-green-500 focus:border-green-500`} value={project.trialTarget || ''} onChange={e => handleProjectChange('trialTarget', e.target.value)} />
+                         </div>
+                       </div>
+                    </div>
+
+                    <div className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200">
+                      <h2 className="font-extrabold text-2xl mb-8 text-slate-800 border-b-2 border-slate-100 pb-4 flex items-center gap-3"><Truck size={28} className="text-indigo-600"/> 4. Product Supply Chain</h2>
+                      
+                      <div className="mb-8 bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100">
+                        <label className="block mb-3 text-xs font-bold tracking-wide text-indigo-900 uppercase">Transport Modus <span className="text-red-500">*</span></label>
+                        <div className="flex flex-wrap gap-4">
+                          {TRANSPORT_MODES.map(mode => {
+                            let modeDisplay = mode;
+                            if(mode === 'Air Freight') modeDisplay = 'Luchtvracht';
+                            if(mode === 'Sea Freight') modeDisplay = 'Zeevracht';
+                            if(mode === 'Road Transport') modeDisplay = 'Wegtransport';
+                            if(mode === 'Storage') modeDisplay = 'Opslag';
+
+                            return (
+                                <button 
+                                key={mode} 
+                                onClick={() => handleTransportModeToggle(mode)}
+                                className={`px-5 py-3 rounded-xl text-sm font-bold transition-all border shadow-sm flex items-center gap-2 ${project.transportMode === mode || project.transportModes?.includes(mode) ? 'bg-indigo-600 text-white border-indigo-700 ring-4 ring-indigo-600/20 transform scale-[1.02]' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}
+                                >
+                                {modeDisplay} {(project.transportMode === mode || project.transportModes?.includes(mode)) && <CheckCircle size={16} className="text-white"/>}
+                                </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      <div className="space-y-3">
+                        <label className="block mb-2 text-xs font-bold tracking-wide text-slate-500 uppercase">Supply Chain Overzicht</label>
+                        
+                        {/* Desktop Header - CSS GRID */}
+                        <div className="hidden lg:grid grid-cols-[80px_1fr_150px_150px_130px_40px] items-center gap-4 px-4 text-xs font-bold text-slate-500 uppercase tracking-widest">
+                           <div>Stap</div>
+                           <div>Fase (Activiteit) <span className="text-red-500">*</span></div>
+                           <div className="text-center">Temp (°C) <span className="text-red-500">*</span></div>
+                           <div className="text-center">Tijd (Dagen) <span className="text-red-500">*</span></div>
+                           <div>Actie</div>
+                           <div></div>
+                        </div>
+
+                        {supplyChain.map((step, idx) => (
+                           <div key={idx} className="grid grid-cols-1 lg:grid-cols-[80px_1fr_150px_150px_130px_40px] items-start lg:items-center gap-4 bg-white hover:bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-sm transition-all group">
+                              
+                              {/* Step Controls */}
+                              <div className="flex items-center gap-2 justify-between lg:justify-start">
+                                 <div className="flex lg:flex-col gap-1">
+                                    <button onClick={() => moveChainStep(idx, 'up')} disabled={idx === 0} className="p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700 rounded disabled:opacity-30 transition-colors"><ChevronUp size={16}/></button>
+                                    <button onClick={() => moveChainStep(idx, 'down')} disabled={idx === supplyChain.length - 1} className="p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700 rounded disabled:opacity-30 transition-colors"><ChevronDown size={16}/></button>
+                                 </div>
+                                 <div className="w-8 h-8 bg-indigo-100 text-indigo-700 rounded-full flex items-center justify-center font-bold text-sm shadow-sm">
+                                    {idx + 1}
+                                 </div>
+                                 <button onClick={() => removeChainStep(idx)} className="lg:hidden p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={18}/></button>
+                              </div>
+
+                              {/* Stage Input */}
+                              <div className="w-full">
+                                 <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">Fase (Activiteit) <span className="text-red-500">*</span></label>
+                                 {idx === 2 ? (
+                                    <select className={`${inputClass} py-2.5 font-bold w-full`} value={step.stage || ''} onChange={e => updateChainStep(idx, 'stage', e.target.value)}>
+                                      <option>Transport by road</option><option>Seafreight</option><option>Airfreight</option><option>Storage</option>
+                                    </select>
+                                  ) : (
+                                    <input type="text" className={`${inputClass} py-2.5 font-bold w-full`} value={step.stage || ''} placeholder="bijv. Oogst, Transport..." onChange={e => updateChainStep(idx, 'stage', e.target.value)} />
+                                  )}
+                              </div>
+
+                              {/* Temp Block */}
+                              <div className="w-full">
+                                 <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">Temp (°C) <span className="text-red-500">*</span></label>
+                                 <div className="flex items-center gap-1.5">
+                                    <input type="number" className={`${narrowInputClass} w-full`} value={step.tempStart || ''} placeholder="Min" onChange={e => updateChainStep(idx, 'tempStart', e.target.value)} />
+                                    <span className="text-slate-400 font-bold shrink-0">-</span>
+                                    <input type="number" className={`${narrowInputClass} w-full`} value={step.tempEnd || ''} placeholder="Max" onChange={e => updateChainStep(idx, 'tempEnd', e.target.value)} />
+                                 </div>
+                              </div>
+
+                              {/* Days Block */}
+                              <div className="w-full">
+                                 <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">Tijd (Dagen) <span className="text-red-500">*</span></label>
+                                 <div className="flex items-center gap-1.5">
+                                    <input type="number" className={`${narrowInputClass} w-full`} value={step.daysStart || ''} placeholder="Min" onChange={e => updateChainStep(idx, 'daysStart', e.target.value)} />
+                                    <span className="text-slate-400 font-bold shrink-0">-</span>
+                                    <input type="number" className={`${narrowInputClass} w-full`} value={step.daysEnd || ''} placeholder="Max" onChange={e => updateChainStep(idx, 'daysEnd', e.target.value)} />
+                                 </div>
+                              </div>
+
+                              {/* Action Block */}
+                              <div className="w-full">
+                                 <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">Actie</label>
+                                 <select className={`${inputClass} py-2.5 font-bold px-2 w-full text-slate-700`} value={step.action || 'none'} onChange={e => updateChainStep(idx, 'action', e.target.value)}>
+                                   <option value="none">- Geen -</option>
+                                   <option value="pack" className="text-green-700">Inpakken</option>
+                                   <option value="unpack" className="text-red-700">Uitpakken</option>
+                                 </select>
+                              </div>
+
+                              {/* Desktop Delete */}
+                              <div className="hidden lg:flex justify-center w-full">
+                                 <button onClick={() => removeChainStep(idx)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Verwijder Stap">
+                                   <Trash2 size={20}/>
+                                 </button>
+                              </div>
+                           </div>
+                        ))}
+                        
+                        <button onClick={addChainStep} className="w-full py-4 mt-4 border-2 border-dashed border-indigo-200 bg-indigo-50/50 hover:bg-indigo-100 text-indigo-700 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-sm">
+                          <div className="bg-white p-1.5 rounded-lg shadow-sm"><Plus size={16} /></div> 
+                          Extra Stap Toevoegen
+                        </button>
+                      </div>
+                    </div>
+
+                  </div>
+                )}
+
+                {/* 2. GROUPS (Inputs) - FULLY REDESIGNED LAYOUT */}
+                {activeTab === 'groups' && (
+                  <div className="col-span-1 md:col-span-12 flex flex-col gap-8">
+                    
+                    {/* TOP SECTION: GLOBAL SETTINGS */}
+                    <div className="flex flex-col gap-6">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                           
+                           {/* Criteria */}
+                           <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col h-full">
+                              <label className="block mb-4 font-extrabold text-slate-800 text-lg border-b border-slate-100 pb-3">Globale Kwaliteitscriteria</label>
+                              <div className="flex flex-wrap gap-2 mb-6 flex-1">
+                                {(!project.criteria || project.criteria.length === 0) && <span className="text-sm text-gray-400 italic">Geen criteria geselecteerd.</span>}
+                                {(project.criteria || []).map(c => (
+                                  <span key={c} className="bg-slate-50 border border-slate-300 text-slate-700 text-sm px-3 py-1.5 rounded-lg flex items-center gap-2 whitespace-nowrap shadow-sm font-medium">{c} <button onClick={() => toggleCriteria(c)} className="text-red-400 hover:text-red-600 font-bold ml-1">×</button></span>
+                                ))}
+                              </div>
+                              <div className="flex flex-col sm:flex-row gap-3 mt-auto">
+                                <select className={`${inputClass} flex-1`} value={newCriteria || ''} onChange={e => setNewCriteria(e.target.value)}>
+                                   <option value="">Selecteer standaard criterium...</option>
+                                   {DEFAULT_CRITERIA.filter(c => !(project.criteria || []).includes(c)).map(c => <option key={c}>{c}</option>)}
+                                </select>
+                                <button onClick={addNewCriteria} className="bg-slate-800 text-white px-5 py-3 rounded-lg hover:bg-slate-900 flex justify-center items-center font-bold shadow-sm transition-colors shrink-0 gap-2 whitespace-nowrap"><Plus size={18}/> Criterium Toevoegen</button>
+                              </div>
+                           </div>
+
+                           {/* Evaluation Days */}
+                           <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col h-full">
+                              <label className="block mb-2 font-extrabold text-slate-800 text-lg">Globale Evaluatiedagen</label>
+                              <p className="text-sm text-slate-500 mb-6">Geef aan op welke dagen de verpakkingen worden geopend en geëvalueerd.</p>
+                              
+                              <div className="flex flex-wrap gap-3 mb-6 flex-1 items-start">
+                                  {(groups[0]?.measurements || []).map((m, i) => (
+                                      <div key={i} className="flex gap-2 items-center bg-slate-50 p-2 rounded-xl border border-slate-200 shadow-sm">
+                                          <span className="text-sm font-extrabold text-slate-600 ml-2">Dag</span>
+                                          <input type="number" className="w-16 bg-white border border-slate-300 text-blue-700 text-center text-lg font-bold rounded-lg py-1 focus:ring-2 focus:ring-blue-500 outline-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" value={m.day} onChange={e => updateEvaluationDay(groups[0].id, m.day, e.target.value)} />
+                                          {i > 0 && <button onClick={() => removeEvaluationDay(groups[0].id, m.day)} className="text-red-400 hover:text-red-600 p-1.5 bg-white rounded-lg border shadow-sm"><X size={16}/></button>}
+                                      </div>
+                                  ))}
+                              </div>
+                              <div className="mt-auto">
+                                  <button onClick={() => addEvaluationDay(groups[0].id)} className="w-full sm:w-auto text-sm bg-blue-50 text-blue-700 px-5 py-3 rounded-xl font-bold border border-blue-200 hover:bg-blue-100 transition-colors inline-flex justify-center items-center gap-2"><Plus size={18}/> Evaluatiedag Toevoegen</button>
+                              </div>
+                           </div>
+                        </div>
+
+                        {/* PerfoTec Technology */}
+                        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col h-full">
+                            <label className="block mb-4 font-extrabold text-slate-800 text-lg border-b border-slate-100 pb-3">PerfoTec Technologie</label>
+                            <div className="flex flex-wrap gap-3">
+                                {PERFOTEC_TECHNOLOGIES.map(tech => {
+                                    const isSelected = project.technologies?.includes(tech);
+                                    return (
+                                        <button
+                                            key={tech}
+                                            type="button"
+                                            onClick={() => toggleTechnology(tech)}
+                                            className={`px-5 py-3 rounded-xl text-sm font-bold transition-all border shadow-sm flex items-center gap-2 ${isSelected ? 'bg-blue-600 text-white border-blue-700 ring-4 ring-blue-600/20 transform scale-[1.02]' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}
+                                        >
+                                            {tech} {isSelected && <CheckCircle size={16} className="text-white" />}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* BOTTOM SECTION: VARIANTS */}
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                       
+                       {/* Sidebar: Variant List */}
+                       <div className="lg:col-span-3 space-y-4">
+                           <button onClick={addNewVariant} className="w-full py-4 rounded-2xl font-extrabold border-2 border-dashed border-green-300 hover:border-green-500 bg-green-50/50 hover:bg-green-50 text-green-700 transition flex items-center justify-center gap-2 shadow-sm mb-2">
+                              <div className="bg-white p-1 rounded-md shadow-sm"><Plus size={18}/></div>
+                              Variant Toevoegen
+                           </button>
+
+                           <div className="space-y-3">
+                             {groups.map((g, idx) => (
+                               <div key={g.id} onClick={() => setActiveGroupId(g.id)} className={`p-4 rounded-xl border-2 cursor-pointer transition-all relative group shadow-sm ${activeGroupId === g.id ? 'bg-white border-green-500 transform scale-[1.02]' : 'bg-slate-50 border-slate-200 hover:bg-white hover:border-slate-300'}`}>
+                                 <div className="flex items-center gap-3 font-extrabold text-base text-slate-800">
+                                   <div className="w-4 h-4 rounded-full shrink-0 shadow-sm" style={{ backgroundColor: CHART_COLORS[idx % CHART_COLORS.length].stroke }}></div>
+                                   <span className="truncate">{g.name || 'Variant'}</span>
+                                 </div>
+                                 <div className="absolute top-2 right-2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <div className="flex gap-1">
+                                      <button onClick={(e) => { e.stopPropagation(); moveGroup(g.id, 'up'); }} className="p-1.5 bg-white border border-slate-200 text-slate-500 rounded-lg hover:bg-slate-100 shadow-sm"><ChevronUp size={16}/></button>
+                                      <button onClick={(e) => { e.stopPropagation(); moveGroup(g.id, 'down'); }} className="p-1.5 bg-white border border-slate-200 text-slate-500 rounded-lg hover:bg-slate-100 shadow-sm"><ChevronDown size={16}/></button>
+                                    </div>
+                                    <div className="flex gap-1 mt-1">
+                                      <button onClick={(e) => { e.stopPropagation(); duplicateGroup(g.id); }} className="p-1.5 bg-blue-50 text-blue-600 border border-blue-100 rounded-lg hover:bg-blue-100 shadow-sm" title="Dupliceren"><Copy size={16} /></button>
+                                      <button onClick={(e) => { e.stopPropagation(); removeGroup(g.id); }} className="p-1.5 bg-red-50 text-red-600 border border-red-100 rounded-lg hover:bg-red-100 shadow-sm" title="Verwijderen"><Trash2 size={16} /></button>
+                                    </div>
+                                 </div>
+                               </div>
+                             ))}
+                           </div>
+                       </div>
+                       
+                       {/* Main Content: Variant Details */}
+                       <div className="lg:col-span-9 bg-white p-6 sm:p-10 rounded-3xl shadow-sm border border-slate-200 space-y-10 overflow-hidden relative">
+                           <div className="absolute top-0 left-0 w-1 h-full bg-slate-200"></div>
+                           {groups.find(g => g.id === activeGroupId) && (
+                             <>
+                               <div>
+                                 <h3 className="font-extrabold text-2xl mb-8 text-slate-800 border-b-2 border-slate-100 pb-4">Variant Configuratie</h3>
+                                 
+                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
+                                   <div><label className={labelClass}>Variant Naam</label><input type="text" className={`${inputClass} text-lg font-bold`} value={groups.find(g => g.id === activeGroupId).name || ''} onChange={(e) => handleGroupChange(activeGroupId, 'name', null, e.target.value)} /></div>
+                                   <div><label className={labelClass}>Type Verpakking</label><select className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.packaging || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'packaging', e.target.value)}>{PACKAGING_TYPES.map(t => <option key={t}>{t}</option>)}</select></div>
+                                 </div>
+                                 
+                                 <div className="bg-gradient-to-br from-slate-50 to-slate-100 p-8 rounded-2xl border border-slate-200 shadow-sm mb-10">
+                                   <label className="block mb-6 text-sm font-extrabold tracking-widest text-blue-900 uppercase border-b border-blue-200 pb-2">Verpakkingsspecificaties & Samples</label>
+                                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-6">
+                                      <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">Lengte (mm)</label><input type="number" className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.length || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'length', e.target.value)} /></div>
+                                      <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">Breedte (mm)</label><input type="number" className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.width || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'width', e.target.value)} /></div>
+                                      <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">Hoogte (mm)</label><input type="number" className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.height || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'height', e.target.value)} /></div>
+                                   </div>
+                                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                                     <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">Materiaal</label><input className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.material || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'material', e.target.value)} /></div>
+                                     <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">Transmissiewaarde</label><input type="text" className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.holes || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'holes', e.target.value)} /></div>
+                                     <div><label className="text-xs text-blue-700 font-extrabold uppercase tracking-wider mb-2 block">Samples / Meting</label><input type="number" min="1" className={`${inputClass} bg-white border-blue-300 ring-2 ring-blue-50 font-extrabold text-blue-900 text-lg`} value={groups.find(g => g.id === activeGroupId).specs.sampleCount || 3} onChange={(e) => handleSampleCountChange(activeGroupId, parseInt(e.target.value))} /></div>
+                                   </div>
+                                 </div>
+                                 
+                                 <div className="bg-slate-50 p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm mb-10">
+                                    <div className="flex flex-col mb-6">
+                                      <h4 className="font-extrabold text-xl text-slate-800 mb-1">Tijdlijn & Gebeurtenissen</h4>
+                                      <p className="text-sm text-slate-500">Selecteer de specifieke samplenummers (bijv. 1, 2, 3) die de fysieke verpakkingen vertegenwoordigen voor elke actie.</p>
+                                    </div>
+                                    <div className="overflow-x-auto rounded-xl border border-slate-200">
+                                      <table className="w-full text-sm bg-white">
+                                        <thead className="bg-slate-100 border-b border-slate-200">
+                                          <tr className="text-left text-slate-600 uppercase tracking-wider text-[10px] font-bold">
+                                            <th className="p-4 w-20 text-center">Dag</th>
+                                            <th className="p-4 border-l border-slate-200">Meten Gas/Gewicht</th>
+                                            <th className="p-4 border-l border-slate-200 text-orange-700">Open Verpakking</th>
+                                            <th className="p-4 border-l border-slate-200 text-green-700">Kwaliteit Evalueren</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                          {(groups.find(g => g.id === activeGroupId).measurements || []).map((m, idx, arr) => {
+                                            const disabledForMeasure = [];
+                                            arr.filter(prev => parseFloat(prev.day) < parseFloat(m.day)).forEach(prev => {
+                                              disabledForMeasure.push(...(prev.open || []));
+                                            });
+                                            const sCount = groups.find(g => g.id === activeGroupId).specs.sampleCount || 3;
+
+                                            return (
+                                              <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                                                <td className="p-4 text-center font-extrabold text-slate-700 bg-slate-50/50">
+                                                  P+{m.day}
+                                                </td>
+                                                <td className="p-4 border-l border-slate-100">
+                                                  <SampleToggles max={sCount} selected={m.measure||[]} disabled={disabledForMeasure} activeClass="bg-blue-500 border-blue-600 text-white shadow-sm transform scale-105" onChange={s => toggleEvent(activeGroupId, m.day, 'measure', s)} />
+                                                </td>
+                                                <td className="p-4 border-l border-slate-100">
+                                                  <SampleToggles max={sCount} selected={m.open||[]} disabled={[]} activeClass="bg-orange-500 border-orange-600 text-white shadow-sm transform scale-105" onChange={s => toggleEvent(activeGroupId, m.day, 'open', s)} />
+                                                </td>
+                                                <td className="p-4 border-l border-slate-100">
+                                                  <SampleToggles max={sCount} selected={m.evaluate||[]} disabled={[]} activeClass="bg-green-500 border-green-600 text-white shadow-sm transform scale-105" onChange={s => toggleEvent(activeGroupId, m.day, 'evaluate', s)} />
+                                                </td>
+                                              </tr>
+                                            )
+                                          })}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                    <div className="mt-4 text-sm font-medium text-slate-500 bg-white p-4 rounded-lg border border-slate-100 inline-flex items-start gap-3">
+                                       <AlertCircle size={18} className="text-blue-400 shrink-0 mt-0.5" />
+                                       <span>Zodra een sample op een eerdere dag als 'Open' is gemarkeerd, kan deze logischerwijs niet meer gekozen worden voor gas/gewichtsmetingen (de knop wordt grijs en onklikbaar).</span>
+                                    </div>
+                                 </div>
+
+                                 <div className="border-2 border-dashed border-blue-200 bg-blue-50 rounded-2xl p-6 sm:p-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6 shadow-sm">
+                                    <div className="flex items-center gap-5">
+                                       <div className="w-14 h-14 bg-white rounded-full shadow-sm flex items-center justify-center shrink-0">
+                                          <LineChart size={28} className="text-blue-500" />
+                                       </div>
+                                       <div>
+                                         <div className="font-extrabold text-lg text-blue-950 mb-1">Voorspelde Gasgrafiek</div>
+                                         <div className="text-sm font-medium text-blue-700">Upload een screenshot van de voorspelling voor deze specifieke variant</div>
+                                       </div>
+                                    </div>
+                                    <label className="cursor-pointer bg-white border border-blue-200 text-blue-700 px-6 py-3 rounded-xl font-bold text-sm hover:bg-blue-100 hover:border-blue-300 transition-all shrink-0 whitespace-nowrap shadow-sm">
+                                       Upload Afbeelding
+                                       <input 
+                                         type="file" 
+                                         accept="image/*" 
+                                         className="hidden" 
+                                         onClick={(e) => {
+                                            const g = groups.find(x => x.id === activeGroupId);
+                                            if (g && g.predictedImage) {
+                                              e.preventDefault();
+                                              setPendingImageReplace({ groupId: activeGroupId, result: null });
+                                            }
+                                         }} 
+                                         onChange={(e) => handlePredictedImageUpload(e, activeGroupId)} 
+                                       />
+                                    </label>
+                                 </div>
+                                 
+                                 {groups.find(g => g.id === activeGroupId).predictedImage && (
+                                    <div className="mt-6 border border-slate-200 rounded-2xl p-4 bg-white max-w-full relative group shadow-sm inline-block">
+                                      <img src={groups.find(g => g.id === activeGroupId).predictedImage} className="max-h-[300px] w-auto object-contain rounded-xl" />
+                                      <button onClick={() => removePredictedImage(activeGroupId)} className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-all shadow-lg hover:bg-red-600 hover:scale-110">
+                                         <Trash2 size={16}/>
+                                      </button>
+                                    </div>
+                                 )}
+                               </div>
+                             </>
+                           )}
+                        </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. PROPOSAL (Texts) */}
+                {activeTab === 'proposal' && (
+                  <div className="col-span-12 space-y-8">
+                    <div className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-10">
+                       <div className="md:col-span-2 border-b-2 border-slate-100 pb-4">
+                          <h2 className="font-extrabold text-2xl text-slate-800 flex items-center gap-3">
+                             <FileText className="text-blue-600" size={28}/>
+                             Voorstel & Evaluatie Teksten
+                          </h2>
+                       </div>
+                       
+                       <div className="md:col-span-2">
+                          <label className={`${labelClass} text-sm mb-3`}>Introductie / Huidige Uitdaging</label>
+                          <RichTextEditor 
+                             value={proposal.intro} 
+                             onChange={(val) => setProposal(prev => ({...prev, intro: val}))} 
+                             placeholder="Beschrijf de uitdaging en waarom we deze test uitvoeren..."
+                          />
+                       </div>
+                       
+                       <div className="md:col-span-2">
+                          <label className={`${labelClass} text-sm mb-3`}>Doelen / Verwachte Resultaten</label>
+                          <RichTextEditor 
+                             value={proposal.expectedOutcomes} 
+                             onChange={(val) => setProposal(prev => ({...prev, expectedOutcomes: val}))} 
+                             placeholder="Wat hopen we te bereiken met deze test?"
+                          />
+                       </div>
+                       
+                       <div className="md:col-span-2">
+                          <label className={`${labelClass} text-sm mb-3`}>Benodigdheden & Afspraken</label>
+                          <RichTextEditor 
+                             value={proposal.requirements} 
+                             onChange={(val) => setProposal(prev => ({...prev, requirements: val}))} 
+                             placeholder="Wat moet de klant aanleveren? Welke afspraken zijn er gemaakt?"
+                          />
+                       </div>
+                    </div>
+                  </div>
+                )}
+
+              </main>
+            </div>
+          );
+        };
+
+        const root = createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
