@@ -70,6 +70,17 @@
           'Dehydration / Shriveling', 'Moulds / Decay', 'Internal Browning'
         ];
 
+        const PERFOTEC_TECHNOLOGIES = [
+          'Respiration Measurement (FRM)',
+          'Laser Micro Perforation',
+          'Laser Nano Perforation',
+          'Gas Flush (O2 Control)',
+          'CO2 Shock',
+          'PerfoTec Retail Film',
+          'PerfoTec Liner',
+          'PerfoTec Pallet Cover'
+        ];
+
         const DEFAULT_SUPPLY_CHAIN = globalConfig.DEFAULT_SUPPLY_CHAIN || [
           { stage: 'Farm / Harvest', tempStart: '15', tempEnd: '', daysStart: '0.5', daysEnd: '', action: 'none' },
           { stage: 'Packing House', tempStart: '12', tempEnd: '', daysStart: '1', daysEnd: '', action: 'pack' },
@@ -299,7 +310,8 @@
             rrO2: '', rrCO2: '', rrTemp: '', startWeight: '', 
             acpO2: '', co2Max: '', co2Shock: '', co2ShockHours: '', tempMin: '', 
             totalDuration: '', transportMode: '',
-            criteria: [], 
+            criteria: [],
+            technologies: [],
             date: new Date().toISOString().split('T')[0], packingDate: new Date().toISOString().split('T')[0],
             logo: BRAND.logos.default, clientLogo: null, startImage: null, coverImage: null,
             maturityStage: '', postHarvestTreatment: '',
@@ -336,6 +348,35 @@
           });
           
           const [newCriteria, setNewCriteria] = useState('');
+
+          const calcUnpackingDate = () => {
+            const baseDate = project.packingDate || project.date;
+            const duration = parseInt(project.totalDuration) || 0;
+            if (baseDate && duration) {
+               const d = new Date(baseDate);
+               d.setDate(d.getDate() + duration);
+               const day = String(d.getDate()).padStart(2, '0');
+               const month = String(d.getMonth() + 1).padStart(2, '0');
+               const year = d.getFullYear();
+               return `${day}/${month}/${year}`; 
+            }
+            return '-';
+          };
+          
+          const calcRetailDate = () => {
+            const baseDate = project.packingDate || project.date;
+            const duration = parseInt(project.totalDuration) || 0;
+            const retailDays = parseInt(project.retailOpenDays) || 0;
+            if (baseDate && (duration || retailDays)) {
+               const d = new Date(baseDate);
+               d.setDate(d.getDate() + duration + retailDays);
+               const day = String(d.getDate()).padStart(2, '0');
+               const month = String(d.getMonth() + 1).padStart(2, '0');
+               const year = d.getFullYear();
+               return `${day}/${month}/${year}`; 
+            }
+            return '-';
+          };
 
           // --- HANDLERS ---
           const handleImgUpload = (e, field) => { 
@@ -420,7 +461,8 @@
                    const client = d.client || {}; const prod = d.products?.[0] || {};
                    setProject(p => ({ ...p, 
                      company: client.companyName||'', street: client.street||'', houseNumber: client.houseNumber||'', zipCode: client.zipCode||'', city: client.city||'', country: client.country||'', contactName: client.contactName||'', contactRole: client.role||'', contactEmail: client.email||'', contactPhone: client.phone||'', logo: client.logo||p.logo, productName: prod.name||'', processingType: prod.processingType||'Whole', maturityStage: prod.maturityStage||'', postHarvestTreatment: prod.postHarvestTreatment||'', currentChallenge: prod.currentChallenge||'', trialTarget: prod.targetGoal||'', transportMode: prod.transportMode || (prod.transportModes?.[0] || ''), criteria: prod.qualityCriteria||[], startImage: prod.photo||null,
-                     startWeight: prod.weight || p.startWeight 
+                     startWeight: prod.weight || p.startWeight,
+                     technologies: prod.technologies || p.technologies || []
                    }));
                    if (prod.supplyChain) setSupplyChain(prod.supplyChain);
                    setGroups(p => { const ug = [...p]; if(ug[0]) { ug[0].specs = { ...ug[0].specs, packaging: prod.packagingType||'Retail', material: prod.material||'', length: prod.length||'', width: prod.width||'', height: prod.height||'' }; } return ug; });
@@ -431,7 +473,8 @@
                            ...d.project, 
                            packingDate: d.project.packingDate || d.project.date || new Date().toISOString().split('T')[0], 
                            transportMode: d.project.transportMode || '',
-                           startWeight: d.project.startWeight || d.groups?.[0]?.specs?.startWeight || ''
+                           startWeight: d.project.startWeight || d.groups?.[0]?.specs?.startWeight || '',
+                           technologies: d.project.technologies || []
                        })); 
                    }
                    if(d.supplyChain) setSupplyChain(d.supplyChain); 
@@ -486,6 +529,12 @@
           const addNewCriteria = () => { if(newCriteria && !(project.criteria||[]).includes(newCriteria)) { toggleCriteria(newCriteria); setNewCriteria(''); }};
           const handleTransportModeToggle = (mode) => {
             setProject(p => ({ ...p, transportMode: p.transportMode === mode ? '' : mode }));
+          };
+          const toggleTechnology = (tech) => {
+            setProject(p => ({ 
+                ...p, 
+                technologies: p.technologies?.includes(tech) ? p.technologies.filter(t => t !== tech) : [...(p.technologies || []), tech] 
+            }));
           };
 
           // Supply Chain
@@ -733,7 +782,12 @@
                        <div className="font-bold col-span-2 mt-4 border-t border-slate-200 pt-4 text-lg" style={{color: BRAND.colors.green}}>PerfoTec Support</div>
                        {project.employee && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">PerfoTec Employee :</div> <div className="font-medium">{project.employee}</div></>}
                        {(project.employeeEmail || project.employeePhone) && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Contact Details :</div> <div className="font-medium">{[project.employeeEmail, project.employeePhone].filter(Boolean).join(' | ')}</div></>}
-                       <div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Technology :</div> <div className="font-medium">PerfoTec Laser Perforation & Respiration Measuring</div>
+                       <div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Technology :</div> 
+                       <div className="font-medium">
+                         {project.technologies && project.technologies.length > 0 
+                            ? project.technologies.join(', ') 
+                            : 'PerfoTec Laser Perforation & Respiration Measuring'}
+                       </div>
                     </div>
                   </div>
 
@@ -852,14 +906,14 @@
                         {groups.some(g => g.predictedImage) && (
                             <div className="mt-10 break-inside-avoid bg-slate-50 p-8 rounded-2xl border border-slate-200">
                                <h4 className="font-bold mb-8 text-2xl text-slate-800">Predicted Gas Levels</h4>
-                               <div className="flex flex-col gap-12">
+                               <div className="flex flex-col gap-12 w-full">
                                  {groups.map((g, idx) => {
                                     if (!g.predictedImage) return null;
                                     return (
                                        <div key={g.id} className="flex flex-col items-center w-full break-inside-avoid">
                                           <div className="text-lg font-bold mb-4 text-center text-slate-700 bg-white px-6 py-2 rounded-full shadow-sm border border-slate-200">{g.name || 'Variant'}</div>
                                           <div className="w-full flex justify-center bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
-                                             <img src={g.predictedImage} className="w-full h-auto max-h-[500px] object-contain" crossOrigin="anonymous" />
+                                             <img src={g.predictedImage} className="w-full h-auto object-contain" crossOrigin="anonymous" />
                                           </div>
                                        </div>
                                     )
@@ -873,7 +927,7 @@
 
                   <div className="page-break"></div>
 
-                  {/* --- PAGE 5: EVALUATION PLAN --- */}
+                  {/* --- PAGE 6: EVALUATION PLAN --- */}
                   <div className="pt-4">
                     <h2 className={reportTitleClass} style={reportTitleStyle}>6. Evaluation Plan</h2>
                     <div className="text-base space-y-6 text-slate-800">
@@ -1167,44 +1221,66 @@
                   <div className="col-span-1 md:col-span-12 flex flex-col gap-8">
                     
                     {/* TOP SECTION: GLOBAL SETTINGS */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                       
-                       {/* Criteria */}
-                       <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col h-full">
-                          <label className="block mb-4 font-extrabold text-slate-800 text-lg border-b border-slate-100 pb-3">Global Assessment Criteria</label>
-                          <div className="flex flex-wrap gap-2 mb-6 flex-1">
-                            {(!project.criteria || project.criteria.length === 0) && <span className="text-sm text-gray-400 italic">No criteria selected.</span>}
-                            {(project.criteria || []).map(c => (
-                              <span key={c} className="bg-slate-50 border border-slate-300 text-slate-700 text-sm px-3 py-1.5 rounded-lg flex items-center gap-2 whitespace-nowrap shadow-sm font-medium">{c} <button onClick={() => toggleCriteria(c)} className="text-red-400 hover:text-red-600 font-bold ml-1">×</button></span>
-                            ))}
-                          </div>
-                          <div className="flex flex-col sm:flex-row gap-3 mt-auto">
-                            <select className={`${inputClass} flex-1`} value={newCriteria || ''} onChange={e => setNewCriteria(e.target.value)}>
-                               <option value="">Select standard criterion...</option>
-                               {DEFAULT_CRITERIA.filter(c => !(project.criteria || []).includes(c)).map(c => <option key={c}>{c}</option>)}
-                            </select>
-                            <button onClick={addNewCriteria} className="bg-slate-800 text-white px-5 py-3 rounded-lg hover:bg-slate-900 flex justify-center items-center font-bold shadow-sm transition-colors shrink-0 gap-2 whitespace-nowrap"><Plus size={18}/> Add Criterion</button>
-                          </div>
-                       </div>
+                    <div className="flex flex-col gap-6">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                           
+                           {/* Criteria */}
+                           <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col h-full">
+                              <label className="block mb-4 font-extrabold text-slate-800 text-lg border-b border-slate-100 pb-3">Global Assessment Criteria</label>
+                              <div className="flex flex-wrap gap-2 mb-6 flex-1">
+                                {(!project.criteria || project.criteria.length === 0) && <span className="text-sm text-gray-400 italic">No criteria selected.</span>}
+                                {(project.criteria || []).map(c => (
+                                  <span key={c} className="bg-slate-50 border border-slate-300 text-slate-700 text-sm px-3 py-1.5 rounded-lg flex items-center gap-2 whitespace-nowrap shadow-sm font-medium">{c} <button onClick={() => toggleCriteria(c)} className="text-red-400 hover:text-red-600 font-bold ml-1">×</button></span>
+                                ))}
+                              </div>
+                              <div className="flex flex-col sm:flex-row gap-3 mt-auto">
+                                <select className={`${inputClass} flex-1`} value={newCriteria || ''} onChange={e => setNewCriteria(e.target.value)}>
+                                   <option value="">Select standard criterion...</option>
+                                   {DEFAULT_CRITERIA.filter(c => !(project.criteria || []).includes(c)).map(c => <option key={c}>{c}</option>)}
+                                </select>
+                                <button onClick={addNewCriteria} className="bg-slate-800 text-white px-5 py-3 rounded-lg hover:bg-slate-900 flex justify-center items-center font-bold shadow-sm transition-colors shrink-0 gap-2 whitespace-nowrap"><Plus size={18}/> Add Criterion</button>
+                              </div>
+                           </div>
 
-                       {/* Evaluation Days */}
-                       <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col h-full">
-                          <label className="block mb-2 font-extrabold text-slate-800 text-lg">Global Evaluation Days</label>
-                          <p className="text-sm text-slate-500 mb-6">Specify the days on which packs are opened and evaluated.</p>
-                          
-                          <div className="flex flex-wrap gap-3 mb-6 flex-1 items-start">
-                              {(groups[0]?.measurements || []).map((m, i) => (
-                                  <div key={i} className="flex gap-2 items-center bg-slate-50 p-2 rounded-xl border border-slate-200 shadow-sm">
-                                      <span className="text-sm font-extrabold text-slate-600 ml-2">Day</span>
-                                      <input type="number" className="w-16 bg-white border border-slate-300 text-blue-700 text-center text-lg font-bold rounded-lg py-1 focus:ring-2 focus:ring-blue-500 outline-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" value={m.day} onChange={e => updateEvaluationDay(groups[0].id, m.day, e.target.value)} />
-                                      {i > 0 && <button onClick={() => removeEvaluationDay(groups[0].id, m.day)} className="text-red-400 hover:text-red-600 p-1.5 bg-white rounded-lg border shadow-sm"><X size={16}/></button>}
-                                  </div>
-                              ))}
-                          </div>
-                          <div className="mt-auto">
-                              <button onClick={() => addEvaluationDay(groups[0].id)} className="w-full sm:w-auto text-sm bg-blue-50 text-blue-700 px-5 py-3 rounded-xl font-bold border border-blue-200 hover:bg-blue-100 transition-colors inline-flex justify-center items-center gap-2"><Plus size={18}/> Add Evaluation Day</button>
-                          </div>
-                       </div>
+                           {/* Evaluation Days */}
+                           <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col h-full">
+                              <label className="block mb-2 font-extrabold text-slate-800 text-lg">Global Evaluation Days</label>
+                              <p className="text-sm text-slate-500 mb-6">Specify the days on which packs are opened and evaluated.</p>
+                              
+                              <div className="flex flex-wrap gap-3 mb-6 flex-1 items-start">
+                                  {(groups[0]?.measurements || []).map((m, i) => (
+                                      <div key={i} className="flex gap-2 items-center bg-slate-50 p-2 rounded-xl border border-slate-200 shadow-sm">
+                                          <span className="text-sm font-extrabold text-slate-600 ml-2">Day</span>
+                                          <input type="number" className="w-16 bg-white border border-slate-300 text-blue-700 text-center text-lg font-bold rounded-lg py-1 focus:ring-2 focus:ring-blue-500 outline-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" value={m.day} onChange={e => updateEvaluationDay(groups[0].id, m.day, e.target.value)} />
+                                          {i > 0 && <button onClick={() => removeEvaluationDay(groups[0].id, m.day)} className="text-red-400 hover:text-red-600 p-1.5 bg-white rounded-lg border shadow-sm"><X size={16}/></button>}
+                                      </div>
+                                  ))}
+                              </div>
+                              <div className="mt-auto">
+                                  <button onClick={() => addEvaluationDay(groups[0].id)} className="w-full sm:w-auto text-sm bg-blue-50 text-blue-700 px-5 py-3 rounded-xl font-bold border border-blue-200 hover:bg-blue-100 transition-colors inline-flex justify-center items-center gap-2"><Plus size={18}/> Add Evaluation Day</button>
+                              </div>
+                           </div>
+                        </div>
+
+                        {/* PerfoTec Technology */}
+                        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col h-full">
+                            <label className="block mb-4 font-extrabold text-slate-800 text-lg border-b border-slate-100 pb-3">PerfoTec Technology</label>
+                            <div className="flex flex-wrap gap-3">
+                                {PERFOTEC_TECHNOLOGIES.map(tech => {
+                                    const isSelected = project.technologies?.includes(tech);
+                                    return (
+                                        <button
+                                            key={tech}
+                                            type="button"
+                                            onClick={() => toggleTechnology(tech)}
+                                            className={`px-5 py-3 rounded-xl text-sm font-bold transition-all border shadow-sm flex items-center gap-2 ${isSelected ? 'bg-blue-600 text-white border-blue-700 ring-4 ring-blue-600/20 transform scale-[1.02]' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}
+                                        >
+                                            {tech} {isSelected && <CheckCircle size={16} className="text-white" />}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
                     </div>
 
                     {/* BOTTOM SECTION: VARIANTS */}
