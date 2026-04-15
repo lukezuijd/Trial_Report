@@ -58,7 +58,7 @@
           Upload, Image as ImageIcon, CheckCircle, Target, AlertCircle,
           Globe, AlertTriangle, Truck, Tractor, Ship, Plane, Warehouse, Store, 
           Utensils, Factory, Thermometer, Clock, ChevronRight, ArrowDown, ArrowUp, 
-          Beaker, Save, FolderOpen, FileText, Printer, Edit3, Camera, X, Mail, Send, Activity
+          Beaker, Save, FolderOpen, FileText, Printer, Edit3, Camera, X, Mail, Send, Activity, UserPlus, Package, FileArchive
         } from 'https://esm.sh/lucide-react@0.292.0';
 
         // --- LINK WITH CONFIG.JS ---
@@ -92,8 +92,9 @@
             introText: "Please fill in the details. Click 'Save (.json)' to save progress. Click 'View Summary' to review and print/save as PDF.",
             load: "Load (.json)", save: "Save (.json)", preview: "View Summary", print: "Print / Save PDF", back: "Back to edit",
             sec1Title: "1. Company & Contact Details",
-            companyName: "Company Name", street: "Street", houseNumber: "Number", zipCode: "Zip / Postal", city: "City", country: "Country",
-            contactName: "Contact Name", role: "Job Title", email: "Email", phone: "Phone",
+            companyName: "Company Name", street: "Street", houseNumber: "Number", zipCode: "Zip / Postal", city: "City", country: "Country", website: "Website",
+            contactName: "Contact Name", role: "Job Title", email: "Email", phoneDirect: "Phone (Direct)", phoneWork: "Phone (Work)", addContactBtn: "Add Contact Person",
+            unitSystem: "Unit System", metric: "Metric", imperial: "Imperial",
             logoUpload: "Company Logo", clickUpload: "Click to upload",
             sec2Title: "2. Product(s) for Testing", prodDetails: "Details", delProd: "Remove Product",
             secATitle: "A. Product & Packaging", prodName: "Product Name", prodType: "Variety / Type", origin: "Origin", prodPhoto: "Photo", processingType: "State of product",
@@ -106,7 +107,7 @@
             secBTitle: "B. Challenge & Objectives", challenge: "Current Challenge", goal: "Target Goal",
             secCTitle: "C. Current Supply Chain", transportMode: "Transport & Storage", transportModeErr: "Transport mode",
             airFreight: "Air", seaFreight: "Sea", roadTransport: "Road", storage: "Storage",
-            step: "Step", phase: "Phase (Activity)", temp: "Temperature (°C)", to: "To", days: "Time (Days)", action: "Action",
+            step: "Step", phase: "Phase (Activity)", temp: "Temperature", to: "To", days: "Time (Days)", action: "Action",
             actNone: "- None -", actPack: "Pack", actUnpack: "Unpack", addStep: "Add Step", addProd: "Add another product",
             validationErr: "Not all mandatory fields have been filled in:", reqField: "is required", reqProd: "Product",
             printTitle: "Intake Summary",
@@ -153,14 +154,35 @@
         const narrowInputClass = "w-full bg-slate-50 border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block py-2.5 px-1 text-center shadow-sm transition-all hover:bg-slate-100 focus:bg-white [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] min-w-0";
         const labelClass = "block mb-2 text-xs font-bold tracking-wide text-slate-600 uppercase";
 
+        // --- MATH CONVERSION HELPER ---
+        const convertValue = (val, type, isBulk, toImperial) => {
+            if (!val || isNaN(val)) return val;
+            const v = parseFloat(val);
+            let res = v;
+            
+            if (type === 'length') {
+                if (isBulk) res = toImperial ? v / 2.54 : v * 2.54; // cm <-> inch
+                else res = toImperial ? v / 25.4 : v * 25.4; // mm <-> inch
+            } else if (type === 'weight') {
+                if (isBulk) res = toImperial ? v * 2.20462 : v / 2.20462; // kg <-> lbs
+                else res = toImperial ? v * 0.00220462 : v / 0.00220462; // g <-> lbs
+            } else if (type === 'temp') {
+                res = toImperial ? (v * 9/5) + 32 : (v - 32) * 5/9; // C <-> F
+            }
+            
+            return Number(res.toFixed(2)).toString(); // Strips trailing zeros cleanly
+        };
+
         // --- COMPONENT: PRODUCT SUPPLY CHAIN FLOW (Visualizer for PDF) ---
-        const ProductSupplyChainFlow = ({ chain, t }) => {
+        const ProductSupplyChainFlow = ({ chain, unitSystem, t }) => {
           if (!chain || chain.length === 0) return null;
           let cumulativeMin = 0;
           let cumulativeMax = 0;
+          const isMetric = unitSystem === 'metric';
+          const tempUnit = isMetric ? '°C' : '°F';
 
           return (
-            <div className="flex w-full gap-1 items-start justify-between mt-2 mb-2 font-sans overflow-hidden">
+            <div className="flex w-full gap-1 items-start justify-between mt-2 mb-2 font-sans overflow-hidden print:overflow-visible">
               {chain.map((step, idx) => {
                 const minD = parseFloat(step.daysStart) || 0;
                 const maxD = step.daysEnd ? parseFloat(step.daysEnd) : minD;
@@ -174,29 +196,27 @@
                     {idx > 0 && <div className="h-16 flex items-center justify-center"><ChevronRight size={14} className="text-gray-300 flex-shrink-0" /></div>}
                     
                     <div className="flex flex-col items-center flex-1 min-w-0">
-                      <div className="w-full flex flex-col items-center bg-white border border-gray-200 rounded shadow-sm p-1.5 relative">
+                      <div className="w-full flex flex-col items-center bg-white border border-gray-200 rounded shadow-sm p-1.5 relative min-h-[5.5rem]">
                          <div className="absolute top-0 left-0 w-full h-1" style={{backgroundColor: idx % 2 === 0 ? BRAND.colors.green : BRAND.colors.blue}}></div>
                          
                          <div className="bg-gray-50 p-1.5 rounded-full mb-1 flex-shrink-0 mt-1">
                             {getStageIcon(step.stage)}
                          </div>
                          
-                         <div className="text-[8px] font-bold text-center uppercase mb-1 min-h-[24px] py-0.5 flex items-center justify-center leading-tight w-full break-words px-0.5">
-                           {step.stage}
-                         </div>
+                         <div className="text-[8px] font-bold text-center uppercase mb-1 min-h-[24px] flex items-center justify-center leading-tight w-full break-words px-0.5">{step.stage || '-'}</div>
                          
                          <div className="w-full border-t border-dotted border-gray-200 my-0.5"></div>
                          
                          <div className="flex flex-col justify-center w-full text-[8px] gap-0.5 pb-0.5">
                             <span className="flex items-center justify-center gap-0.5 font-bold text-gray-700 whitespace-nowrap">
-                              <Thermometer size={8} className="text-red-500"/> {formatRange(step.tempStart, step.tempEnd, '°C')}
+                              <Thermometer size={8} className="text-red-500"/> {formatRange(step.tempStart, step.tempEnd, tempUnit)}
                             </span>
                             <span className="flex items-center justify-center gap-0.5 text-gray-500 whitespace-nowrap">
                               <Clock size={8}/> {formatRange(step.daysStart, step.daysEnd, 'd')}
                             </span>
                          </div>
                          
-                         <div className="mt-1 bg-blue-50 text-blue-700 border border-blue-100 text-[7px] font-bold px-1 rounded whitespace-nowrap">
+                         <div className="mt-1 bg-blue-50 text-blue-700 border border-blue-100 text-[7px] font-bold px-1 rounded whitespace-nowrap w-full text-center">
                             ∑ {cumStr}d
                          </div>
                       </div>
@@ -214,16 +234,34 @@
         };
 
         // --- COMPONENT: PRINT VIEW ---
-        const PrintPreview = ({ clientInfo, products, t, onBack }) => {
+        const PrintPreview = ({ clientInfo, products, unitSystem, t, onBack }) => {
           const reportTitleClass = "text-3xl font-extrabold uppercase mb-6 brand-heading break-after-avoid";
           const reportTitleStyle = { color: BRAND.colors.green, borderBottom: `3px solid ${BRAND.colors.gray}`, paddingBottom: '0.75rem', marginTop: '2rem' };
 
+          const isMetric = unitSystem === 'metric';
+
           const handlePdfExport = () => { window.print(); };
+
+          const handleWordExport = () => {
+              const content = document.getElementById('print-content').innerHTML;
+              const preHtml = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export HTML To Doc</title><style>body { font-family: 'Arial', sans-serif; } .page-break { page-break-before: always; } table { width: 100%; border-collapse: collapse; margin-bottom: 20px; } th, td { border: 1px solid #ccc; padding: 8px; text-align: left; } th { background-color: #007C27; color: white; } img { max-width: 100%; height: auto; }</style></head><body>`;
+              const postHtml = "</body></html>";
+              const html = preHtml + content + postHtml;
+              const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
+              const url = URL.createObjectURL(blob);
+              const downloadLink = document.createElement("a");
+              document.body.appendChild(downloadLink);
+              downloadLink.href = URL.createObjectURL(blob);
+              downloadLink.download = `Intake_${clientInfo.companyName || 'Client'}.doc`;
+              downloadLink.click();
+              document.body.removeChild(downloadLink);
+          };
 
           return (
              <div className="min-h-screen bg-slate-600 p-0 sm:p-8 overflow-y-auto print:overflow-visible print:h-auto print:min-h-0 print:block font-sans print:p-0 print:bg-white no-print-bg">
                 <div className="fixed top-6 right-6 flex gap-4 no-print z-50">
                     <button onClick={onBack} className="bg-slate-800 text-white px-6 py-3 rounded-full shadow-lg font-bold flex items-center gap-2 hover:bg-slate-900 transition"><Edit3 size={18}/> {t.back}</button>
+                    <button onClick={handleWordExport} className="bg-blue-600 text-white px-6 py-3 rounded-full shadow-lg font-bold flex items-center gap-2 hover:bg-blue-700 transition"><FileArchive size={20} /> Download Word</button>
                     <button onClick={handlePdfExport} className="bg-green-600 text-white px-6 py-3 rounded-full shadow-lg font-bold flex items-center gap-2 hover:bg-green-700 transition"><Printer size={18}/> {t.print}</button>
                 </div>
 
@@ -251,30 +289,40 @@
                          <div>
                             <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">{t.companyName}</p>
                             <p className="font-bold text-slate-800 text-lg">{clientInfo.companyName || '-'}</p>
-                         </div>
-                         <div>
-                            <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">{t.contactName}</p>
-                            <p className="font-bold text-slate-800 text-lg">{clientInfo.contactName || '-'} {clientInfo.role && <span className="font-normal text-slate-500 text-sm ml-1">({clientInfo.role})</span>}</p>
+                            {clientInfo.website && <p className="text-blue-600 font-medium mt-1 text-xs">{clientInfo.website}</p>}
                          </div>
                          <div>
                             <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Address</p>
                             <p className="text-slate-700 text-base">{clientInfo.street} {clientInfo.houseNumber}</p>
                             <p className="text-slate-700 text-base">{clientInfo.zipCode} {clientInfo.city}, {clientInfo.country}</p>
                          </div>
-                         <div>
-                            <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Contact</p>
-                            <p className="text-slate-700 text-base">{clientInfo.email || '-'}</p>
-                            <p className="text-slate-700 text-base">{clientInfo.phone || '-'}</p>
-                         </div>
                       </div>
+                      
+                      {clientInfo.contacts && clientInfo.contacts.length > 0 && (
+                          <div className="mt-8">
+                             <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-2">Contacts</p>
+                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {clientInfo.contacts.map((contact, i) => (
+                                    <div key={i} className="bg-white p-4 border border-slate-200 rounded-xl">
+                                        <p className="font-bold text-slate-800 text-base">{contact.name || '-'} {contact.role && <span className="font-normal text-slate-500 text-sm ml-1">({contact.role})</span>}</p>
+                                        <div className="mt-2 space-y-1">
+                                            {contact.email && <p className="text-slate-600 text-sm flex items-center gap-2"><Mail size={14}/> {contact.email}</p>}
+                                            {contact.phoneDirect && <p className="text-slate-600 text-sm flex items-center gap-2"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"></path></svg> {contact.phoneDirect} (Direct)</p>}
+                                            {contact.phoneWork && <p className="text-slate-600 text-sm flex items-center gap-2"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path></svg> {contact.phoneWork} (Work)</p>}
+                                        </div>
+                                    </div>
+                                ))}
+                             </div>
+                          </div>
+                      )}
                    </div>
 
                    {/* PRODUCTS */}
                    <div className="space-y-12">
                      {products.map((prod, idx) => {
                        const isLargeBulk = prod.packagingType === 'Bin crate' || prod.packagingType === 'Pallet';
-                       const dimUnit = isLargeBulk ? 'cm' : 'mm';
-                       const weightUnit = isLargeBulk ? 'kg' : 'g';
+                       const dimUnit = isLargeBulk ? (isMetric ? 'cm' : 'inch') : (isMetric ? 'mm' : 'inch');
+                       const weightUnit = isLargeBulk ? (isMetric ? 'kg' : 'lbs') : (isMetric ? 'g' : 'lbs');
 
                        return (
                          <div key={prod.id} className="border border-slate-200 rounded-2xl p-8 mb-8 break-inside-avoid bg-white">
@@ -286,7 +334,7 @@
                                
                                <div style={{ width: '80mm', height: '80mm' }} className="border border-slate-200 rounded-xl flex items-center justify-center bg-white p-2 shadow-sm shrink-0 overflow-hidden">
                                   {prod.photo ? (
-                                     <img src={prod.photo} className="max-w-full h-auto max-h-[80mm] object-contain rounded" crossOrigin="anonymous" />
+                                     <img src={prod.photo} className="max-w-full h-auto max-h-[80mm] object-contain p-2 rounded" crossOrigin="anonymous" />
                                   ) : (
                                      <div className="flex flex-col items-center text-slate-300">
                                         <ImageIcon size={32} className="mb-2 opacity-50"/> 
@@ -305,7 +353,7 @@
                                      <div className="font-bold text-slate-500">Maturity :</div> <div>{prod.maturityStage || '-'}</div>
                                      <div className="font-bold text-slate-500">Treatment :</div> <div>{prod.postHarvestTreatment || '-'}</div>
                                      <div className="font-bold text-slate-500 mt-2 pt-2 border-t">Packaging :</div> <div className="mt-2 pt-2 border-t">{prod.packagingType || '-'} ({prod.material || '-'})</div>
-                                     <div className="font-bold text-slate-500">Dimensions :</div> <div>{prod.length || '-'}x{prod.width || '-'}x{prod.height || '-'} {dimUnit}</div>
+                                     <div className="font-bold text-slate-500">Dimensions :</div> <div>{prod.length || '-'} x {prod.width || '-'} {prod.packagingType !== 'Pillow Bag' && `x ${prod.height || '-'}`} {dimUnit}</div>
                                      <div className="font-bold text-slate-500">Net Weight :</div> <div className="font-bold">{prod.weight || '-'} {weightUnit}</div>
                                   </div>
                                </div>
@@ -324,7 +372,7 @@
 
                             <div className="break-inside-avoid bg-slate-50 p-6 rounded-2xl border border-slate-200 mb-8">
                                <h4 className="font-bold text-lg mb-4 text-slate-800 flex items-center gap-2"><Truck size={20} className="text-indigo-600"/> Supply Chain ({prod.transportMode || 'None'})</h4>
-                               <ProductSupplyChainFlow chain={prod.supplyChain} t={t} />
+                               <ProductSupplyChainFlow chain={prod.supplyChain} unitSystem={unitSystem} t={t} />
                             </div>
 
                             {prod.qualityCriteria && prod.qualityCriteria.length > 0 && (
@@ -346,16 +394,20 @@
 
         // --- MAIN APPLICATION (EDITOR) ---
         const App = () => {
+          // Language strictly set to English for this file.
           const lang = 'en';
           const t = T[lang];
 
           const [clientInfo, setClientInfo] = useState({
-            companyName: '', street: '', houseNumber: '', zipCode: '', city: '', country: '',
-            contactName: '', role: '', email: '', phone: '', logo: null
+            companyName: '', street: '', houseNumber: '', zipCode: '', city: '', country: '', website: '',
+            contacts: [{ id: 1, name: '', role: '', email: '', phoneDirect: '', phoneWork: '' }],
+            logo: null
           });
 
+          const [unitSystem, setUnitSystem] = useState('metric'); // 'metric' or 'imperial'
+
           const initialProduct = {
-            id: 1, name: '', type: '', origin: '', processingType: 'Whole',
+            id: Date.now(), name: '', type: '', origin: '', processingType: 'Whole',
             maturityStage: '', postHarvestTreatment: '', weight: '',
             packagingType: 'Punnets', material: '', length: '', width: '', height: '',
             qualityCriteria: [], currentChallenge: '', targetGoal: '',
@@ -368,11 +420,68 @@
           const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
           const [mailUrl, setMailUrl] = useState('');
           const [isPreview, setIsPreview] = useState(false);
+          const fileInputRef = useRef(null);
+
+          // --- HANDLERS UNIT TOGGLE ---
+          const handleUnitToggle = (newSystem) => {
+              if (newSystem === unitSystem) return;
+              const toImperial = newSystem === 'imperial';
+              
+              setProducts(prevProds => prevProds.map(p => {
+                  const isBulk = p.packagingType === 'Bin crate' || p.packagingType === 'Pallet';
+                  
+                  // Convert dimensions
+                  const newLen = convertValue(p.length, 'length', isBulk, toImperial);
+                  const newWid = convertValue(p.width, 'length', isBulk, toImperial);
+                  const newHei = convertValue(p.height, 'length', isBulk, toImperial);
+                  const newWgt = convertValue(p.weight, 'weight', isBulk, toImperial);
+
+                  // Convert Supply Chain Temps
+                  const newChain = p.supplyChain.map(step => ({
+                      ...step,
+                      tempStart: convertValue(step.tempStart, 'temp', false, toImperial),
+                      tempEnd: convertValue(step.tempEnd, 'temp', false, toImperial)
+                  }));
+
+                  return {
+                      ...p,
+                      length: newLen,
+                      width: newWid,
+                      height: newHei,
+                      weight: newWgt,
+                      supplyChain: newChain
+                  };
+              }));
+              
+              setUnitSystem(newSystem);
+          };
 
           // --- HANDLERS CLIENT INFO ---
           const handleClientChange = (field, value) => {
             setClientInfo(prev => ({ ...prev, [field]: value }));
             if (errors.length > 0) setErrors([]); 
+          };
+
+          const handleContactChange = (id, field, value) => {
+             setClientInfo(prev => ({
+                 ...prev,
+                 contacts: prev.contacts.map(c => c.id === id ? { ...c, [field]: value } : c)
+             }));
+             if (errors.length > 0) setErrors([]); 
+          };
+
+          const addContact = () => {
+             setClientInfo(prev => ({
+                 ...prev,
+                 contacts: [...prev.contacts, { id: Date.now(), name: '', role: '', email: '', phoneDirect: '', phoneWork: '' }]
+             }));
+          };
+
+          const removeContact = (id) => {
+             setClientInfo(prev => ({
+                 ...prev,
+                 contacts: prev.contacts.filter(c => c.id !== id)
+             }));
           };
 
           const handleLogoUpload = (e) => {
@@ -386,12 +495,15 @@
 
           // --- HANDLERS PRODUCTS ---
           const addProduct = () => {
-            const newId = Math.max(...products.map(p => p.id), 0) + 1;
-            setProducts([...products, { ...initialProduct, id: newId, name: `Product ${newId}` }]);
+            const newId = Date.now() + Math.random(); 
+            setProducts([...products, { ...initialProduct, id: newId }]);
           };
 
           const removeProduct = (id) => {
-            if (products.length > 1) setProducts(products.filter(p => p.id !== id));
+            if (products.length > 1) {
+                const newProds = products.filter(p => p.id !== id);
+                setProducts(newProds);
+            }
           };
 
           const handleProductChange = (id, field, value) => {
@@ -409,11 +521,11 @@
                     let newAction = step.action;
                     if (newAction === 'unpack') newAction = 'none';
 
-                    if (stageLower.includes('packing')) {
+                    if (stageLower.includes('packing') || stageLower.includes('verpak') || stageLower.includes('empaca')) {
                        newAction = 'pack';
-                    } else if (stageLower.includes('distribution') || stageLower.includes('dc')) {
+                    } else if (stageLower.includes('distribution') || stageLower.includes('dc') || stageLower.includes('distribu')) {
                        if (isBulk) newAction = 'unpack';
-                    } else if (stageLower.includes('consumer')) {
+                    } else if (stageLower.includes('consumer') || stageLower.includes('consum')) {
                        if (!isBulk) newAction = 'unpack';
                     }
                     return { ...step, action: newAction };
@@ -438,9 +550,9 @@
              }));
           };
 
-          const addNewCriteriaField = (id) => { 
+          const addNewCriteriaField = (productId) => { 
               if(newCriteria) { 
-                  toggleCriteria(id, newCriteria); 
+                  toggleCriteria(productId, newCriteria); 
                   setNewCriteria(''); 
               }
           };
@@ -486,14 +598,14 @@
           const validateForm = () => {
             let newErrors = [];
             
+            // Only Company Name and at least one Contact Person are mandatory now for address/company section
             if (!clientInfo.companyName.trim()) newErrors.push(`${t.companyName} ${t.reqField}`);
-            if (!clientInfo.street.trim()) newErrors.push(`${t.street} ${t.reqField}`);
-            if (!clientInfo.houseNumber.trim()) newErrors.push(`${t.houseNumber} ${t.reqField}`);
-            if (!clientInfo.zipCode.trim()) newErrors.push(`${t.zipCode} ${t.reqField}`);
-            if (!clientInfo.city.trim()) newErrors.push(`${t.city} ${t.reqField}`);
-            if (!clientInfo.country.trim()) newErrors.push(`${t.country} ${t.reqField}`);
-            if (!clientInfo.contactName.trim()) newErrors.push(`${t.contactName} ${t.reqField}`);
-            if (!clientInfo.email.trim()) newErrors.push(`${t.email} ${t.reqField}`);
+            
+            clientInfo.contacts.forEach((c, idx) => {
+               const cPrefix = clientInfo.contacts.length > 1 ? `Contact ${idx + 1}: ` : '';
+               if (!c.name.trim()) newErrors.push(`${cPrefix}${t.contactName} ${t.reqField}`);
+               if (!c.email.trim()) newErrors.push(`${cPrefix}${t.email} ${t.reqField}`);
+            });
 
             products.forEach((p, idx) => {
               const prefix = `${t.reqProd} ${idx + 1} (${p.name || '?'}): `;
@@ -523,10 +635,12 @@
               isPerfoTecIntake: true,
               exportDate: new Date().toISOString(),
               language: lang,
+              unitSystem: unitSystem,
               client: clientInfo,
               products: products
             };
 
+            // Automatically Generate Filename: Intake Form_[Company Name]_[ProductName1]_[ProductName2]
             const companyPart = clientInfo.companyName.trim() || 'Company';
             const productPart = products.map(p => p.name.trim()).filter(Boolean).join('_') || 'Products';
             const rawFilename = `Intake Form_${companyPart}_${productPart}`;
@@ -552,13 +666,33 @@
             const file = e.target.files[0];
             if (!file) return;
             
+            const processData = (data) => {
+                if(data.isPerfoTecIntake) {
+                   // Backward compatibility check for older JSONs that had contact info flat on the client object
+                   let loadedClient = { ...data.client };
+                   if (!loadedClient.contacts || loadedClient.contacts.length === 0) {
+                       loadedClient.contacts = [{
+                           id: Date.now(),
+                           name: loadedClient.contactName || '',
+                           role: loadedClient.role || '',
+                           email: loadedClient.email || '',
+                           phoneDirect: loadedClient.phone || '',
+                           phoneWork: ''
+                       }];
+                       // clean up old flat values to avoid confusion
+                       delete loadedClient.contactName; delete loadedClient.role; delete loadedClient.email; delete loadedClient.phone;
+                   }
+                   
+                   setClientInfo(loadedClient);
+                   if(data.products && data.products.length > 0) {
+                       setProducts(data.products);
+                   }
+                   if(data.unitSystem) setUnitSystem(data.unitSystem);
+                } else { alert(t.validationErr || "Invalid intake file."); }
+            };
+
             if (globalConfig.importJSON) {
-                globalConfig.importJSON(file, (data) => {
-                    if(data.isPerfoTecIntake) {
-                       if(data.client) setClientInfo(data.client);
-                       if(data.products) setProducts(data.products);
-                    } else { alert(t.validationErr || "Invalid intake file."); }
-                }, (err) => {
+                globalConfig.importJSON(file, processData, () => {
                     alert("Error loading JSON file.");
                 });
             } else {
@@ -566,15 +700,12 @@
                 reader.onload = (event) => {
                   try {
                     const data = JSON.parse(event.target.result);
-                    if(data.isPerfoTecIntake) {
-                       if(data.client) setClientInfo(data.client);
-                       if(data.products) setProducts(data.products);
-                    } else { alert("Invalid intake file."); }
+                    processData(data);
                   } catch (err) { alert("Error loading JSON file."); }
                 };
                 reader.readAsText(file);
             }
-            e.target.value = null; // Zorgt dat je hetzelfde bestand twee keer achter elkaar kunt inladen
+            e.target.value = null; 
           };
 
           const handleSubmit = (e) => {
@@ -587,14 +718,16 @@
 
             handleExportJSON();
             
+            const primaryContact = clientInfo.contacts && clientInfo.contacts[0] ? clientInfo.contacts[0] : { name: '' };
             const subject = encodeURIComponent(`New PerfoTec Intake - ${clientInfo.companyName}`);
-            const bodyText = `Dear Luke,\n\nPlease find our completed intake form attached (the JSON file has just been downloaded to my computer).\n\nBest regards,\n${clientInfo.contactName}\n${clientInfo.companyName}`;
+            const bodyText = `Dear Luke,\n\nPlease find our completed intake form attached (the JSON file has just been downloaded to my computer).\n\nBest regards,\n${primaryContact.name}\n${clientInfo.companyName}`;
             
             const generatedMailUrl = `mailto:luke.zuijderwijk@perfotec.com?subject=${subject}&body=${encodeURIComponent(bodyText)}`;
             setMailUrl(generatedMailUrl);
 
             setIsSuccessModalOpen(true);
             
+            // Fallback strategy for environments where window.location.href to mailto is blocked
             setTimeout(() => {
                 try {
                     const iframe = document.createElement('iframe');
@@ -609,7 +742,7 @@
           };
 
           if (isPreview) {
-            return <PrintPreview clientInfo={clientInfo} products={products} t={t} onBack={() => setIsPreview(false)} />;
+            return <PrintPreview clientInfo={clientInfo} products={products} unitSystem={unitSystem} t={t} onBack={() => setIsPreview(false)} />;
           }
 
           return (
@@ -656,7 +789,7 @@
               <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40 shadow-sm">
                 <div className="max-w-6xl mx-auto px-4 md:px-6 py-4 flex justify-between items-center">
                   <div className="flex items-center gap-4">
-                    <img src={globalConfig.BRAND?.logos?.default || "https://cdn.prod.website-files.com/68b594c756c22085ddc6c1ea/68b59ba2f027bfeecd25261b_PerfoTec%20logo.png"} alt="PerfoTec" className="h-9 md:h-12 object-contain" />
+                    <img src={BRAND.logos.default} alt="PerfoTec" className="h-9 md:h-12 object-contain" />
                     <div className="border-l-2 border-slate-200 pl-4 ml-2 hidden sm:block">
                       <h1 className="font-extrabold text-2xl tracking-tight leading-none" style={{color: BRAND.colors.blue}}>{t.title}</h1>
                       <p className="text-xs text-slate-500 font-bold uppercase tracking-widest mt-1">{t.subtitle}</p>
@@ -664,12 +797,36 @@
                   </div>
                   
                   <div className="flex items-center gap-3">
+                    <div className="flex items-center bg-slate-100 hover:bg-slate-200 transition-colors rounded-xl px-3 py-2 border border-slate-200 shadow-sm">
+                       <Globe size={18} className="text-slate-500 mr-2" />
+                       <select 
+                         className="bg-transparent text-sm font-bold text-slate-700 outline-none cursor-pointer w-full" 
+                         value={lang} 
+                         onChange={(e) => {
+                           const val = e.target.value;
+                           if (globalConfig.setLanguage) globalConfig.setLanguage(val);
+                           if (val !== 'en') {
+                              try {
+                                  window.location.assign(`intake_${val}.html`);
+                              } catch(err) {
+                                  console.warn("Navigation failed", err);
+                              }
+                           }
+                         }}
+                       >
+                         {globalConfig.LANGUAGES ? globalConfig.LANGUAGES.map(l => (
+                             <option key={l.code} value={l.code}>{l.label}</option>
+                         )) : (
+                             <React.Fragment><option value="en">EN</option><option value="nl">NL</option><option value="es">ES</option></React.Fragment>
+                         )}
+                       </select>
+                    </div>
                     
                     <div className="h-8 border-l border-slate-300 mx-1 hidden md:block"></div>
 
                     <label className="cursor-pointer bg-white border border-slate-300 text-slate-700 px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm">
                       <FolderOpen size={18} className="text-blue-600"/> <span className="hidden md:inline">{t.load}</span>
-                      <input type="file" accept=".json" className="hidden" onChange={handleImportJSON} />
+                      <input type="file" accept=".json" className="hidden" onClick={(e) => { e.target.value = null; }} onChange={handleImportJSON} ref={fileInputRef} />
                     </label>
                     <button onClick={handleExportJSON} className="bg-white border border-slate-300 text-slate-700 px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm">
                       <Save size={18} className="text-green-600"/> <span className="hidden md:inline">{t.save}</span>
@@ -703,63 +860,108 @@
                 {/* 1. COMPANY DETAILS */}
                 <section className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden">
                   <div className="absolute top-0 left-0 w-full h-1" style={{ backgroundColor: BRAND.colors.green }}></div>
-                  <div className="flex items-center gap-4 border-b-2 border-slate-100 pb-6 mb-8">
-                    <div className="p-3 bg-green-50 rounded-xl">
-                      <Building2 size={28} color={BRAND.colors.green} />
+                  <div className="flex items-center justify-between border-b-2 border-slate-100 pb-6 mb-8">
+                    <div className="flex items-center gap-4">
+                      <div className="p-3 bg-green-50 rounded-xl">
+                        <Building2 size={28} color={BRAND.colors.green} />
+                      </div>
+                      <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">{t.sec1Title}</h2>
                     </div>
-                    <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">{t.sec1Title}</h2>
+                    
+                    {/* UNIT TOGGLE SWITCH */}
+                    <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-xl border border-slate-200 shadow-inner">
+                        <button 
+                          onClick={() => handleUnitToggle('metric')}
+                          className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${unitSystem === 'metric' ? 'bg-white text-slate-800 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                            {t.metric}
+                        </button>
+                        <button 
+                          onClick={() => handleUnitToggle('imperial')}
+                          className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${unitSystem === 'imperial' ? 'bg-white text-slate-800 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
+                        >
+                            {t.imperial}
+                        </button>
+                    </div>
                   </div>
                   
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
                     <div className="lg:col-span-2 flex flex-col gap-8">
                       
-                      <div>
-                        <label className={labelClass}>{t.companyName} <span className="text-red-500">*</span></label>
-                        <input type="text" className={`${inputClass} text-lg font-bold`} value={clientInfo.companyName} placeholder="E.g. Fresh Produce Ltd." onChange={e => handleClientChange('companyName', e.target.value)} />
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                          <div className="sm:col-span-2">
+                            <label className={labelClass}>{t.companyName} <span className="text-red-500">*</span></label>
+                            <input type="text" className={`${inputClass} text-lg font-bold`} value={clientInfo.companyName} onChange={e => handleClientChange('companyName', e.target.value)} />
+                          </div>
+                          <div className="sm:col-span-2">
+                            <label className={labelClass}>{t.website}</label>
+                            <div className="relative">
+                               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"><Globe size={18}/></span>
+                               <input type="url" className={`${inputClass} pl-11`} placeholder="https://www.example.com" value={clientInfo.website} onChange={e => handleClientChange('website', e.target.value)} />
+                            </div>
+                          </div>
                       </div>
 
                       {/* Address Block */}
                       <div className="bg-slate-50/50 p-6 rounded-2xl border border-slate-200 grid grid-cols-4 gap-5">
                          <div className="col-span-4 sm:col-span-3">
-                           <label className={labelClass}>{t.street} <span className="text-red-500">*</span></label>
+                           <label className={labelClass}>{t.street}</label>
                            <input type="text" className={inputClass} value={clientInfo.street} onChange={e => handleClientChange('street', e.target.value)} />
                          </div>
                          <div className="col-span-4 sm:col-span-1">
-                           <label className={labelClass}>{t.houseNumber} <span className="text-red-500">*</span></label>
+                           <label className={labelClass}>{t.houseNumber}</label>
                            <input type="text" className={inputClass} value={clientInfo.houseNumber} onChange={e => handleClientChange('houseNumber', e.target.value)} />
                          </div>
                          <div className="col-span-4 sm:col-span-2">
-                           <label className={labelClass}>{t.zipCode} <span className="text-red-500">*</span></label>
+                           <label className={labelClass}>{t.zipCode}</label>
                            <input type="text" className={inputClass} value={clientInfo.zipCode} onChange={e => handleClientChange('zipCode', e.target.value)} />
                          </div>
                          <div className="col-span-4 sm:col-span-2">
-                           <label className={labelClass}>{t.city} <span className="text-red-500">*</span></label>
+                           <label className={labelClass}>{t.city}</label>
                            <input type="text" className={inputClass} value={clientInfo.city} onChange={e => handleClientChange('city', e.target.value)} />
                          </div>
                          <div className="col-span-4">
-                           <label className={labelClass}>{t.country} <span className="text-red-500">*</span></label>
+                           <label className={labelClass}>{t.country}</label>
                            <input type="text" className={inputClass} value={clientInfo.country} onChange={e => handleClientChange('country', e.target.value)} />
                          </div>
                       </div>
 
-                      {/* Contact Info */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                          <div>
-                            <label className={labelClass}>{t.contactName} <span className="text-red-500">*</span></label>
-                            <input type="text" className={inputClass} value={clientInfo.contactName} placeholder="Jane Doe" onChange={e => handleClientChange('contactName', e.target.value)} />
-                          </div>
-                          <div>
-                            <label className={labelClass}>{t.role}</label>
-                            <input type="text" className={inputClass} value={clientInfo.role} placeholder="Quality Manager" onChange={e => handleClientChange('role', e.target.value)} />
-                          </div>
-                          <div>
-                            <label className={labelClass}>{t.email} <span className="text-red-500">*</span></label>
-                            <input type="email" className={inputClass} value={clientInfo.email} placeholder="jane@example.com" onChange={e => handleClientChange('email', e.target.value)} />
-                          </div>
-                          <div>
-                            <label className={labelClass}>{t.phone}</label>
-                            <input type="tel" className={inputClass} value={clientInfo.phone} placeholder="+1 234 567 890" onChange={e => handleClientChange('phone', e.target.value)} />
-                          </div>
+                      {/* Contacts Loop */}
+                      <div className="space-y-6">
+                          {clientInfo.contacts.map((contact, idx) => (
+                              <div key={contact.id} className="p-6 bg-slate-50 border border-slate-200 rounded-2xl relative group">
+                                  {clientInfo.contacts.length > 1 && (
+                                    <button onClick={() => removeContact(contact.id)} className="absolute top-4 right-4 text-red-400 hover:text-red-600 bg-white p-2 rounded-lg border border-slate-200 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity" title="Remove contact">
+                                        <Trash2 size={16}/>
+                                    </button>
+                                  )}
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                      <div>
+                                        <label className={labelClass}>{t.contactName} <span className="text-red-500">*</span></label>
+                                        <input type="text" className={inputClass} value={contact.name} onChange={e => handleContactChange(contact.id, 'name', e.target.value)} />
+                                      </div>
+                                      <div>
+                                        <label className={labelClass}>{t.role}</label>
+                                        <input type="text" className={inputClass} value={contact.role} onChange={e => handleContactChange(contact.id, 'role', e.target.value)} />
+                                      </div>
+                                      <div className="sm:col-span-2">
+                                        <label className={labelClass}>{t.email} <span className="text-red-500">*</span></label>
+                                        <input type="email" className={inputClass} value={contact.email} onChange={e => handleContactChange(contact.id, 'email', e.target.value)} />
+                                      </div>
+                                      <div>
+                                        <label className={labelClass}>{t.phoneDirect}</label>
+                                        <input type="tel" className={inputClass} value={contact.phoneDirect} onChange={e => handleContactChange(contact.id, 'phoneDirect', e.target.value)} />
+                                      </div>
+                                      <div>
+                                        <label className={labelClass}>{t.phoneWork}</label>
+                                        <input type="tel" className={inputClass} value={contact.phoneWork} onChange={e => handleContactChange(contact.id, 'phoneWork', e.target.value)} />
+                                      </div>
+                                  </div>
+                              </div>
+                          ))}
+                          <button onClick={addContact} className="w-full py-4 rounded-xl border-2 border-dashed border-blue-200 bg-blue-50 text-blue-700 font-bold hover:bg-blue-100 transition-colors flex items-center justify-center gap-2">
+                              <UserPlus size={18}/> {t.addContactBtn}
+                          </button>
                       </div>
                     </div>
 
@@ -782,310 +984,328 @@
                   </div>
                 </section>
 
-                {/* PRODUCTS */}
-                {products.map((product, productIndex) => {
-                  const isPillowBag = product.packagingType === 'Pillow Bag';
-                  const isLargeBulk = product.packagingType === 'Bin crate' || product.packagingType === 'Pallet';
-                  const dimUnit = isLargeBulk ? 'cm' : 'mm';
-                  const weightUnit = isLargeBulk ? 'kg' : 'g';
+                <div className="flex items-center gap-4 pb-2 pt-6">
+                  <div className="p-3 bg-blue-100 rounded-xl shadow-sm">
+                    <PackagePlus size={32} color={BRAND.colors.blue} />
+                  </div>
+                  <h2 className="text-3xl font-extrabold text-slate-800 tracking-tight">{t.sec2Title}</h2>
+                </div>
 
-                  return (
-                    <section key={product.id} className="bg-white rounded-3xl shadow-md border border-slate-200 overflow-hidden relative transition-all hover:shadow-lg">
-                      
-                      {/* PRODUCT HEADER */}
-                      <div className="text-white px-6 py-5 flex justify-between items-center" style={{ backgroundColor: BRAND.colors.green }}>
-                         <div className="flex items-center gap-4">
-                           <div className="bg-white/20 border border-white/30 text-white w-10 h-10 rounded-full flex items-center justify-center font-bold shadow-inner">
-                              {productIndex + 1}
-                           </div>
-                           <h3 className="font-bold text-xl tracking-wide">
-                             {t.prodDetails} {product.name ? <span className="text-green-100 font-normal ml-2">/ {product.name}</span> : ''}
-                           </h3>
-                         </div>
-                         
-                         {products.length > 1 && (
-                           <button type="button" onClick={() => removeProduct(product.id)} className="text-red-100 hover:text-white hover:bg-red-500 bg-black/20 p-2.5 rounded-xl transition-all flex items-center gap-2 text-sm font-bold shadow-sm">
-                             <Trash2 size={18} /> <span className="hidden sm:inline">{t.delProd}</span>
-                           </button>
-                         )}
-                      </div>
+                {/* PRODUCTS LIST */}
+                <div className="space-y-10">
+                  {products.map((prod, idx) => {
+                    const isLargeBulk = prod.packagingType === 'Bin crate' || prod.packagingType === 'Pallet';
+                    const dimUnit = isLargeBulk ? (unitSystem === 'metric' ? 'cm' : 'inch') : (unitSystem === 'metric' ? 'mm' : 'inch');
+                    const weightUnit = isLargeBulk ? (unitSystem === 'metric' ? 'kg' : 'lbs') : (unitSystem === 'metric' ? 'g' : 'lbs');
 
-                      <div className="p-6 md:p-10 space-y-12">
+                    return (
+                      <section key={prod.id} className="bg-white rounded-3xl shadow-md border border-slate-200 overflow-hidden relative transition-all hover:shadow-lg">
                         
-                        {/* A. Basic & Packaging */}
-                        <div>
-                          <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-3">
-                             <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center"><Target size={16} className="text-green-700"/></div>
-                             <h4 className="font-extrabold text-lg text-slate-800">{t.secATitle}</h4>
-                          </div>
+                        {/* PRODUCT HEADER */}
+                        <div className="text-white px-6 py-5 flex justify-between items-center" style={{ backgroundColor: BRAND.colors.green }}>
+                           <div className="flex items-center gap-4">
+                             <div className="bg-white/20 border border-white/30 text-white w-10 h-10 rounded-full flex items-center justify-center font-bold shadow-inner">
+                                {idx + 1}
+                             </div>
+                             <h3 className="font-bold text-xl tracking-wide">
+                               {t.prodDetails} {prod.name ? <span className="text-green-100 font-normal ml-2">/ {prod.name}</span> : ''}
+                             </h3>
+                           </div>
+                           
+                           {products.length > 1 && (
+                             <button type="button" onClick={() => removeProduct(prod.id)} className="text-red-100 hover:text-white hover:bg-red-500 bg-black/20 p-2.5 rounded-xl transition-all flex items-center gap-2 text-sm font-bold shadow-sm">
+                               <Trash2 size={18} /> <span className="hidden sm:inline">{t.delProd}</span>
+                             </button>
+                           )}
+                        </div>
 
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                            <div className="md:col-span-2">
-                              <label className={labelClass}>{t.prodName} <span className="text-red-500">*</span></label>
-                              <input type="text" className={`${inputClass} text-xl font-bold py-4`} value={product.name} placeholder="E.g. Blueberries" onChange={e => handleProductChange(product.id, 'name', e.target.value)} />
-                            </div>
-                            
-                            <div className="md:col-span-1 md:row-span-4 flex flex-col">
-                               <label className={labelClass}>{t.prodPhoto}</label>
-                               <div className="border-2 border-dashed border-slate-300 rounded-2xl w-full aspect-square max-w-[240px] flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-blue-50 hover:border-blue-300 transition-all cursor-pointer relative overflow-hidden mx-auto shadow-sm group">
-                                  <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={(e) => handleProductPhotoUpload(e, product.id)} />
-                                  {product.photo ? (
-                                    <img src={product.photo} className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform" />
-                                  ) : (
-                                    <div className="p-4 flex flex-col items-center">
-                                      <div className="w-16 h-16 bg-white rounded-full shadow-sm flex items-center justify-center mb-4 group-hover:shadow-md transition-all">
-                                        <ImageIcon size={32} className="text-blue-500" />
-                                      </div>
-                                      <span className="font-bold text-sm text-slate-700 block">{t.clickUpload}</span>
-                                    </div>
-                                  )}
-                               </div>
-                            </div>
-                            
-                            <div className="md:col-span-1">
-                              <label className={labelClass}>{t.prodType}</label>
-                              <input type="text" className={inputClass} value={product.type} placeholder="E.g. Duke" onChange={e => handleProductChange(product.id, 'type', e.target.value)} />
-                            </div>
-                            <div className="md:col-span-1">
-                              <label className={labelClass}>{t.origin}</label>
-                              <input type="text" className={inputClass} value={product.origin} placeholder="Country" onChange={e => handleProductChange(product.id, 'origin', e.target.value)} />
+                        <div className="p-6 md:p-10 space-y-12">
+                          
+                          {/* A. Basic & Packaging */}
+                          <div>
+                            <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-3">
+                               <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center"><Target size={16} className="text-green-700"/></div>
+                               <h4 className="font-extrabold text-lg text-slate-800">{t.secATitle}</h4>
                             </div>
 
-                            <div className="md:col-span-2 bg-slate-50 border border-slate-200 p-5 rounded-2xl">
-                              <label className={labelClass}>{t.processingType} <span className="text-red-500">*</span></label>
-                              <div className="flex flex-wrap gap-4 mt-3">
-                                 {['Whole', 'Processed'].map(type => (
-                                   <button
-                                     key={type}
-                                     type="button"
-                                     onClick={() => handleProductChange(product.id, 'processingType', type)}
-                                     className={`px-6 py-3 rounded-xl text-sm font-bold transition-all border shadow-sm flex-1 sm:flex-none ${product.processingType === type ? 'bg-blue-600 text-white border-blue-700 ring-4 ring-blue-600/20 transform scale-[1.02]' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100 hover:border-slate-400'}`}
-                                   >
-                                     {type === 'Whole' ? t.whole : t.processed}
-                                   </button>
-                                 ))}
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                              <div className="md:col-span-2">
+                                <label className={labelClass}>{t.prodName} <span className="text-red-500">*</span></label>
+                                <input type="text" className={`${inputClass} text-xl font-bold py-4`} value={prod.name} onChange={e => handleProductChange(prod.id, 'name', e.target.value)} />
                               </div>
-                            </div>
-
-                            <div className="md:col-span-1">
-                              <label className={labelClass}>{t.maturity}</label>
-                              <input type="text" className={inputClass} value={product.maturityStage} onChange={e => handleProductChange(product.id, 'maturityStage', e.target.value)} />
-                            </div>
-                            
-                            <div className="md:col-span-1">
-                              <label className={labelClass}>{t.treatment}</label>
-                              <input type="text" className={inputClass} value={product.postHarvestTreatment} onChange={e => handleProductChange(product.id, 'postHarvestTreatment', e.target.value)} />
-                            </div>
-
-                            {/* ALIGNED PACKAGING, MATERIAL AND WEIGHT ROW */}
-                            <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-8">
-                               <div>
-                                 <label className={labelClass}>{t.packType} <span className="text-red-500">*</span></label>
-                                 <select className={`${inputClass} cursor-pointer bg-white`} value={product.packagingType} onChange={e => handleProductChange(product.id, 'packagingType', e.target.value)}>
-                                   {PACKAGING_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
-                                 </select>
-                               </div>
-                               <div>
-                                 <label className={labelClass}>{t.material} <span className="text-red-500">*</span></label>
-                                 <input type="text" className={inputClass} value={product.material} onChange={e => handleProductChange(product.id, 'material', e.target.value)} />
-                               </div>
-                               <div>
-                                 <label className={labelClass}>{t.weight} <span className="text-red-500">*</span></label>
-                                 <div className="relative">
-                                    <input type="number" className={`${inputClass} pr-12`} value={product.weight} onChange={e => handleProductChange(product.id, 'weight', e.target.value)} />
-                                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{weightUnit}</span>
+                              
+                              <div className="md:col-span-1 md:row-span-4 flex flex-col">
+                                 <label className={labelClass}>{t.prodPhoto}</label>
+                                 <div className="border-2 border-dashed border-slate-300 rounded-2xl w-full aspect-square max-w-[240px] flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-blue-50 hover:border-blue-300 transition-all cursor-pointer relative overflow-hidden mx-auto shadow-sm group">
+                                    <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={(e) => handleProductPhotoUpload(e, prod.id)} />
+                                    {prod.photo ? (
+                                      <img src={prod.photo} className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform" />
+                                    ) : (
+                                      <div className="p-4 flex flex-col items-center">
+                                        <div className="w-16 h-16 bg-white rounded-full shadow-sm flex items-center justify-center mb-4 group-hover:shadow-md transition-all">
+                                          <ImageIcon size={32} className="text-blue-500" />
+                                        </div>
+                                        <span className="font-bold text-sm text-slate-700 block">{t.clickUpload}</span>
+                                      </div>
+                                    )}
                                  </div>
-                               </div>
-                            </div>
+                              </div>
+                              
+                              <div className="md:col-span-1">
+                                <label className={labelClass}>{t.prodType}</label>
+                                <input type="text" className={inputClass} value={prod.type} onChange={e => handleProductChange(prod.id, 'type', e.target.value)} />
+                              </div>
+                              <div className="md:col-span-1">
+                                <label className={labelClass}>{t.origin}</label>
+                                <input type="text" className={inputClass} value={prod.origin} onChange={e => handleProductChange(prod.id, 'origin', e.target.value)} />
+                              </div>
 
-                            {/* FULL WIDTH DIMENSIONS */}
-                            <div className="md:col-span-3 bg-gradient-to-br from-slate-50 to-slate-100 p-6 rounded-2xl border border-slate-200 shadow-sm mt-2">
-                               <label className="block mb-4 text-xs font-extrabold tracking-widest text-blue-800 uppercase border-b border-blue-200 pb-2">{t.dimens}</label>
-                               <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
+                              <div className="md:col-span-2 bg-slate-50 border border-slate-200 p-5 rounded-2xl">
+                                <label className={labelClass}>{t.processingType} <span className="text-red-500">*</span></label>
+                                <div className="flex flex-wrap gap-4 mt-3">
+                                   {['Whole', 'Processed'].map(type => (
+                                     <button
+                                       key={type}
+                                       type="button"
+                                       onClick={() => handleProductChange(prod.id, 'processingType', type)}
+                                       className={`px-6 py-3 rounded-xl text-sm font-bold transition-all border shadow-sm flex-1 sm:flex-none ${prod.processingType === type ? 'bg-blue-600 text-white border-blue-700 ring-4 ring-blue-600/20 transform scale-[1.02]' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100 hover:border-slate-400'}`}
+                                     >
+                                       {type === 'Whole' ? t.whole : t.processed}
+                                     </button>
+                                   ))}
+                                </div>
+                              </div>
+
+                              <div className="md:col-span-1">
+                                <label className={labelClass}>{t.maturity}</label>
+                                <input type="text" className={inputClass} value={prod.maturityStage} onChange={e => handleProductChange(prod.id, 'maturityStage', e.target.value)} />
+                              </div>
+                              
+                              <div className="md:col-span-1">
+                                <label className={labelClass}>{t.treatment}</label>
+                                <input type="text" className={inputClass} value={prod.postHarvestTreatment} onChange={e => handleProductChange(prod.id, 'postHarvestTreatment', e.target.value)} />
+                              </div>
+
+                              {/* ALIGNED PACKAGING, MATERIAL AND WEIGHT ROW */}
+                              <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-8">
                                  <div>
-                                   <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">{t.len} <span className="text-red-500">*</span></label>
+                                   <label className={labelClass}>{t.packType} <span className="text-red-500">*</span></label>
+                                   <select className={`${inputClass} cursor-pointer bg-white`} value={prod.packagingType} onChange={e => handleProductChange(prod.id, 'packagingType', e.target.value)}>
+                                     {PACKAGING_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
+                                   </select>
+                                 </div>
+                                 <div>
+                                   <label className={labelClass}>{t.material} <span className="text-red-500">*</span></label>
+                                   <input type="text" className={inputClass} value={prod.material} onChange={e => handleProductChange(prod.id, 'material', e.target.value)} />
+                                 </div>
+                                 <div>
+                                   <label className={labelClass}>{t.weight} <span className="text-red-500">*</span></label>
                                    <div className="relative">
-                                     <input type="number" className={`${inputClass} pl-4 pr-12`} value={product.length} onChange={e => handleProductChange(product.id, 'length', e.target.value)} />
-                                     <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{dimUnit}</span>
+                                      <input type="number" className={`${inputClass} pr-12`} value={prod.weight} onChange={e => handleProductChange(prod.id, 'weight', e.target.value)} />
+                                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{weightUnit}</span>
                                    </div>
                                  </div>
-                                 <div>
-                                   <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">{isPillowBag ? t.widSeal : t.wid} <span className="text-red-500">*</span></label>
-                                   <div className="relative">
-                                     <input type="number" className={`${inputClass} pl-4 pr-12`} value={product.width} onChange={e => handleProductChange(product.id, 'width', e.target.value)} />
-                                     <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{dimUnit}</span>
-                                   </div>
-                                 </div>
-                                 {!isPillowBag && (
-                                   <div className="col-span-2 sm:col-span-1">
-                                     <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">{t.hei} <span className="text-red-500">*</span></label>
+                              </div>
+
+                              {/* FULL WIDTH DIMENSIONS */}
+                              <div className="md:col-span-3 bg-gradient-to-br from-slate-50 to-slate-100 p-6 rounded-2xl border border-slate-200 shadow-sm mt-2">
+                                 <label className="block mb-4 text-xs font-extrabold tracking-widest text-blue-800 uppercase border-b border-blue-200 pb-2">{t.dimens}</label>
+                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
+                                   <div>
+                                     <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">{t.len} <span className="text-red-500">*</span></label>
                                      <div className="relative">
-                                        <input type="number" className={`${inputClass} pl-4 pr-12`} value={product.height} onChange={e => handleProductChange(product.id, 'height', e.target.value)} />
-                                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{dimUnit}</span>
+                                       <input type="number" className={`${inputClass} pl-4 pr-12`} value={prod.length} onChange={e => handleProductChange(prod.id, 'length', e.target.value)} />
+                                       <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{dimUnit}</span>
                                      </div>
                                    </div>
-                                 )}
-                               </div>
+                                   <div>
+                                     <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">{prod.packagingType === 'Pillow Bag' ? t.widSeal : t.wid} <span className="text-red-500">*</span></label>
+                                     <div className="relative">
+                                       <input type="number" className={`${inputClass} pl-4 pr-12`} value={prod.width} onChange={e => handleProductChange(prod.id, 'width', e.target.value)} />
+                                       <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{dimUnit}</span>
+                                     </div>
+                                   </div>
+                                   {prod.packagingType !== 'Pillow Bag' && (
+                                     <div className="col-span-2 sm:col-span-1">
+                                       <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">{t.hei} <span className="text-red-500">*</span></label>
+                                       <div className="relative">
+                                          <input type="number" className={`${inputClass} pl-4 pr-12`} value={prod.height} onChange={e => handleProductChange(prod.id, 'height', e.target.value)} />
+                                          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{dimUnit}</span>
+                                       </div>
+                                     </div>
+                                   )}
+                                 </div>
+                              </div>
+                              
+                              <div className="md:col-span-3 mt-4">
+                                <label className="block mb-2 text-sm font-extrabold tracking-wide text-slate-800 uppercase flex items-center gap-2">
+                                   <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center"><Beaker size={16} className="text-blue-700"/></div>
+                                   {t.qualityCrit}
+                                </label>
+                                <p className="text-sm text-slate-500 mb-4">{t.qualityCritDesc}</p>
+                                <div className="flex flex-wrap gap-3">
+                                   {DEFAULT_CRITERIA.map(crit => {
+                                     const isSelected = prod.qualityCriteria && prod.qualityCriteria.includes(crit);
+                                     return (
+                                       <button 
+                                         key={crit}
+                                         type="button"
+                                         onClick={() => toggleCriteria(prod.id, crit)}
+                                         className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-all border shadow-sm flex items-center gap-2 ${isSelected ? 'bg-blue-50 text-blue-800 border-blue-400 ring-2 ring-blue-500/20 transform scale-[1.02]' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300'}`}
+                                       >
+                                         {crit} {isSelected && <CheckCircle size={16} className="text-blue-600" />}
+                                       </button>
+                                     )
+                                   })}
+                                </div>
+                                <div className="flex flex-col sm:flex-row gap-3 mt-4 max-w-md">
+                                  <select className={`${inputClass} flex-1`} value={newCriteria || ''} onChange={e => setNewCriteria(e.target.value)}>
+                                     <option value="">Select standard criterion...</option>
+                                     {DEFAULT_CRITERIA.filter(c => !(prod.qualityCriteria || []).includes(c)).map(c => <option key={c}>{c}</option>)}
+                                  </select>
+                                  <button onClick={() => addNewCriteriaField(prod.id)} className="bg-slate-800 text-white px-5 py-3 rounded-lg hover:bg-slate-900 flex justify-center items-center font-bold shadow-sm transition-colors shrink-0 gap-2 whitespace-nowrap"><Plus size={18}/> Add</button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* B. Goal & Challenge */}
+                          <div>
+                            <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-3">
+                               <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center"><AlertCircle size={16} className="text-orange-700"/></div>
+                               <h4 className="font-extrabold text-lg text-slate-800">{t.secBTitle}</h4>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                              <div>
+                                <label className="block mb-3 text-xs font-bold tracking-wide text-orange-700 uppercase flex items-center gap-2"><AlertCircle size={16}/> {t.challenge} <span className="text-red-500">*</span></label>
+                                <textarea rows="5" className={`${inputClass} resize-y focus:ring-orange-500 focus:border-orange-500`} value={prod.currentChallenge} onChange={e => handleProductChange(prod.id, 'currentChallenge', e.target.value)}></textarea>
+                              </div>
+                              <div>
+                                <label className="block mb-3 text-xs font-bold tracking-wide text-green-700 uppercase flex items-center gap-2"><CheckCircle size={16}/> {t.goal} <span className="text-red-500">*</span></label>
+                                <textarea rows="5" className={`${inputClass} resize-y focus:ring-green-500 focus:border-green-500`} value={prod.targetGoal} onChange={e => handleProductChange(prod.id, 'targetGoal', e.target.value)}></textarea>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* C. Supply Chain */}
+                          <div>
+                            <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-3">
+                               <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center"><Truck size={16} className="text-indigo-700"/></div>
+                               <h4 className="font-extrabold text-lg text-slate-800">{t.secCTitle}</h4>
                             </div>
                             
-                            <div className="md:col-span-3 mt-4">
-                              <label className="block mb-2 text-sm font-extrabold tracking-wide text-slate-800 uppercase flex items-center gap-2">
-                                 <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center"><Beaker size={16} className="text-blue-700"/></div>
-                                 {t.qualityCrit}
-                              </label>
-                              <p className="text-sm text-slate-500 mb-4">{t.qualityCritDesc}</p>
-                              <div className="flex flex-wrap gap-3">
-                                 {DEFAULT_CRITERIA.map(crit => {
-                                   const isSelected = product.qualityCriteria.includes(crit);
-                                   return (
-                                     <button 
-                                       key={crit}
-                                       type="button"
-                                       onClick={() => toggleCriteria(product.id, crit)}
-                                       className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-all border shadow-sm flex items-center gap-2 ${isSelected ? 'bg-blue-50 text-blue-800 border-blue-400 ring-2 ring-blue-500/20 transform scale-[1.02]' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300'}`}
-                                     >
-                                       {crit} {isSelected && <CheckCircle size={16} className="text-blue-600" />}
-                                     </button>
-                                   )
+                            <div className="mb-8 bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100">
+                              <label className="block mb-3 text-xs font-bold tracking-wide text-indigo-900 uppercase">{t.transportMode} <span className="text-red-500">*</span></label>
+                              <div className="flex flex-wrap gap-4">
+                                 {TRANSPORT_MODES.map(mode => {
+                                    const modeKeys = { 'Air Freight': 'airFreight', 'Sea Freight': 'seaFreight', 'Road Transport': 'roadTransport', 'Storage': 'storage' };
+                                    const isSelected = prod.transportMode === mode;
+                                    return (
+                                      <button 
+                                        key={mode}
+                                        type="button"
+                                        onClick={() => handleProductChange(prod.id, 'transportMode', isSelected ? '' : mode)}
+                                        className={`px-5 py-3 rounded-xl text-sm font-bold transition-all border shadow-sm flex items-center gap-2 ${isSelected ? 'bg-indigo-600 text-white border-indigo-700 ring-4 ring-indigo-600/20 transform scale-[1.02]' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}
+                                      >
+                                        {t[modeKeys[mode]]} {isSelected && <CheckCircle size={16} className="text-white" />}
+                                      </button>
+                                    )
                                  })}
                               </div>
                             </div>
-                          </div>
-                        </div>
-
-                        {/* B. Goal & Challenge */}
-                        <div>
-                          <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-3">
-                             <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center"><AlertCircle size={16} className="text-orange-700"/></div>
-                             <h4 className="font-extrabold text-lg text-slate-800">{t.secBTitle}</h4>
-                          </div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                            <div>
-                              <label className="block mb-3 text-xs font-bold tracking-wide text-orange-700 uppercase flex items-center gap-2"><AlertCircle size={16}/> {t.challenge} <span className="text-red-500">*</span></label>
-                              <textarea rows="5" className={`${inputClass} resize-y focus:ring-orange-500 focus:border-orange-500`} placeholder={t.challengePl} value={product.currentChallenge} onChange={e => handleProductChange(product.id, 'currentChallenge', e.target.value)}></textarea>
-                            </div>
-                            <div>
-                              <label className="block mb-3 text-xs font-bold tracking-wide text-green-700 uppercase flex items-center gap-2"><CheckCircle size={16}/> {t.goal} <span className="text-red-500">*</span></label>
-                              <textarea rows="5" className={`${inputClass} resize-y focus:ring-green-500 focus:border-green-500`} placeholder={t.goalPl} value={product.targetGoal} onChange={e => handleProductChange(product.id, 'targetGoal', e.target.value)}></textarea>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* C. Supply Chain */}
-                        <div>
-                          <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-3">
-                             <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center"><Truck size={16} className="text-indigo-700"/></div>
-                             <h4 className="font-extrabold text-lg text-slate-800">{t.secCTitle}</h4>
-                          </div>
-                          
-                          <div className="mb-8 bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100">
-                            <label className="block mb-3 text-xs font-bold tracking-wide text-indigo-900 uppercase">{t.transportMode} <span className="text-red-500">*</span></label>
-                            <div className="flex flex-wrap gap-4">
-                               {TRANSPORT_MODES.map(mode => {
-                                  const modeKeys = { 'Air Freight': 'airFreight', 'Sea Freight': 'seaFreight', 'Road Transport': 'roadTransport', 'Storage': 'storage' };
-                                  const isSelected = product.transportMode === mode;
-                                  return (
-                                    <button 
-                                      key={mode}
-                                      type="button"
-                                      onClick={() => handleProductChange(product.id, 'transportMode', isSelected ? '' : mode)}
-                                      className={`px-5 py-3 rounded-xl text-sm font-bold transition-all border shadow-sm flex items-center gap-2 ${isSelected ? 'bg-indigo-600 text-white border-indigo-700 ring-4 ring-indigo-600/20 transform scale-[1.02]' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}
-                                    >
-                                      {t[modeKeys[mode]]} {isSelected && <CheckCircle size={16} className="text-white" />}
-                                    </button>
-                                  )
-                               })}
-                            </div>
-                          </div>
-                          
-                          {/* --- PERFECT CSS GRID SUPPLY CHAIN FLOW --- */}
-                          <div className="space-y-3">
-                            <label className="block mb-2 text-xs font-bold tracking-wide text-slate-500 uppercase">{t.supplyChainFlow}</label>
                             
-                            {/* Desktop Header - CSS GRID */}
-                            <div className="hidden lg:grid grid-cols-[80px_1fr_150px_150px_130px_40px] items-center gap-4 px-4 text-xs font-bold text-slate-500 uppercase tracking-widest">
-                               <div>{t.step}</div>
-                               <div>{t.phase} <span className="text-red-500">*</span></div>
-                               <div className="text-center">{t.temp} <span className="text-red-500">*</span></div>
-                               <div className="text-center">{t.days} <span className="text-red-500">*</span></div>
-                               <div>{t.action}</div>
-                               <div></div>
+                            {/* --- PERFECT CSS GRID SUPPLY CHAIN FLOW --- */}
+                            <div className="space-y-3">
+                              <label className="block mb-2 text-xs font-bold tracking-wide text-slate-500 uppercase">Supply Chain Flow</label>
+                              
+                              {/* Desktop Header - CSS GRID */}
+                              <div className="hidden lg:grid grid-cols-[80px_1fr_150px_150px_130px_40px] items-center gap-4 px-4 text-xs font-bold text-slate-500 uppercase tracking-widest">
+                                 <div>{t.step}</div>
+                                 <div>{t.phase} <span className="text-red-500">*</span></div>
+                                 <div className="text-center">{t.temp} <span className="text-red-500">*</span></div>
+                                 <div className="text-center">{t.days} <span className="text-red-500">*</span></div>
+                                 <div>{t.action}</div>
+                                 <div></div>
+                              </div>
+
+                              {prod.supplyChain.map((step, idx) => {
+                                 const tempUnit = unitSystem === 'metric' ? '°C' : '°F';
+                                 return (
+                                   <div key={idx} className="grid grid-cols-1 lg:grid-cols-[80px_1fr_150px_150px_130px_40px] items-start lg:items-center gap-4 bg-white hover:bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-sm transition-all group">
+                                      
+                                      {/* Step Controls (Up/Down + Number) */}
+                                      <div className="flex items-center gap-2 justify-between lg:justify-start">
+                                         <div className="flex lg:flex-col gap-1">
+                                            <button type="button" onClick={() => moveChainStep(prod.id, idx, 'up')} disabled={idx === 0} className="p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700 rounded disabled:opacity-30 transition-colors"><ChevronUp size={16}/></button>
+                                            <button type="button" onClick={() => moveChainStep(prod.id, idx, 'down')} disabled={idx === prod.supplyChain.length - 1} className="p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700 rounded disabled:opacity-30 transition-colors"><ChevronDown size={16}/></button>
+                                         </div>
+                                         <div className="w-8 h-8 bg-indigo-100 text-indigo-700 rounded-full flex items-center justify-center font-bold text-sm shadow-sm">
+                                            {idx + 1}
+                                         </div>
+                                         {/* Mobile Delete */}
+                                         <button type="button" onClick={() => removeChainStep(prod.id, idx)} className="lg:hidden p-2 text-red-500 hover:bg-red-50 rounded-lg">
+                                            <Trash2 size={18}/>
+                                         </button>
+                                      </div>
+
+                                      {/* Stage Input */}
+                                      <div className="w-full">
+                                         <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">{t.phase} <span className="text-red-500">*</span></label>
+                                         <input type="text" className={`${inputClass} py-2.5 font-bold w-full`} value={step.stage} onChange={e => updateChainStep(prod.id, idx, 'stage', e.target.value)} />
+                                      </div>
+
+                                      {/* Temp Block */}
+                                      <div className="w-full">
+                                         <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">{t.temp} ({tempUnit}) <span className="text-red-500">*</span></label>
+                                         <div className="flex items-center gap-1.5">
+                                            <input type="number" className={`${narrowInputClass} w-full`} value={step.tempStart} placeholder="Min" onChange={e => updateChainStep(prod.id, idx, 'tempStart', e.target.value)} />
+                                            <span className="text-slate-400 font-bold shrink-0">-</span>
+                                            <input type="number" className={`${narrowInputClass} w-full`} value={step.tempEnd} placeholder="Max" onChange={e => updateChainStep(prod.id, idx, 'tempEnd', e.target.value)} />
+                                         </div>
+                                      </div>
+
+                                      {/* Days Block */}
+                                      <div className="w-full">
+                                         <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">{t.days} <span className="text-red-500">*</span></label>
+                                         <div className="flex items-center gap-1.5">
+                                            <input type="number" className={`${narrowInputClass} w-full`} value={step.daysStart} placeholder="Min" onChange={e => updateChainStep(prod.id, idx, 'daysStart', e.target.value)} />
+                                            <span className="text-slate-400 font-bold shrink-0">-</span>
+                                            <input type="number" className={`${narrowInputClass} w-full`} value={step.daysEnd} placeholder="Max" onChange={e => updateChainStep(prod.id, idx, 'daysEnd', e.target.value)} />
+                                         </div>
+                                      </div>
+
+                                      {/* Action Block */}
+                                      <div className="w-full">
+                                         <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">{t.action}</label>
+                                         <select className={`${inputClass} py-2.5 font-bold px-2 w-full text-slate-700`} value={step.action} onChange={e => updateChainStep(prod.id, idx, 'action', e.target.value)}>
+                                           <option value="none">{t.actNone}</option>
+                                           <option value="pack" className="text-green-700">{t.actPack}</option>
+                                           <option value="unpack" className="text-red-700">{t.actUnpack}</option>
+                                         </select>
+                                      </div>
+
+                                      {/* Desktop Delete */}
+                                      <div className="hidden lg:flex justify-center w-full">
+                                         <button type="button" onClick={() => removeChainStep(prod.id, idx)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title={t.removeStep}>
+                                           <Trash2 size={20}/>
+                                         </button>
+                                      </div>
+                                   </div>
+                                 )
+                              })}
+                              
+                              <button type="button" onClick={() => addChainStep(prod.id)} className="w-full py-4 mt-4 border-2 border-dashed border-indigo-200 bg-indigo-50/50 hover:bg-indigo-100 text-indigo-700 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-sm">
+                                <div className="bg-white p-1.5 rounded-lg shadow-sm"><Plus size={16} /></div> 
+                                {t.addStep}
+                              </button>
                             </div>
-
-                            {product.supplyChain.map((step, idx) => (
-                               <div key={idx} className="grid grid-cols-1 lg:grid-cols-[80px_1fr_150px_150px_130px_40px] items-start lg:items-center gap-4 bg-white hover:bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-sm transition-all group">
-                                  
-                                  {/* Step Controls (Up/Down + Number) */}
-                                  <div className="flex items-center gap-2 justify-between lg:justify-start">
-                                     <div className="flex lg:flex-col gap-1">
-                                        <button type="button" onClick={() => moveChainStep(product.id, idx, 'up')} disabled={idx === 0} className="p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700 rounded disabled:opacity-30 transition-colors"><ChevronUp size={16}/></button>
-                                        <button type="button" onClick={() => moveChainStep(product.id, idx, 'down')} disabled={idx === product.supplyChain.length - 1} className="p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700 rounded disabled:opacity-30 transition-colors"><ChevronDown size={16}/></button>
-                                     </div>
-                                     <div className="w-8 h-8 bg-indigo-100 text-indigo-700 rounded-full flex items-center justify-center font-bold text-sm shadow-sm">
-                                        {idx + 1}
-                                     </div>
-                                     {/* Mobile Delete */}
-                                     <button type="button" onClick={() => removeChainStep(product.id, idx)} className="lg:hidden p-2 text-red-500 hover:bg-red-50 rounded-lg">
-                                        <Trash2 size={18}/>
-                                     </button>
-                                  </div>
-
-                                  {/* Stage Input */}
-                                  <div className="w-full">
-                                     <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">{t.phase} <span className="text-red-500">*</span></label>
-                                     <input type="text" className={`${inputClass} py-2.5 font-bold w-full`} value={step.stage} placeholder="e.g. Farm, Transport..." onChange={e => updateChainStep(product.id, idx, 'stage', e.target.value)} />
-                                  </div>
-
-                                  {/* Temp Block */}
-                                  <div className="w-full">
-                                     <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">{t.temp} <span className="text-red-500">*</span></label>
-                                     <div className="flex items-center gap-1.5">
-                                        <input type="number" className={`${narrowInputClass} w-full`} value={step.tempStart} placeholder="Min" onChange={e => updateChainStep(product.id, idx, 'tempStart', e.target.value)} />
-                                        <span className="text-slate-400 font-bold shrink-0">-</span>
-                                        <input type="number" className={`${narrowInputClass} w-full`} value={step.tempEnd} placeholder="Max" onChange={e => updateChainStep(product.id, idx, 'tempEnd', e.target.value)} />
-                                     </div>
-                                  </div>
-
-                                  {/* Days Block */}
-                                  <div className="w-full">
-                                     <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">{t.days} <span className="text-red-500">*</span></label>
-                                     <div className="flex items-center gap-1.5">
-                                        <input type="number" className={`${narrowInputClass} w-full`} value={step.daysStart} placeholder="Min" onChange={e => updateChainStep(product.id, idx, 'daysStart', e.target.value)} />
-                                        <span className="text-slate-400 font-bold shrink-0">-</span>
-                                        <input type="number" className={`${narrowInputClass} w-full`} value={step.daysEnd} placeholder="Max" onChange={e => updateChainStep(product.id, idx, 'daysEnd', e.target.value)} />
-                                     </div>
-                                  </div>
-
-                                  {/* Action Block */}
-                                  <div className="w-full">
-                                     <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">{t.action}</label>
-                                     <select className={`${inputClass} py-2.5 font-bold px-2 w-full text-slate-700`} value={step.action} onChange={e => updateChainStep(product.id, idx, 'action', e.target.value)}>
-                                       <option value="none">{t.actNone}</option>
-                                       <option value="pack" className="text-green-700">{t.actPack}</option>
-                                       <option value="unpack" className="text-red-700">{t.actUnpack}</option>
-                                     </select>
-                                  </div>
-
-                                  {/* Desktop Delete */}
-                                  <div className="hidden lg:flex justify-center w-full">
-                                     <button type="button" onClick={() => removeChainStep(product.id, idx)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title={t.removeStep}>
-                                       <Trash2 size={20}/>
-                                     </button>
-                                  </div>
-                               </div>
-                            ))}
-                            
-                            <button type="button" onClick={() => addChainStep(product.id)} className="w-full py-4 mt-4 border-2 border-dashed border-indigo-200 bg-indigo-50/50 hover:bg-indigo-100 text-indigo-700 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-sm">
-                              <div className="bg-white p-1.5 rounded-lg shadow-sm"><Plus size={16} /></div> 
-                              {t.addStep}
-                            </button>
                           </div>
-                        </div>
 
-                      </div>
-                    </section>
-                  );
-                })}
+                        </div>
+                      </section>
+                    );
+                  })}
+                </div>
 
                 {/* ADD NEW PRODUCT BUTTON */}
                 <button 
