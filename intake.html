@@ -793,18 +793,18 @@
                     <section key={product.id} className="bg-white rounded-3xl shadow-md border border-slate-200 overflow-hidden relative transition-all hover:shadow-lg">
                       
                       {/* PRODUCT HEADER */}
-                      <div className="bg-slate-800 text-white px-6 py-5 flex justify-between items-center">
+                      <div className="text-white px-6 py-5 flex justify-between items-center" style={{ backgroundColor: BRAND.colors.green }}>
                          <div className="flex items-center gap-4">
-                           <div className="bg-blue-500/20 border border-blue-400/30 text-blue-100 w-10 h-10 rounded-full flex items-center justify-center font-bold shadow-inner">
+                           <div className="bg-white/20 border border-white/30 text-white w-10 h-10 rounded-full flex items-center justify-center font-bold shadow-inner">
                               {productIndex + 1}
                            </div>
                            <h3 className="font-bold text-xl tracking-wide">
-                             {t.prodDetails} {product.name ? <span className="text-blue-300 font-normal ml-2">/ {product.name}</span> : ''}
+                             {t.prodDetails} {product.name ? <span className="text-green-100 font-normal ml-2">/ {product.name}</span> : ''}
                            </h3>
                          </div>
                          
                          {products.length > 1 && (
-                           <button type="button" onClick={() => removeProduct(product.id)} className="text-red-300 hover:text-white hover:bg-red-500 bg-slate-700/50 p-2.5 rounded-xl transition-all flex items-center gap-2 text-sm font-bold shadow-sm">
+                           <button type="button" onClick={() => removeProduct(product.id)} className="text-red-100 hover:text-white hover:bg-red-500 bg-black/20 p-2.5 rounded-xl transition-all flex items-center gap-2 text-sm font-bold shadow-sm">
                              <Trash2 size={18} /> <span className="hidden sm:inline">{t.delProd}</span>
                            </button>
                          )}
