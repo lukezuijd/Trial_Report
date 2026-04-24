@@ -1,161 +1,208 @@
 <!DOCTYPE html>
-<html lang="nl">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PerfoTec Management Hub</title>
+    <meta name="description" content="PerfoTec Management Hub — Tools for quality testing, trial proposals, and official reporting.">
+    <meta name="author" content="PerfoTec B.V.">
+    <meta name="theme-color" content="#007C27">
     
-    <!-- Tailwind CSS (voor de lay-out) -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- Babel voor JSX compilatie in de browser -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
-    <!-- INLADEN VAN DE CENTRALE STYLING & CONFIGURATIE -->
     <link rel="stylesheet" href="style.css">
     <script src="config.js"></script>
 </head>
 <body class="bg-[var(--brand-light-gray)] text-[var(--brand-black)]">
+    <a href="#main-content" class="skip-to-content">Skip to content</a>
+
     <div id="root">
-        <div style="padding: 2rem; text-align: center; font-family: sans-serif; color: #666;">
-            Aan het laden... Zorg ervoor dat 'style.css' en 'config.js' in dezelfde map staan.
+        <div style="padding: 2rem; text-align: center; font-family: sans-serif; color: #666;" role="status">
+            Loading...
         </div>
     </div>
 
-    <!-- React App Script -->
     <script type="text/babel" data-type="module">
-        import React from 'https://esm.sh/react@18.2.0';
+        import React, { useState } from 'https://esm.sh/react@18.2.0';
         import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
         import { 
             ClipboardList, FileText, BarChart3, ArrowRight, 
             Settings, ShieldCheck, Zap, AlertTriangle
         } from 'https://esm.sh/lucide-react@0.292.0';
 
-        // Veilige fallback voor het geval config.js niet gevonden of geblokkeerd wordt
         const isConfigMissing = !window.PERFOTEC_CONFIG;
         const config = window.PERFOTEC_CONFIG || {
             BRAND: {
-                name: 'PerfoTec',
-                tagline: 'BEST FOR FRESHNESS',
-                logos: {
-                    default: 'https://cdn.prod.website-files.com/68b594c756c22085ddc6c1ea/68b59ba2f027bfeecd25261b_PerfoTec%20logo.png',
-                },
+                name: 'PerfoTec', tagline: 'BEST FOR FRESHNESS',
+                logos: { default: 'https://cdn.prod.website-files.com/68b594c756c22085ddc6c1ea/68b59ba2f027bfeecd25261b_PerfoTec%20logo.png' },
                 colors: {
                     primary: { green: '#007C27', blue: '#054E9A', darkBlue: '#004B87' },
                     secondary: { lightBlue: '#5B9BD5', orange: '#ea580c' },
                     neutral: { black: '#211A1A', gray: '#E9E9E9', lightGray: '#F3F4F6', white: '#FFFFFF' }
-                },
-                fonts: {
-                    heading: '"League Spartan", sans-serif',
-                    body: '"Inter", sans-serif'
                 }
             }
         };
 
-        const ToolCard = ({ title, description, icon: Icon, href, color, step }) => (
-            <a href={href} className="group relative bg-[var(--brand-white)] p-8 rounded-2xl shadow-sm border border-[var(--brand-gray)] hover:shadow-xl transition-all duration-300 flex flex-col h-full" style={{ borderColor: 'var(--brand-gray)' }} onMouseEnter={(e) => e.currentTarget.style.borderColor = config.BRAND.colors.primary.green} onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--brand-gray)'}>
-                <div className="absolute -top-4 -left-4 w-10 h-10 rounded-full flex items-center justify-center text-white font-bold shadow-lg" style={{ backgroundColor: color }}>
-                    {step}
-                </div>
-                <div className="mb-6 p-4 rounded-xl inline-block" style={{ backgroundColor: `${color}15`, color: color }}>
-                    <Icon size={32} />
-                </div>
-                <h3 className="text-2xl font-bold mb-3 brand-heading text-[var(--brand-black)] transition-colors">{title}</h3>
+        // === TRANSLATIONS ===
+        const T = {
+            en: {
+                welcome: "Welcome to the", workflow: "Workflow",
+                subtitle: "Select the tool you need to manage your quality tests.",
+                card1Title: "Client Intake", card1Desc: "Collect client data and product information. This forms the basis for every new request.",
+                card2Title: "Trial Proposal", card2Desc: "Create a detailed test plan. Use the data from the intake to propose a simulation.",
+                card3Title: "Official Report", card3Desc: "Process test data into an official report with charts, photos, and conclusions for the client.",
+                openTool: "Open Tool",
+                dataFlow: "Data Flow", dataFlowDesc: "All tools work with JSON files. Export the JSON from the Intake and load it directly into the Proposal or Report.",
+                privacy: "Privacy", privacyDesc: "Your data is processed locally in the browser and not stored on an external server.",
+                localStorage: "Local Storage", localStorageDesc: "Make sure the files config.js and style.css are in the same folder as the web pages.",
+                configWarningTitle: "Warning: config.js could not be loaded.",
+                configWarningDesc: "Make sure the file config.js is in the exact same folder as index.html. Default settings are being used temporarily."
+            },
+            nl: {
+                welcome: "Welkom bij de", workflow: "Workflow",
+                subtitle: "Selecteer de tool die u nodig heeft om uw kwaliteitstesten te beheren.",
+                card1Title: "Klant Intake", card1Desc: "Verzamel klantgegevens en productinformatie. Dit vormt de basis voor elke nieuwe aanvraag.",
+                card2Title: "Testvoorstel", card2Desc: "Stel een gedetailleerd testplan op. Gebruik de data uit de intake om een simulatie voor te stellen.",
+                card3Title: "Officieel Rapport", card3Desc: "Verwerk testdata tot een officieel rapport met grafieken, foto's en conclusies voor de klant.",
+                openTool: "Open Tool",
+                dataFlow: "Data Flow", dataFlowDesc: "Alle tools werken met JSON-bestanden. Exporteer de JSON vanuit de Intake en laad deze direct in de Proposal of het Report.",
+                privacy: "Privacy", privacyDesc: "Uw data wordt lokaal in de browser verwerkt en niet opgeslagen op een externe server.",
+                localStorage: "Lokale Opslag", localStorageDesc: "Zorg dat de bestanden config.js en style.css in dezelfde map staan als de webpagina's.",
+                configWarningTitle: "Let op: config.js kon niet worden ingeladen.",
+                configWarningDesc: "Zorg ervoor dat het bestand config.js in exact dezelfde map staat als index.html. Er worden nu tijdelijk standaardinstellingen gebruikt."
+            },
+            es: {
+                welcome: "Bienvenido al", workflow: "Workflow",
+                subtitle: "Seleccione la herramienta que necesita para gestionar sus pruebas de calidad.",
+                card1Title: "Ingreso de Clientes", card1Desc: "Recopile datos del cliente e información del producto. Esto forma la base para cada nueva solicitud.",
+                card2Title: "Propuesta de Prueba", card2Desc: "Cree un plan de prueba detallado. Use los datos del ingreso para proponer una simulación.",
+                card3Title: "Informe Oficial", card3Desc: "Procese los datos de prueba en un informe oficial con gráficos, fotos y conclusiones para el cliente.",
+                openTool: "Abrir",
+                dataFlow: "Flujo de Datos", dataFlowDesc: "Todas las herramientas funcionan con archivos JSON. Exporte el JSON desde el Ingreso y cárguelo directamente en la Propuesta o el Informe.",
+                privacy: "Privacidad", privacyDesc: "Sus datos se procesan localmente en el navegador y no se almacenan en un servidor externo.",
+                localStorage: "Almacenamiento Local", localStorageDesc: "Asegúrese de que los archivos config.js y style.css estén en la misma carpeta que las páginas web.",
+                configWarningTitle: "Advertencia: no se pudo cargar config.js.",
+                configWarningDesc: "Asegúrese de que el archivo config.js esté en la misma carpeta que index.html. Se están utilizando configuraciones predeterminadas temporalmente."
+            }
+        };
+        const LANGS = config.LANGUAGES || [{ code: 'en', label: 'EN' }, { code: 'nl', label: 'NL' }, { code: 'es', label: 'ES' }];
+
+        // === SHARED: Language auto-detect ===
+        const getInitialLang = () => {
+            if (config.getLanguage) return config.getLanguage();
+            const saved = localStorage.getItem('perfotec_lang');
+            if (saved && T[saved]) return saved;
+            const browser = (navigator.language || '').substring(0, 2).toLowerCase();
+            if (T[browser]) return browser;
+            return 'en';
+        };
+
+        // === SHARED: Language Switcher Component ===
+        const LangSwitcher = ({ lang, setLang }) => (
+            <div className="lang-selector" role="radiogroup" aria-label="Language">
+                {LANGS.map(l => (
+                    <button
+                        key={l.code}
+                        type="button"
+                        role="radio"
+                        aria-checked={lang === l.code}
+                        className={`lang-btn ${lang === l.code ? 'active' : ''}`}
+                        onClick={() => {
+                            setLang(l.code);
+                            if (config.setLanguage) config.setLanguage(l.code);
+                            document.documentElement.lang = l.code;
+                        }}
+                    >
+                        {l.label}
+                    </button>
+                ))}
+            </div>
+        );
+
+        const ToolCard = ({ title, description, icon: Icon, href, color, step, openLabel }) => (
+            <a href={href} className="group relative bg-[var(--brand-white)] p-8 rounded-2xl shadow-sm border border-[var(--brand-gray)] hover:shadow-xl transition-all duration-300 flex flex-col h-full focus-visible:ring-2 focus-visible:ring-[var(--brand-blue)] focus-visible:ring-offset-2" style={{ borderColor: 'var(--brand-gray)' }} onMouseEnter={(e) => e.currentTarget.style.borderColor = config.BRAND.colors.primary.green} onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--brand-gray)'} aria-label={`${step}: ${title}`}>
+                <div className="absolute -top-4 -left-4 w-10 h-10 rounded-full flex items-center justify-center text-white font-bold shadow-lg" style={{ backgroundColor: color }} aria-hidden="true">{step}</div>
+                <div className="mb-6 p-4 rounded-xl inline-block" style={{ backgroundColor: `${color}15`, color }} aria-hidden="true"><Icon size={32} /></div>
+                <h3 className="text-2xl font-bold mb-3 brand-heading text-[var(--brand-black)]">{title}</h3>
                 <p className="opacity-70 leading-relaxed mb-8 flex-grow brand-body">{description}</p>
-                <div className="flex items-center font-bold text-sm uppercase tracking-wider group-hover:gap-2 transition-all" style={{ color: color }}>
-                    Open Tool <ArrowRight size={18} className="ml-2" />
+                <div className="flex items-center font-bold text-sm uppercase tracking-wider group-hover:gap-2 transition-all" style={{ color }} aria-hidden="true">
+                    {openLabel} <ArrowRight size={18} className="ml-2" />
                 </div>
             </a>
         );
 
         const App = () => {
+            const [lang, setLang] = useState(getInitialLang);
+            const t = T[lang] || T['en'];
+
             return (
                 <div className="min-h-screen flex flex-col brand-body">
-                    {/* Header */}
-                    <header className="bg-[var(--brand-white)] border-b border-[var(--brand-gray)] py-6 shadow-sm">
-                        <div className="max-w-7xl mx-auto px-6 flex justify-between items-center">
-                            <div className="flex items-center gap-4">
-                                <img src={config.BRAND.logos.default} alt={config.BRAND.name} className="h-12" />
-                                <div className="h-10 border-l border-[var(--brand-gray)] ml-2"></div>
-                                <div className="flex flex-col ml-2">
-                                    <h1 className="brand-heading text-2xl uppercase tracking-tighter" style={{ color: config.BRAND.colors.primary.blue }}>Management Hub</h1>
-                                    <p className="text-[10px] font-bold tracking-[0.2em] uppercase" style={{ color: config.BRAND.colors.primary.green }}>{config.BRAND.tagline}</p>
+                    <header className="bg-[var(--brand-white)] border-b border-[var(--brand-gray)] py-4 md:py-5 shadow-sm" role="banner">
+                        <div className="max-w-7xl mx-auto px-4 md:px-6 flex justify-between items-center gap-4">
+                            <div className="flex items-center gap-3 md:gap-4 min-w-0">
+                                <img src={config.BRAND.logos.default} alt={`${config.BRAND.name} logo`} className="h-8 md:h-10 shrink-0" />
+                                <div className="h-8 md:h-10 border-l border-[var(--brand-gray)]" aria-hidden="true"></div>
+                                <div className="flex flex-col min-w-0">
+                                    <h1 className="brand-heading text-lg md:text-2xl uppercase tracking-tighter truncate" style={{ color: config.BRAND.colors.primary.blue }}>Management Hub</h1>
+                                    <p className="text-[10px] font-bold tracking-[0.2em] uppercase truncate" style={{ color: config.BRAND.colors.primary.green }}>{config.BRAND.tagline}</p>
                                 </div>
                             </div>
+                            <LangSwitcher lang={lang} setLang={setLang} />
                         </div>
                     </header>
 
-                    {/* Waarschuwing als config.js ontbreekt */}
                     {isConfigMissing && (
-                        <div className="max-w-7xl mx-auto px-6 mt-6 w-full">
+                        <div className="max-w-7xl mx-auto px-6 mt-6 w-full" role="alert">
                             <div className="bg-orange-50 border border-orange-200 text-orange-800 p-4 rounded-lg shadow-sm flex items-start gap-3">
-                                <AlertTriangle className="shrink-0 text-orange-500 mt-0.5" size={20} />
+                                <AlertTriangle className="shrink-0 text-orange-500 mt-0.5" size={20} aria-hidden="true" />
                                 <div>
-                                    <p className="font-bold">Let op: config.js kon niet worden ingeladen.</p>
-                                    <p className="text-sm mt-1">Zorg ervoor dat het bestand <code>config.js</code> in exact dezelfde map staat als <code>index.html</code>. Er worden nu tijdelijk standaardinstellingen gebruikt.</p>
+                                    <p className="font-bold">{t.configWarningTitle}</p>
+                                    <p className="text-sm mt-1">{t.configWarningDesc}</p>
                                 </div>
                             </div>
                         </div>
                     )}
 
-                    {/* Main Content */}
-                    <main className="flex-grow max-w-7xl mx-auto px-6 py-12 w-full">
+                    <main id="main-content" className="flex-grow max-w-7xl mx-auto px-6 py-12 w-full" role="main">
                         <div className="text-center mb-16">
-                            <h2 className="text-4xl font-bold mb-4 brand-heading">Welkom bij de {config.BRAND.name} Workflow</h2>
-                            <p className="text-xl max-w-2xl mx-auto opacity-70">Selecteer de tool die u nodig heeft om uw kwaliteitstesten te beheren.</p>
+                            <h2 className="text-4xl font-bold mb-4 brand-heading">{t.welcome} {config.BRAND.name} {t.workflow}</h2>
+                            <p className="text-xl max-w-2xl mx-auto opacity-70">{t.subtitle}</p>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
-                            <ToolCard 
-                                step="1"
-                                title="Client Intake"
-                                description="Verzamel klantgegevens en productinformatie. Dit vormt de basis voor elke nieuwe aanvraag."
-                                icon={ClipboardList}
-                                href="intake.html"
-                                color={config.BRAND.colors.primary.blue}
-                            />
-                            <ToolCard 
-                                step="2"
-                                title="Trial Proposal"
-                                description="Stel een gedetailleerd testplan op. Gebruik de data uit de intake om een simulatie voor te stellen."
-                                icon={FileText}
-                                href="proposal.html"
-                                color={config.BRAND.colors.primary.green}
-                            />
-                            <ToolCard 
-                                step="3"
-                                title="Official Report"
-                                description="Verwerk testdata tot een officieel rapport met grafieken, foto's en conclusies voor de klant."
-                                icon={BarChart3}
-                                href="report.html"
-                                color={config.BRAND.colors.neutral.black}
-                            />
-                        </div>
+                        <nav aria-label="Workflow tools">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+                                <ToolCard step="1" title={t.card1Title} description={t.card1Desc} icon={ClipboardList} href="intake.html" color={config.BRAND.colors.primary.blue} openLabel={t.openTool} />
+                                <ToolCard step="2" title={t.card2Title} description={t.card2Desc} icon={FileText} href="proposal.html" color={config.BRAND.colors.primary.green} openLabel={t.openTool} />
+                                <ToolCard step="3" title={t.card3Title} description={t.card3Desc} icon={BarChart3} href="report.html" color={config.BRAND.colors.neutral.black} openLabel={t.openTool} />
+                            </div>
+                        </nav>
 
-                        {/* Info Footer */}
-                        <div className="mt-20 grid grid-cols-1 md:grid-cols-3 gap-8 border-t border-[var(--brand-gray)] pt-12 text-sm opacity-80">
+                        <section className="mt-20 grid grid-cols-1 md:grid-cols-3 gap-8 border-t border-[var(--brand-gray)] pt-12 text-sm opacity-80" aria-label="Info">
                             <div className="flex gap-3 items-start">
-                                <Zap className="shrink-0" size={20} style={{ color: config.BRAND.colors.secondary.orange }} />
-                                <p><strong>Data Flow:</strong> Alle tools werken met JSON-bestanden. Exporteer de JSON vanuit de Intake en laad deze direct in de Proposal of het Report.</p>
+                                <Zap className="shrink-0" size={20} style={{ color: config.BRAND.colors.secondary.orange }} aria-hidden="true" />
+                                <p><strong>{t.dataFlow}:</strong> {t.dataFlowDesc}</p>
                             </div>
                             <div className="flex gap-3 items-start">
-                                <ShieldCheck className="shrink-0" size={20} style={{ color: config.BRAND.colors.primary.green }} />
-                                <p><strong>Privacy:</strong> Uw data wordt lokaal in de browser verwerkt en niet opgeslagen op een externe server.</p>
+                                <ShieldCheck className="shrink-0" size={20} style={{ color: config.BRAND.colors.primary.green }} aria-hidden="true" />
+                                <p><strong>{t.privacy}:</strong> {t.privacyDesc}</p>
                             </div>
                             <div className="flex gap-3 items-start">
-                                <Settings className="shrink-0" size={20} style={{ color: config.BRAND.colors.secondary.lightBlue }} />
-                                <p><strong>Lokale Opslag:</strong> Zorg dat de bestanden <code>config.js</code> en <code>style.css</code> in dezelfde map staan als de webpagina's.</p>
+                                <Settings className="shrink-0" size={20} style={{ color: config.BRAND.colors.secondary.lightBlue }} aria-hidden="true" />
+                                <p><strong>{t.localStorage}:</strong> {t.localStorageDesc}</p>
                             </div>
-                        </div>
+                        </section>
                     </main>
 
-                    <footer className="py-8 text-center text-xs border-t border-[var(--brand-gray)] bg-[var(--brand-white)] opacity-60">
+                    <footer className="py-8 text-center text-xs border-t border-[var(--brand-gray)] bg-[var(--brand-white)] opacity-60" role="contentinfo">
                         &copy; {new Date().getFullYear()} {config.BRAND.name} - {config.BRAND.tagline}
                     </footer>
                 </div>
             );
         };
 
+        // Set initial html lang attribute
+        document.documentElement.lang = getInitialLang();
         const root = createRoot(document.getElementById('root'));
         root.render(<App />);
     </script>
