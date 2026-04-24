@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PerfoTec Client Intake</title>
+    <meta name="description" content="PerfoTec Client Intake — Collect client and product information for quality testing.">
+    <meta name="author" content="PerfoTec B.V.">
+    <meta name="theme-color" content="#007C27">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     
@@ -11,37 +14,7 @@
     <link rel="stylesheet" href="style.css">
     <script src="config.js"></script>
 
-    <!-- CRUCIALE FIX VOOR HET OPSLAAN VAN PDF -->
-    <style>
-        @media print {
-            body, html, #root { 
-                background-color: white !important; 
-                overflow: visible !important; 
-                height: auto !important; 
-                margin: 0 !important;
-                padding: 0 !important;
-            }
-            .no-print { display: none !important; }
-            .page-break { page-break-before: always; break-before: page; }
-            .break-inside-avoid { break-inside: avoid; page-break-inside: avoid; }
-            
-            /* Dwing de grijze rand en padding van de hoofdcontainer naar wit/0 */
-            .bg-slate-600 {
-                background-color: white !important;
-                padding: 0 !important;
-            }
-
-            #print-content { 
-                position: relative !important; 
-                box-shadow: none !important; 
-                margin: 0 !important; 
-                padding: 0 !important; 
-                width: 100% !important; 
-                max-width: 100% !important; 
-            }
-            * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-        }
-    </style>
+    <!-- Print rules live in style.css so Intake, Proposal and Report share one source. -->
 </head>
 <body class="bg-slate-100 text-slate-800 antialiased selection:bg-blue-200 selection:text-blue-900">
     <div id="root">
@@ -75,16 +48,22 @@
           }
         };
 
-        const PACKAGING_TYPES = globalConfig.PACKAGING_TYPES || ['Punnets', 'Pillow Bag', 'Box/ Crate', 'Bin crate', 'Pallet'];
-        const TRANSPORT_MODES = globalConfig.TRANSPORT_MODES || ['Air Freight', 'Sea Freight', 'Road Transport', 'Storage'];
+        // i18n arrays are the single source; flat arrays are derived from them
+        // so option order and content stay in sync across all tools.
+        const PACKAGING_TYPES_I18N = globalConfig.PACKAGING_TYPES_I18N || [];
+        const TRANSPORT_MODES_I18N = globalConfig.TRANSPORT_MODES_I18N || [];
+        const DEFAULT_CRITERIA_I18N = globalConfig.DEFAULT_CRITERIA_I18N || [];
+        const PACKAGING_TYPES = PACKAGING_TYPES_I18N.map(x => x.value);
+        const TRANSPORT_MODES = TRANSPORT_MODES_I18N.map(x => x.value);
+        // i18n label lookup — sourced from config (v2.1); local fallback returns value.
+        const getI18nLabel = globalConfig.getI18nLabel
+          ? globalConfig.getI18nLabel.bind(globalConfig)
+          : ((arr, value) => value);
 
-        const DEFAULT_CRITERIA = globalConfig.DEFAULT_CRITERIA || [
-          'General Quality', 'Taste', 'Visual Appearance', 'Color',
-          'Smell / Aroma', 'Texture / Firmness', 'Humidity / Condensation',
-          'Dehydration / Shriveling', 'Moulds / Decay', 'Internal Browning'
-        ];
+        const DEFAULT_CRITERIA = DEFAULT_CRITERIA_I18N.map(x => x.value);
 
         // --- TRANSLATIONS (Strictly English) ---
+        // === MULTI-LANGUAGE TRANSLATIONS (EN / NL / ES in one file) ===
         const T = {
           en: {
             title: "Client Intake Form", subtitle: "Test Request Preparation",
@@ -92,16 +71,16 @@
             introText: "Please fill in the details. Click 'Save (.json)' to save progress. Click 'View Summary' to review and print/save as PDF.",
             load: "Load (.json)", save: "Save (.json)", preview: "View Summary", print: "Print / Save PDF", back: "Back to edit",
             sec1Title: "1. Company & Contact Details",
-            companyName: "Company Name", street: "Street", houseNumber: "Number", zipCode: "Zip / Postal", city: "City", country: "Country", website: "Website",
+            companyName: "Company Name", street: "Street", houseNumber: "Number", addressExtra: "Additional Info (floor, building, etc.)", zipCode: "Zip / Postal", city: "City", country: "Country", website: "Website",
             contactName: "Contact Name", role: "Job Title", email: "Email", phoneDirect: "Phone (Direct)", phoneWork: "Phone (Work)", addContactBtn: "Add Contact Person",
             unitSystem: "Unit System", metric: "Metric", imperial: "Imperial",
             logoUpload: "Company Logo", clickUpload: "Click to upload",
             sec2Title: "2. Product(s) for Testing", prodDetails: "Details", delProd: "Remove Product",
-            secATitle: "A. Product & Packaging", prodName: "Product Name", prodType: "Variety / Type", origin: "Origin", prodPhoto: "Photo", processingType: "State of product",
+            secATitle: "A. Product & Packaging", prodName: "Product Name", prodType: "Variety / Type", origin: "Origin", prodPhoto: "Product Photo", processingType: "State of product",
             whole: "Whole", processed: "Processed / Fresh-cut",
             maturity: "Maturity stage", treatment: "Post-harvest treatment",
             packType: "Packaging Type", material: "Current Material",
-            dimens: "Dimensions (Internal)", len: "Length", wid: "Width", widSeal: "Seal Width", hei: "Height",
+            dimens: "Packaging dimensions (Internal)", len: "Length", wid: "Width", widSeal: "Seal Width", hei: "Height",
             weight: "Net Weight",
             qualityCrit: "Quality criteria", qualityCritDesc: "Select the aspects to evaluate:",
             secBTitle: "B. Challenge & Objectives", challenge: "Current Challenge", goal: "Target Goal",
@@ -118,7 +97,87 @@
             fallbackMailText: "Did the email not open automatically?",
             fallbackMailBtn: "Open Email Manually",
             closeBtn: "I understand, close", submitBtn: "Finish & Send",
-            removeStep: "Remove Step"
+            removeStep: "Remove Step",
+            home: "Home",
+            warnCompanyName: "Warning: Please enter a company name!",
+            selectCriterion: "Select standard criterion...",
+            addBtn: "Add"
+          },
+          nl: {
+            title: "Klant Intake Formulier", subtitle: "Test Aanvraag Voorbereiding",
+            introTitle: "Welkom bij PerfoTec!",
+            introText: "Vul de bedrijfs- en productgegevens in. Klik op 'Opslaan (.json)' om uw voortgang te bewaren. Klaar? Klik op 'Bekijk Overzicht' om de PDF te controleren en af te drukken of op te slaan.",
+            load: "Laden (.json)", save: "Opslaan (.json)", preview: "Bekijk Overzicht", print: "Print / Opslaan als PDF", back: "Terug naar bewerken",
+            sec1Title: "1. Bedrijfs- & Contactgegevens",
+            companyName: "Bedrijfsnaam", street: "Straat", houseNumber: "Huisnummer", addressExtra: "Extra (verdieping, gebouw, etc.)", zipCode: "Postcode", city: "Plaats / Stad", country: "Land", website: "Website",
+            contactName: "Naam Contactpersoon", role: "Functie", email: "E-mailadres", phoneDirect: "Telefoon (Direct)", phoneWork: "Telefoon (Werk)", addContactBtn: "Contactpersoon Toevoegen",
+            unitSystem: "Eenheidssysteem", metric: "Metrisch", imperial: "Imperiaal",
+            logoUpload: "Bedrijfslogo", clickUpload: "Klik om te uploaden",
+            sec2Title: "2. Product(en) voor de Test", prodDetails: "Details", delProd: "Verwijder Product",
+            secATitle: "A. Product & Verpakking", prodName: "Productnaam", prodType: "Variëteit / Type", origin: "Herkomst", prodPhoto: "Product Foto", processingType: "Staat van het product",
+            whole: "Heel", processed: "Verwerkt / Gesneden",
+            maturity: "Rijpheidsstadium", treatment: "Standaard Behandeling",
+            packType: "Type Verpakking", material: "Huidig Materiaal",
+            dimens: "Afmetingen verpakking (Binnenmaat)", len: "Lengte", wid: "Breedte", widSeal: "Breedte Seal", hei: "Hoogte",
+            weight: "Netto Gewicht",
+            qualityCrit: "Kwaliteitscriteria", qualityCritDesc: "Selecteer de aspecten die u wilt laten beoordelen:",
+            secBTitle: "B. Uitdaging & Doelstelling", challenge: "Huidige Uitdaging", goal: "Beoogd Doel",
+            secCTitle: "C. Huidige Supply Chain", transportMode: "Transport & Opslag", transportModeErr: "Transportmodus",
+            airFreight: "Luchtvracht", seaFreight: "Zeevracht", roadTransport: "Wegtransport", storage: "Opslag",
+            step: "Stap", phase: "Fase (Activiteit)", temp: "Temperatuur", to: "Tot", days: "Tijd (Dagen)", action: "Actie",
+            actNone: "- Geen -", actPack: "Inpakken", actUnpack: "Uitpakken", addStep: "Extra Stap", addProd: "Extra product toevoegen",
+            validationErr: "Nog niet alle verplichte velden zijn ingevuld:", reqField: "is verplicht", reqProd: "Product",
+            printTitle: "Intake Overzicht",
+            successTitle: "Bijna klaar!",
+            successStep1: "Uw e-mailprogramma is zojuist geopend (gericht aan luke.zuijderwijk@perfotec.com).",
+            successStep2: "Het aanvraagbestand (JSON data) is zojuist gedownload in uw 'Downloads' map.",
+            successStep3: "BELANGRIJK: Sleep het gedownloade bestand in de geopende e-mail als bijlage en klik op verzenden! Gebruik eventueel de 'Print als PDF' functie om het overzicht op te slaan.",
+            fallbackMailText: "Opent de e-mail niet automatisch?",
+            fallbackMailBtn: "Open E-mail Handmatig",
+            closeBtn: "Ik begrijp het, sluiten", submitBtn: "Afronden & Verzenden",
+            removeStep: "Verwijder Stap",
+            home: "Home",
+            warnCompanyName: "Waarschuwing: Voer een bedrijfsnaam in!",
+            selectCriterion: "Selecteer standaard criterium...",
+            addBtn: "Toevoegen"
+          },
+          es: {
+            title: "Formulario de Ingreso de Clientes", subtitle: "Preparación de Solicitud de Prueba",
+            introTitle: "¡Bienvenido a PerfoTec!",
+            introText: "Por favor complete los detalles. Haga clic en 'Guardar (.json)' para guardar su progreso. ¿Terminó? Haga clic en 'Ver Resumen' para revisar y guardar como PDF.",
+            load: "Cargar (.json)", save: "Guardar (.json)", preview: "Ver Resumen", print: "Imprimir / Guardar PDF", back: "Volver a editar",
+            sec1Title: "1. Detalles de la Empresa y Contacto",
+            companyName: "Nombre de la Empresa", street: "Calle", houseNumber: "Número", addressExtra: "Información adicional (piso, edificio, etc.)", zipCode: "Código Postal", city: "Ciudad", country: "País", website: "Sitio Web",
+            contactName: "Nombre del Contacto", role: "Cargo", email: "Correo Electrónico", phoneDirect: "Teléfono (Directo)", phoneWork: "Teléfono (Trabajo)", addContactBtn: "Añadir Contacto",
+            unitSystem: "Sistema de Unidades", metric: "Métrico", imperial: "Imperial",
+            logoUpload: "Logotipo de la Empresa", clickUpload: "Haga clic para subir",
+            sec2Title: "2. Producto(s) para Prueba", prodDetails: "Detalles", delProd: "Eliminar Producto",
+            secATitle: "A. Producto y Empaque", prodName: "Nombre del Producto", prodType: "Variedad / Tipo", origin: "Origen", prodPhoto: "Foto del Producto", processingType: "Estado del producto",
+            whole: "Entero", processed: "Procesado / Cortado",
+            maturity: "Etapa de madurez", treatment: "Tratamiento estándar",
+            packType: "Tipo de Empaque", material: "Material Actual",
+            dimens: "Dimensiones del empaque (Internas)", len: "Longitud", wid: "Ancho", widSeal: "Ancho del Sello", hei: "Altura",
+            weight: "Peso Neto",
+            qualityCrit: "Criterios de calidad", qualityCritDesc: "Seleccione los aspectos a evaluar:",
+            secBTitle: "B. Desafío y Objetivos", challenge: "Desafío Actual", goal: "Objetivo",
+            secCTitle: "C. Cadena de Suministro Actual", transportMode: "Transporte y Almacenamiento", transportModeErr: "Modo de transporte",
+            airFreight: "Flete Aéreo", seaFreight: "Flete Marítimo", roadTransport: "Transporte Terrestre", storage: "Almacenamiento",
+            step: "Paso", phase: "Fase (Actividad)", temp: "Temperatura", to: "A", days: "Tiempo (Días)", action: "Acción",
+            actNone: "- Ninguna -", actPack: "Empacar", actUnpack: "Desempacar", addStep: "Añadir Paso", addProd: "Añadir otro producto",
+            validationErr: "No se han completado todos los campos obligatorios:", reqField: "es obligatorio", reqProd: "Producto",
+            printTitle: "Resumen de Ingreso",
+            successTitle: "¡Casi listo!",
+            successStep1: "Su programa de correo electrónico se acaba de abrir (dirigido a luke.zuijderwijk@perfotec.com).",
+            successStep2: "El archivo de solicitud (datos JSON) se acaba de descargar en su carpeta de 'Descargas'.",
+            successStep3: "IMPORTANTE: ¡Por favor, adjunte el archivo descargado al correo electrónico abierto y envíelo! También puede usar la función 'Imprimir como PDF' para guardar el resumen.",
+            fallbackMailText: "¿No se abrió el correo electrónico automáticamente?",
+            fallbackMailBtn: "Abrir Correo Manualmente",
+            closeBtn: "Entendido, cerrar", submitBtn: "Terminar y Enviar",
+            removeStep: "Eliminar Paso",
+            home: "Inicio",
+            warnCompanyName: "¡Advertencia: Ingrese un nombre de empresa!",
+            selectCriterion: "Seleccionar criterio estándar...",
+            addBtn: "Añadir"
           }
         };
 
@@ -150,36 +209,29 @@
         };
 
         // --- HELPER CLASSES ---
-        const inputClass = "w-full bg-slate-50 border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block p-3 shadow-sm transition-all hover:bg-slate-100 focus:bg-white";
+        const inputClass = (globalConfig.UI_CLASSES && globalConfig.UI_CLASSES.input) || "w-full bg-slate-50 border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block p-3 shadow-sm transition-all hover:bg-slate-100 focus:bg-white";
         const narrowInputClass = "w-full bg-slate-50 border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block py-2.5 px-1 text-center shadow-sm transition-all hover:bg-slate-100 focus:bg-white [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] min-w-0";
-        const labelClass = "block mb-2 text-xs font-bold tracking-wide text-slate-600 uppercase";
+        const labelClass = (globalConfig.UI_CLASSES && globalConfig.UI_CLASSES.label) || "block mb-2 text-xs font-bold tracking-wide text-slate-600 uppercase";
 
-        // --- MATH CONVERSION HELPER ---
-        const convertValue = (val, type, isBulk, toImperial) => {
-            if (!val || isNaN(val)) return val;
-            const v = parseFloat(val);
-            let res = v;
-            
-            if (type === 'length') {
-                if (isBulk) res = toImperial ? v / 2.54 : v * 2.54; // cm <-> inch
-                else res = toImperial ? v / 25.4 : v * 25.4; // mm <-> inch
-            } else if (type === 'weight') {
-                if (isBulk) res = toImperial ? v * 2.20462 : v / 2.20462; // kg <-> lbs
-                else res = toImperial ? v * 0.00220462 : v / 0.00220462; // g <-> lbs
-            } else if (type === 'temp') {
-                res = toImperial ? (v * 9/5) + 32 : (v - 32) * 5/9; // C <-> F
-            }
-            
-            return Number(res.toFixed(2)).toString(); // Strips trailing zeros cleanly
-        };
+        // Unit conversion — sourced from config (v2.1).
+        // Note: config uses g <-> oz (matches UNIT_LABELS.imperial.weight = 'oz');
+        // the previous local copy incorrectly used g <-> lb for non-bulk weight.
+        const convertValue = globalConfig.convertValue
+          ? globalConfig.convertValue.bind(globalConfig)
+          : ((val) => val);
 
         // --- COMPONENT: PRODUCT SUPPLY CHAIN FLOW (Visualizer for PDF) ---
-        const ProductSupplyChainFlow = ({ chain, unitSystem, t }) => {
+        const ProductSupplyChainFlow = ({ chain, unitSystem, t, lang }) => {
           if (!chain || chain.length === 0) return null;
           let cumulativeMin = 0;
           let cumulativeMax = 0;
           const isMetric = unitSystem === 'metric';
           const tempUnit = isMetric ? '°C' : '°F';
+          const displayStage = (value) => {
+            if (!value) return '-';
+            if (globalConfig.translateLabel) return globalConfig.translateLabel(value, lang);
+            return value;
+          };
 
           return (
             <div className="flex w-full gap-1 items-start justify-between mt-2 mb-2 font-sans overflow-hidden print:overflow-visible">
@@ -203,7 +255,7 @@
                             {getStageIcon(step.stage)}
                          </div>
                          
-                         <div className="text-[8px] font-bold text-center uppercase mb-1 min-h-[24px] flex items-center justify-center leading-tight w-full break-words px-0.5">{step.stage || '-'}</div>
+                         <div className="text-[8px] font-bold text-center uppercase mb-1 min-h-[24px] flex items-center justify-center leading-tight w-full break-words px-0.5">{displayStage(step.stage)}</div>
                          
                          <div className="w-full border-t border-dotted border-gray-200 my-0.5"></div>
                          
@@ -234,13 +286,18 @@
         };
 
         // --- COMPONENT: PRINT VIEW ---
-        const PrintPreview = ({ clientInfo, products, unitSystem, t, onBack }) => {
+        const PrintPreview = ({ clientInfo, products, unitSystem, t, lang, onBack }) => {
           const reportTitleClass = "text-3xl font-extrabold uppercase mb-6 brand-heading break-after-avoid";
           const reportTitleStyle = { color: BRAND.colors.green, borderBottom: `3px solid ${BRAND.colors.gray}`, paddingBottom: '0.75rem', marginTop: '2rem' };
 
           const isMetric = unitSystem === 'metric';
 
-          const handlePdfExport = () => { window.print(); };
+          const handlePdfExport = () => {
+            const company = clientInfo.companyName || 'Client';
+            const suggested = `PerfoTec_Intake_${company}`;
+            if (globalConfig.printWithFilename) globalConfig.printWithFilename(suggested);
+            else window.print();
+          };
 
           const handleWordExport = () => {
               const content = document.getElementById('print-content').innerHTML;
@@ -294,6 +351,7 @@
                          <div>
                             <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider mb-1">Address</p>
                             <p className="text-slate-700 text-base">{clientInfo.street} {clientInfo.houseNumber}</p>
+                            {clientInfo.addressExtra && <p className="text-slate-700 text-base">{clientInfo.addressExtra}</p>}
                             <p className="text-slate-700 text-base">{clientInfo.zipCode} {clientInfo.city}, {clientInfo.country}</p>
                          </div>
                       </div>
@@ -320,65 +378,71 @@
                    {/* PRODUCTS */}
                    <div className="space-y-12">
                      {products.map((prod, idx) => {
-                       const isLargeBulk = prod.packagingType === 'Bin crate' || prod.packagingType === 'Pallet';
+                       const isLargeBulk = prod.packagingType === 'Cube crate' || prod.packagingType === 'Pallet';
                        const dimUnit = isLargeBulk ? (isMetric ? 'cm' : 'inch') : (isMetric ? 'mm' : 'inch');
                        const weightUnit = isLargeBulk ? (isMetric ? 'kg' : 'lbs') : (isMetric ? 'g' : 'lbs');
 
                        return (
-                         <div key={prod.id} className="border border-slate-200 rounded-2xl p-8 mb-8 break-inside-avoid bg-white">
-                            <div className="flex justify-between items-start border-b-2 border-slate-100 pb-5 mb-8">
-                               <div className="pr-4">
-                                  <h2 className="text-4xl font-bold brand-heading" style={{ color: BRAND.colors.green }}>{prod.name || 'Unnamed Product'}</h2>
-                                  <p className="text-slate-500 uppercase tracking-widest text-sm font-bold mt-2 bg-slate-100 inline-block px-3 py-1 rounded">{prod.processingType === 'Whole' ? t.whole : t.processed}</p>
+                         <div key={prod.id} className="border border-slate-200 rounded-2xl p-8 print:p-3 mb-8 print:mb-2 break-inside-avoid bg-white">
+                            {/* Top grid: [Title + Specifications stacked] (left) | [Photo] (right, full height) */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 print:grid-cols-3 gap-6 print:gap-3 mb-5 print:mb-2">
+                               <div className="sm:col-span-2 print:col-span-2 flex flex-col gap-5 print:gap-2 min-w-0">
+                                  {/* Title block */}
+                                  <div className="border-b-2 border-slate-100 pb-4 print:pb-2">
+                                     <h2 className="text-4xl print:text-2xl font-bold brand-heading" style={{ color: BRAND.colors.green }}>{prod.name || 'Unnamed Product'}</h2>
+                                     <p className="text-slate-500 uppercase tracking-widest text-sm print:text-[10px] font-bold mt-2 print:mt-1 bg-slate-100 inline-block px-3 py-1 print:px-2 print:py-0.5 rounded">{prod.processingType === 'Whole' ? t.whole : t.processed}</p>
+                                  </div>
+                                  {/* Specifications block */}
+                                  <div className="bg-slate-50 p-6 print:p-3 rounded-2xl border border-slate-200 flex-1">
+                                     <h4 className="font-bold text-lg print:text-sm mb-4 print:mb-2" style={{color: BRAND.colors.blue}}>Specifications</h4>
+                                     <div className="grid grid-cols-[130px_1fr] print:grid-cols-[110px_1fr] gap-y-2 print:gap-y-0.5 text-sm print:text-xs leading-snug print:leading-tight">
+                                        <div className="font-bold text-slate-500">Variety :</div> <div>{prod.type || '-'}</div>
+                                        <div className="font-bold text-slate-500">Origin :</div> <div>{prod.origin || '-'}</div>
+                                        <div className="font-bold text-slate-500">Maturity :</div> <div>{prod.maturityStage || '-'}</div>
+                                        <div className="font-bold text-slate-500">Treatment :</div> <div>{prod.postHarvestTreatment || '-'}</div>
+                                        <div className="font-bold text-slate-500 mt-2 pt-2 print:mt-1 print:pt-1 border-t">Packaging :</div> <div className="mt-2 pt-2 print:mt-1 print:pt-1 border-t">{prod.packagingType || '-'} ({prod.material || '-'})</div>
+                                        <div className="font-bold text-slate-500">Dimensions :</div> <div>{prod.length || '-'} x {prod.width || '-'} {prod.packagingType !== 'Pillow Bag' && `x ${prod.height || '-'}`} {dimUnit}</div>
+                                        <div className="font-bold text-slate-500">Net Weight :</div> <div className="font-bold">{prod.weight || '-'} {weightUnit}</div>
+                                     </div>
+                                  </div>
                                </div>
-                               
-                               <div style={{ width: '80mm', height: '80mm' }} className="border border-slate-200 rounded-xl flex items-center justify-center bg-white p-2 shadow-sm shrink-0 overflow-hidden">
+
+                               {/* Photo: occupies full right column, matches height of title+specs */}
+                               <div className="border border-slate-200 rounded-xl flex items-center justify-center bg-white p-2 print:p-1 shadow-sm overflow-hidden min-h-[55mm]">
                                   {prod.photo ? (
-                                     <img src={prod.photo} className="max-w-full h-auto max-h-[80mm] object-contain p-2 rounded" crossOrigin="anonymous" />
+                                     <img src={prod.photo} className="max-w-full max-h-full object-contain rounded" crossOrigin="anonymous" />
                                   ) : (
                                      <div className="flex flex-col items-center text-slate-300">
-                                        <ImageIcon size={32} className="mb-2 opacity-50"/> 
+                                        <ImageIcon size={28} className="mb-1 opacity-50"/>
                                         <span className="text-xs italic font-medium">No Photo</span>
                                      </div>
                                   )}
                                </div>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
-                               <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200">
-                                  <h4 className="font-bold text-lg mb-4" style={{color: BRAND.colors.blue}}>Specifications</h4>
-                                  <div className="grid grid-cols-[140px_1fr] gap-y-2 text-sm">
-                                     <div className="font-bold text-slate-500">Variety :</div> <div>{prod.type || '-'}</div>
-                                     <div className="font-bold text-slate-500">Origin :</div> <div>{prod.origin || '-'}</div>
-                                     <div className="font-bold text-slate-500">Maturity :</div> <div>{prod.maturityStage || '-'}</div>
-                                     <div className="font-bold text-slate-500">Treatment :</div> <div>{prod.postHarvestTreatment || '-'}</div>
-                                     <div className="font-bold text-slate-500 mt-2 pt-2 border-t">Packaging :</div> <div className="mt-2 pt-2 border-t">{prod.packagingType || '-'} ({prod.material || '-'})</div>
-                                     <div className="font-bold text-slate-500">Dimensions :</div> <div>{prod.length || '-'} x {prod.width || '-'} {prod.packagingType !== 'Pillow Bag' && `x ${prod.height || '-'}`} {dimUnit}</div>
-                                     <div className="font-bold text-slate-500">Net Weight :</div> <div className="font-bold">{prod.weight || '-'} {weightUnit}</div>
-                                  </div>
+                            {/* Challenge + Goal side by side (print:grid-cols-2 forces 2 cols on print where md: breakpoint wouldn't trigger) */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 print:grid-cols-2 gap-6 print:gap-3 mb-5 print:mb-2">
+                               <div className="bg-orange-50 p-6 print:p-3 rounded-2xl border border-orange-100">
+                                  <h4 className="font-bold text-lg print:text-sm mb-2 print:mb-1 text-orange-800 flex items-center gap-2"><AlertCircle size={18}/> {t.challenge}</h4>
+                                  <div className="whitespace-pre-wrap text-sm print:text-xs text-slate-700 leading-snug print:leading-tight">{prod.currentChallenge || '-'}</div>
                                </div>
-                               
-                               <div className="flex flex-col gap-6">
-                                  <div className="bg-orange-50 p-6 rounded-2xl border border-orange-100 flex-1">
-                                     <h4 className="font-bold text-lg mb-2 text-orange-800 flex items-center gap-2"><AlertCircle size={18}/> {t.challenge}</h4>
-                                     <div className="whitespace-pre-wrap text-sm text-slate-700">{prod.currentChallenge || '-'}</div>
-                                  </div>
-                                  <div className="bg-green-50 p-6 rounded-2xl border border-green-100 flex-1">
-                                     <h4 className="font-bold text-lg mb-2 text-green-800 flex items-center gap-2"><CheckCircle size={18}/> {t.goal}</h4>
-                                     <div className="whitespace-pre-wrap text-sm text-slate-700">{prod.targetGoal || '-'}</div>
-                                  </div>
+                               <div className="bg-green-50 p-6 print:p-3 rounded-2xl border border-green-100">
+                                  <h4 className="font-bold text-lg print:text-sm mb-2 print:mb-1 text-green-800 flex items-center gap-2"><CheckCircle size={18}/> {t.goal}</h4>
+                                  <div className="whitespace-pre-wrap text-sm print:text-xs text-slate-700 leading-snug print:leading-tight">{prod.trialTarget || '-'}</div>
                                </div>
                             </div>
 
-                            <div className="break-inside-avoid bg-slate-50 p-6 rounded-2xl border border-slate-200 mb-8">
-                               <h4 className="font-bold text-lg mb-4 text-slate-800 flex items-center gap-2"><Truck size={20} className="text-indigo-600"/> Supply Chain ({prod.transportMode || 'None'})</h4>
-                               <ProductSupplyChainFlow chain={prod.supplyChain} unitSystem={unitSystem} t={t} />
+                            {/* Supply chain (tightened padding) */}
+                            <div className="break-inside-avoid bg-slate-50 p-6 print:p-3 rounded-2xl border border-slate-200 mb-5 print:mb-2">
+                               <h4 className="font-bold text-lg print:text-sm mb-4 print:mb-2 text-slate-800 flex items-center gap-2"><Truck size={20} className="text-indigo-600"/> Supply Chain ({prod.transportMode || 'None'})</h4>
+                               <ProductSupplyChainFlow chain={prod.supplyChain} unitSystem={unitSystem} t={t} lang={lang} />
                             </div>
 
+                            {/* Quality criteria: compact 3-col grid on print */}
                             {prod.qualityCriteria && prod.qualityCriteria.length > 0 && (
-                                <div className="break-inside-avoid bg-slate-50 p-6 rounded-2xl border border-slate-200">
-                                   <h4 className="font-bold text-lg mb-4 text-slate-800">Desired Quality Criteria</h4>
-                                   <ul className="list-disc pl-6 grid grid-cols-2 gap-2 text-sm text-slate-700">
+                                <div className="break-inside-avoid bg-slate-50 p-6 print:p-3 rounded-2xl border border-slate-200">
+                                   <h4 className="font-bold text-lg print:text-sm mb-3 print:mb-1 text-slate-800">Desired Quality Criteria</h4>
+                                   <ul className="list-disc pl-5 print:pl-4 grid grid-cols-2 md:grid-cols-3 gap-x-4 print:gap-x-3 gap-y-1 print:gap-y-0 text-sm print:text-xs text-slate-700 leading-snug print:leading-tight">
                                      {prod.qualityCriteria.map((c, i) => <li key={i}>{c}</li>)}
                                    </ul>
                                 </div>
@@ -394,12 +458,20 @@
 
         // --- MAIN APPLICATION (EDITOR) ---
         const App = () => {
-          // Language strictly set to English for this file.
-          const lang = 'en';
-          const t = T[lang];
+          // v2.0: Dynamic language — no more separate files per language
+          const getInitialLang = () => {
+            if (globalConfig.getLanguage) return globalConfig.getLanguage();
+            const saved = localStorage.getItem('perfotec_lang');
+            if (saved && T[saved]) return saved;
+            const browser = (navigator.language || '').substring(0, 2).toLowerCase();
+            if (T[browser]) return browser;
+            return 'en';
+          };
+          const [lang, setLang] = useState(getInitialLang);
+          const t = T[lang] || T['en'];
 
           const [clientInfo, setClientInfo] = useState({
-            companyName: '', street: '', houseNumber: '', zipCode: '', city: '', country: '', website: '',
+            companyName: '', street: '', houseNumber: '', addressExtra: '', zipCode: '', city: '', country: '', website: '',
             contacts: [{ id: 1, name: '', role: '', email: '', phoneDirect: '', phoneWork: '' }],
             logo: null
           });
@@ -410,8 +482,8 @@
             id: Date.now(), name: '', type: '', origin: '', processingType: 'Whole',
             maturityStage: '', postHarvestTreatment: '', weight: '',
             packagingType: 'Punnets', material: '', length: '', width: '', height: '',
-            qualityCriteria: [], currentChallenge: '', targetGoal: '',
-            transportMode: '', supplyChain: JSON.parse(JSON.stringify(DEFAULT_SUPPLY_CHAIN)), photo: null
+            qualityCriteria: [], currentChallenge: '', trialTarget: '',
+            transportMode: '', supplyChain: JSON.parse(JSON.stringify(DEFAULT_SUPPLY_CHAIN)).map(s => ({...s, stage: (globalConfig.translateLabel ? globalConfig.translateLabel(s.stage, lang) : s.stage)})), photo: null
           };
 
           const [products, setProducts] = useState([initialProduct]);
@@ -422,13 +494,27 @@
           const [isPreview, setIsPreview] = useState(false);
           const fileInputRef = useRef(null);
 
+          // Re-translate supply-chain stage labels when the user switches UI language.
+          // Only canonical stages (Farm / Harvest, Packing House, …) are remapped;
+          // free-text entries entered by the user are preserved unchanged.
+          useEffect(() => {
+            if (!globalConfig.retranslateStage) return;
+            setProducts(prev => prev.map(p => ({
+              ...p,
+              supplyChain: (p.supplyChain || []).map(step => ({
+                ...step,
+                stage: globalConfig.retranslateStage(step.stage, lang)
+              }))
+            })));
+          }, [lang]);
+
           // --- HANDLERS UNIT TOGGLE ---
           const handleUnitToggle = (newSystem) => {
               if (newSystem === unitSystem) return;
               const toImperial = newSystem === 'imperial';
               
               setProducts(prevProds => prevProds.map(p => {
-                  const isBulk = p.packagingType === 'Bin crate' || p.packagingType === 'Pallet';
+                  const isBulk = p.packagingType === 'Cube crate' || p.packagingType === 'Pallet';
                   
                   // Convert dimensions
                   const newLen = convertValue(p.length, 'length', isBulk, toImperial);
@@ -513,7 +599,7 @@
                 
                 // Smart Supply Chain Logic for Packaging Action
                 if (field === 'packagingType') {
-                  const bulkTypes = ['Box/ Crate', 'Bin crate', 'Pallet'];
+                  const bulkTypes = ['Box/ Crate', 'Cube crate', 'Pallet'];
                   const isBulk = bulkTypes.includes(value);
                   
                   updatedProduct.supplyChain = updatedProduct.supplyChain.map(step => {
@@ -616,7 +702,7 @@
               if (p.packagingType !== 'Pillow Bag' && !p.height.toString().trim()) newErrors.push(`${prefix}${t.hei} ${t.reqField}`);
               if (!p.weight.toString().trim()) newErrors.push(`${prefix}${t.weight} ${t.reqField}`);
               if (!p.currentChallenge.trim()) newErrors.push(`${prefix}${t.challenge} ${t.reqField}`);
-              if (!p.targetGoal.trim()) newErrors.push(`${prefix}${t.goal} ${t.reqField}`);
+              if (!p.trialTarget.trim()) newErrors.push(`${prefix}${t.goal} ${t.reqField}`);
               if (!p.transportMode) newErrors.push(`${prefix}${t.transportModeErr} ${t.reqField}`);
 
               p.supplyChain.forEach((step, sIdx) => {
@@ -631,12 +717,20 @@
           };
 
           const handleExportJSON = () => {
+            // Ensure the canonical contacts[] array reflects the primary-contact
+            // UI fields before export (round-trip safety).
+            const normalizedClient = globalConfig.buildContactsArray
+              ? { ...clientInfo, contacts: globalConfig.buildContactsArray(clientInfo) }
+              : clientInfo;
+
             const exportData = {
               isPerfoTecIntake: true,
+              schemaVersion: globalConfig.SCHEMA_VERSION || '2.1',
+              appVersion: globalConfig.APP_VERSION || '',
               exportDate: new Date().toISOString(),
               language: lang,
               unitSystem: unitSystem,
-              client: clientInfo,
+              client: normalizedClient,
               products: products
             };
 
@@ -666,23 +760,19 @@
             const file = e.target.files[0];
             if (!file) return;
             
-            const processData = (data) => {
+            const processData = (raw) => {
+                // Run through the shared schema migration so legacy exports
+                // (flat contact fields, targetGoal, missing schemaVersion) are
+                // normalised to the canonical shape before use.
+                const data = globalConfig.migrateSchema ? globalConfig.migrateSchema(raw) : raw;
+
                 if(data.isPerfoTecIntake) {
-                   // Backward compatibility check for older JSONs that had contact info flat on the client object
-                   let loadedClient = { ...data.client };
-                   if (!loadedClient.contacts || loadedClient.contacts.length === 0) {
-                       loadedClient.contacts = [{
-                           id: Date.now(),
-                           name: loadedClient.contactName || '',
-                           role: loadedClient.role || '',
-                           email: loadedClient.email || '',
-                           phoneDirect: loadedClient.phone || '',
-                           phoneWork: ''
-                       }];
-                       // clean up old flat values to avoid confusion
-                       delete loadedClient.contactName; delete loadedClient.role; delete loadedClient.email; delete loadedClient.phone;
-                   }
-                   
+                   const loadedClient = { ...data.client };
+                   // Strip any stale flat fields so the UI binds only to contacts[]
+                   delete loadedClient.contactName; delete loadedClient.role;
+                   delete loadedClient.email; delete loadedClient.phone;
+                   delete loadedClient.phoneDirect; delete loadedClient.phoneWork;
+
                    setClientInfo(loadedClient);
                    if(data.products && data.products.length > 0) {
                        setProducts(data.products);
@@ -742,7 +832,7 @@
           };
 
           if (isPreview) {
-            return <PrintPreview clientInfo={clientInfo} products={products} unitSystem={unitSystem} t={t} onBack={() => setIsPreview(false)} />;
+            return <PrintPreview clientInfo={clientInfo} products={products} unitSystem={unitSystem} t={t} lang={lang} onBack={() => setIsPreview(false)} />;
           }
 
           return (
@@ -787,53 +877,58 @@
 
               {/* HEADER */}
               <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40 shadow-sm">
-                <div className="max-w-6xl mx-auto px-4 md:px-6 py-4 flex justify-between items-center">
-                  <div className="flex items-center gap-4">
-                    <img src={BRAND.logos.default} alt="PerfoTec" className="h-9 md:h-12 object-contain" />
-                    <div className="border-l-2 border-slate-200 pl-4 ml-2 hidden sm:block">
-                      <h1 className="font-extrabold text-2xl tracking-tight leading-none" style={{color: BRAND.colors.blue}}>{t.title}</h1>
-                      <p className="text-xs text-slate-500 font-bold uppercase tracking-widest mt-1">{t.subtitle}</p>
+                <div className="max-w-6xl mx-auto px-4 md:px-6 py-3 flex items-center gap-3 md:gap-4">
+                  {/* LEFT: Logo + Home */}
+                  <div className="flex items-center gap-2 md:gap-3 shrink-0">
+                    <img src={BRAND.logos.default} alt="PerfoTec" className="h-7 md:h-9 object-contain" />
+                    <a href="index.html" className="bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-800 p-2 xl:px-3 xl:py-2 rounded-lg text-xs font-bold transition-all border border-slate-200 flex items-center gap-1.5 whitespace-nowrap" title={t.home || 'Home'}>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" /></svg>
+                      <span className="hidden xl:inline">{t.home || 'Home'}</span>
+                    </a>
+                  </div>
+
+                  {/* CENTER: Title — dedicated space, visible from md */}
+                  <div className="hidden md:flex flex-1 min-w-0 border-l-2 border-slate-200 pl-3 md:pl-4">
+                    <div className="min-w-0">
+                      <h1 className="font-extrabold text-base md:text-lg lg:text-xl xl:text-2xl tracking-tight leading-tight truncate" style={{color: BRAND.colors.blue}}>{t.title}</h1>
+                      <p className="text-[10px] md:text-xs text-slate-500 font-bold uppercase tracking-widest mt-0.5 truncate">{t.subtitle}</p>
                     </div>
                   </div>
-                  
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center bg-slate-100 hover:bg-slate-200 transition-colors rounded-xl px-3 py-2 border border-slate-200 shadow-sm">
-                       <Globe size={18} className="text-slate-500 mr-2" />
-                       <select 
-                         className="bg-transparent text-sm font-bold text-slate-700 outline-none cursor-pointer w-full" 
-                         value={lang} 
-                         onChange={(e) => {
-                           const val = e.target.value;
-                           if (globalConfig.setLanguage) globalConfig.setLanguage(val);
-                           if (val !== 'en') {
-                              try {
-                                  window.location.assign(`intake_${val}.html`);
-                              } catch(err) {
-                                  console.warn("Navigation failed", err);
-                              }
-                           }
-                         }}
-                       >
-                         {globalConfig.LANGUAGES ? globalConfig.LANGUAGES.map(l => (
-                             <option key={l.code} value={l.code}>{l.label}</option>
-                         )) : (
-                             <React.Fragment><option value="en">EN</option><option value="nl">NL</option><option value="es">ES</option></React.Fragment>
-                         )}
-                       </select>
-                    </div>
-                    
-                    <div className="h-8 border-l border-slate-300 mx-1 hidden md:block"></div>
 
-                    <label className="cursor-pointer bg-white border border-slate-300 text-slate-700 px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm">
-                      <FolderOpen size={18} className="text-blue-600"/> <span className="hidden md:inline">{t.load}</span>
+                  {/* SPACER for mobile when title is hidden */}
+                  <div className="md:hidden flex-1"></div>
+
+                  {/* RIGHT: Action buttons + Language selector (lang always rightmost) */}
+                  <div className="flex items-center gap-1.5 md:gap-2 xl:gap-3 shrink-0">
+                    <label className="cursor-pointer bg-white border border-slate-300 text-slate-700 p-2 lg:pr-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm" title={t.load}>
+                      <FolderOpen size={18} className="text-blue-600 shrink-0"/>
+                      <span className="hidden lg:flex flex-col items-start leading-[1.05] text-[10px] uppercase tracking-tight">
+                        {(t.load || '').split(' ').map((w, i) => <span key={i} className={i === 0 ? '' : 'opacity-60 font-medium'}>{w}</span>)}
+                      </span>
                       <input type="file" accept=".json" className="hidden" onClick={(e) => { e.target.value = null; }} onChange={handleImportJSON} ref={fileInputRef} />
                     </label>
-                    <button onClick={handleExportJSON} className="bg-white border border-slate-300 text-slate-700 px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm">
-                      <Save size={18} className="text-green-600"/> <span className="hidden md:inline">{t.save}</span>
+                    <button onClick={handleExportJSON} className="bg-white border border-slate-300 text-slate-700 p-2 lg:pr-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm" title={t.save}>
+                      <Save size={18} className="text-green-600 shrink-0"/>
+                      <span className="hidden lg:flex flex-col items-start leading-[1.05] text-[10px] uppercase tracking-tight">
+                        {(t.save || '').split(' ').map((w, i) => <span key={i} className={i === 0 ? '' : 'opacity-60 font-medium'}>{w}</span>)}
+                      </span>
                     </button>
-                    <button onClick={() => { if(!clientInfo.companyName) alert('Warning: Please enter a company name!'); else if(validateForm()) setIsPreview(true); else window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="bg-blue-600 text-white px-6 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-blue-700 transition-all shadow-md hover:shadow-blue-500/30 ml-2">
-                      <FileText size={18}/> <span className="hidden md:inline">{t.preview}</span>
+                    <button onClick={() => { if(!clientInfo.companyName) alert(t.warnCompanyName || 'Warning: Please enter a company name!'); else if(validateForm()) setIsPreview(true); else window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="bg-blue-600 text-white p-2 lg:pr-3 rounded-xl font-bold flex items-center gap-2 hover:bg-blue-700 transition-all shadow-md hover:shadow-blue-500/30" title={t.preview}>
+                      <FileText size={18} className="shrink-0"/>
+                      <span className="hidden lg:flex flex-col items-start leading-[1.05] text-[10px] uppercase tracking-tight">
+                        {(t.preview || '').split(' ').map((w, i) => <span key={i} className={i === 0 ? '' : 'opacity-80 font-medium'}>{w}</span>)}
+                      </span>
                     </button>
+
+                    <div className="h-8 border-l border-slate-300 mx-1 hidden lg:block"></div>
+
+                    <div className="lang-selector" role="radiogroup" aria-label="Language">
+                      {(globalConfig.LANGUAGES || [{code:'en',label:'EN'},{code:'nl',label:'NL'},{code:'es',label:'ES'}]).map(l => (
+                        <button key={l.code} type="button" role="radio" aria-checked={lang === l.code} className={`lang-btn ${lang === l.code ? 'active' : ''}`} onClick={() => { setLang(l.code); if (globalConfig.setLanguage) globalConfig.setLanguage(l.code); document.documentElement.lang = l.code; }}>
+                          {l.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </header>
@@ -867,22 +962,6 @@
                       </div>
                       <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">{t.sec1Title}</h2>
                     </div>
-                    
-                    {/* UNIT TOGGLE SWITCH */}
-                    <div className="flex items-center gap-2 bg-slate-100 p-1.5 rounded-xl border border-slate-200 shadow-inner">
-                        <button 
-                          onClick={() => handleUnitToggle('metric')}
-                          className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${unitSystem === 'metric' ? 'bg-white text-slate-800 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
-                        >
-                            {t.metric}
-                        </button>
-                        <button 
-                          onClick={() => handleUnitToggle('imperial')}
-                          className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${unitSystem === 'imperial' ? 'bg-white text-slate-800 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
-                        >
-                            {t.imperial}
-                        </button>
-                    </div>
                   </div>
                   
                   <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
@@ -911,6 +990,10 @@
                          <div className="col-span-4 sm:col-span-1">
                            <label className={labelClass}>{t.houseNumber}</label>
                            <input type="text" className={inputClass} value={clientInfo.houseNumber} onChange={e => handleClientChange('houseNumber', e.target.value)} />
+                         </div>
+                         <div className="col-span-4">
+                           <label className={labelClass}>{t.addressExtra}</label>
+                           <input type="text" className={inputClass} value={clientInfo.addressExtra || ''} onChange={e => handleClientChange('addressExtra', e.target.value)} placeholder={t.addressExtra} />
                          </div>
                          <div className="col-span-4 sm:col-span-2">
                            <label className={labelClass}>{t.zipCode}</label>
@@ -984,42 +1067,62 @@
                   </div>
                 </section>
 
-                <div className="flex items-center gap-4 pb-2 pt-6">
-                  <div className="p-3 bg-blue-100 rounded-xl shadow-sm">
-                    <PackagePlus size={32} color={BRAND.colors.blue} />
-                  </div>
-                  <h2 className="text-3xl font-extrabold text-slate-800 tracking-tight">{t.sec2Title}</h2>
-                </div>
-
                 {/* PRODUCTS LIST */}
                 <div className="space-y-10">
                   {products.map((prod, idx) => {
-                    const isLargeBulk = prod.packagingType === 'Bin crate' || prod.packagingType === 'Pallet';
+                    const isLargeBulk = prod.packagingType === 'Cube crate' || prod.packagingType === 'Pallet';
                     const dimUnit = isLargeBulk ? (unitSystem === 'metric' ? 'cm' : 'inch') : (unitSystem === 'metric' ? 'mm' : 'inch');
                     const weightUnit = isLargeBulk ? (unitSystem === 'metric' ? 'kg' : 'lbs') : (unitSystem === 'metric' ? 'g' : 'lbs');
 
                     return (
-                      <section key={prod.id} className="bg-white rounded-3xl shadow-md border border-slate-200 overflow-hidden relative transition-all hover:shadow-lg">
+                      <section key={prod.id} className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200 overflow-hidden relative transition-all hover:shadow-lg">
+                        
+                        <div className="absolute top-0 left-0 w-full h-1" style={{ backgroundColor: BRAND.colors.green }}></div>
                         
                         {/* PRODUCT HEADER */}
-                        <div className="text-white px-6 py-5 flex justify-between items-center" style={{ backgroundColor: BRAND.colors.green }}>
+                        <div className="flex items-center justify-between gap-4 border-b-2 border-slate-100 pb-6 mb-8">
                            <div className="flex items-center gap-4">
-                             <div className="bg-white/20 border border-white/30 text-white w-10 h-10 rounded-full flex items-center justify-center font-bold shadow-inner">
-                                {idx + 1}
+                             <div className="p-3 bg-green-50 rounded-xl">
+                               <PackagePlus size={28} color={BRAND.colors.green} />
                              </div>
-                             <h3 className="font-bold text-xl tracking-wide">
-                               {t.prodDetails} {prod.name ? <span className="text-green-100 font-normal ml-2">/ {prod.name}</span> : ''}
-                             </h3>
+                             <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">
+                               {idx === 0 ? t.sec2Title : `${t.prodDetails} ${idx + 1}`} {prod.name ? <span className="text-slate-500 font-normal ml-2">/ {prod.name}</span> : ''}
+                             </h2>
                            </div>
+                           
+                           {/* RIGHT SIDE: UNIT TOGGLE + DELETE BUTTON */}
+                           <div className="flex items-center gap-4">
+                              {/* Show toggle only in the FIRST product box to prevent duplication spam, or all? Let's just put it in the first one since it's global */}
+                              {idx === 0 && (
+                                <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner border border-slate-200">
+                                   <button
+                                     type="button"
+                                     onClick={() => handleUnitToggle('metric')}
+                                     className={`px-4 py-2 rounded-lg transition-all flex flex-col items-center leading-tight ${unitSystem === 'metric' ? 'bg-white text-slate-800 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
+                                   >
+                                       <span className="text-sm font-bold">{t.metric}</span>
+                                       <span className="text-[10px] font-medium tracking-wide opacity-70 mt-0.5">(kg/meter)</span>
+                                   </button>
+                                   <button
+                                     type="button"
+                                     onClick={() => handleUnitToggle('imperial')}
+                                     className={`px-4 py-2 rounded-lg transition-all flex flex-col items-center leading-tight ${unitSystem === 'imperial' ? 'bg-white text-slate-800 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
+                                   >
+                                       <span className="text-sm font-bold">{t.imperial}</span>
+                                       <span className="text-[10px] font-medium tracking-wide opacity-70 mt-0.5">(inch/lb)</span>
+                                   </button>
+                               </div>
+                              )}
                            
                            {products.length > 1 && (
                              <button type="button" onClick={() => removeProduct(prod.id)} className="text-red-100 hover:text-white hover:bg-red-500 bg-black/20 p-2.5 rounded-xl transition-all flex items-center gap-2 text-sm font-bold shadow-sm">
                                <Trash2 size={18} /> <span className="hidden sm:inline">{t.delProd}</span>
                              </button>
                            )}
+                           </div>
                         </div>
 
-                        <div className="p-6 md:p-10 space-y-12">
+                        <div className="space-y-12">
                           
                           {/* A. Basic & Packaging */}
                           <div>
@@ -1091,7 +1194,7 @@
                                  <div>
                                    <label className={labelClass}>{t.packType} <span className="text-red-500">*</span></label>
                                    <select className={`${inputClass} cursor-pointer bg-white`} value={prod.packagingType} onChange={e => handleProductChange(prod.id, 'packagingType', e.target.value)}>
-                                     {PACKAGING_TYPES.map(type => <option key={type} value={type}>{type}</option>)}
+                                     {PACKAGING_TYPES.map(type => <option key={type} value={type}>{getI18nLabel(PACKAGING_TYPES_I18N, type, lang)}</option>)}
                                    </select>
                                  </div>
                                  <div>
@@ -1147,23 +1250,16 @@
                                    {DEFAULT_CRITERIA.map(crit => {
                                      const isSelected = prod.qualityCriteria && prod.qualityCriteria.includes(crit);
                                      return (
-                                       <button 
+                                       <button
                                          key={crit}
                                          type="button"
                                          onClick={() => toggleCriteria(prod.id, crit)}
                                          className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-all border shadow-sm flex items-center gap-2 ${isSelected ? 'bg-blue-50 text-blue-800 border-blue-400 ring-2 ring-blue-500/20 transform scale-[1.02]' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300'}`}
                                        >
-                                         {crit} {isSelected && <CheckCircle size={16} className="text-blue-600" />}
+                                         {getI18nLabel(DEFAULT_CRITERIA_I18N, crit, lang)} {isSelected && <CheckCircle size={16} className="text-blue-600" />}
                                        </button>
                                      )
                                    })}
-                                </div>
-                                <div className="flex flex-col sm:flex-row gap-3 mt-4 max-w-md">
-                                  <select className={`${inputClass} flex-1`} value={newCriteria || ''} onChange={e => setNewCriteria(e.target.value)}>
-                                     <option value="">Select standard criterion...</option>
-                                     {DEFAULT_CRITERIA.filter(c => !(prod.qualityCriteria || []).includes(c)).map(c => <option key={c}>{c}</option>)}
-                                  </select>
-                                  <button onClick={() => addNewCriteriaField(prod.id)} className="bg-slate-800 text-white px-5 py-3 rounded-lg hover:bg-slate-900 flex justify-center items-center font-bold shadow-sm transition-colors shrink-0 gap-2 whitespace-nowrap"><Plus size={18}/> Add</button>
                                 </div>
                               </div>
                             </div>
@@ -1182,7 +1278,7 @@
                               </div>
                               <div>
                                 <label className="block mb-3 text-xs font-bold tracking-wide text-green-700 uppercase flex items-center gap-2"><CheckCircle size={16}/> {t.goal} <span className="text-red-500">*</span></label>
-                                <textarea rows="5" className={`${inputClass} resize-y focus:ring-green-500 focus:border-green-500`} value={prod.targetGoal} onChange={e => handleProductChange(prod.id, 'targetGoal', e.target.value)}></textarea>
+                                <textarea rows="5" className={`${inputClass} resize-y focus:ring-green-500 focus:border-green-500`} value={prod.trialTarget} onChange={e => handleProductChange(prod.id, 'trialTarget', e.target.value)}></textarea>
                               </div>
                             </div>
                           </div>
