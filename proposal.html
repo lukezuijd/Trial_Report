@@ -4,6 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PerfoTec Proposal Tool</title>
+    <meta name="description" content="PerfoTec Proposal Tool — Create trial proposals for MAP packaging testing.">
+    <meta name="author" content="PerfoTec B.V.">
+    <meta name="theme-color" content="#007C27">
     
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -35,7 +38,7 @@
           Utensils, Factory, ArrowDown, ArrowUp, ChevronUp, ChevronDown, 
           Bold, Italic, Underline, List, AlertTriangle, Package, PackagePlus,
           X, Edit3, Camera, FileArchive, LineChart, Globe, AlertCircle,
-          Building2, Target, Beaker, Send, Mail
+          Building2, Target, Beaker, Send, Mail, ClipboardList, UserPlus
         } from 'https://esm.sh/lucide-react@0.292.0';
 
         // --- LINK WITH CONFIG.JS ---
@@ -60,25 +63,27 @@
           { stroke: '#9333ea', fill: '#f3e8ff', name: 'Purple' }   
         ];
 
-        const PACKAGING_TYPES = globalConfig.PACKAGING_TYPES || ['Retail', 'Box/ Crate', 'Cube crate', 'Pallet', 'Punnets', 'Pillow Bag'];
-        const TRANSPORT_MODES = globalConfig.TRANSPORT_MODES || ['Air Freight', 'Sea Freight', 'Road Transport', 'Storage'];
+        // i18n arrays are the single source; flat arrays are derived from them
+        // so option order and content stay in sync across all tools.
+        const PACKAGING_TYPES_I18N = globalConfig.PACKAGING_TYPES_I18N || [];
+        const TRANSPORT_MODES_I18N = globalConfig.TRANSPORT_MODES_I18N || [];
+        const DEFAULT_CRITERIA_I18N = globalConfig.DEFAULT_CRITERIA_I18N || [];
+        const PERFOTEC_TECHNOLOGIES_I18N = globalConfig.PERFOTEC_TECHNOLOGIES_I18N || [];
+        const PACKAGING_TYPES = PACKAGING_TYPES_I18N.map(x => x.value);
+        const TRANSPORT_MODES = TRANSPORT_MODES_I18N.map(x => x.value);
+        // i18n label lookup — sourced from config (v2.1); local fallback returns value.
+        const getI18nLabel = globalConfig.getI18nLabel
+          ? globalConfig.getI18nLabel.bind(globalConfig)
+          : ((arr, value) => value);
 
-        const DEFAULT_CRITERIA = globalConfig.DEFAULT_CRITERIA || [
-          'General Quality', 'Taste', 'Visual Appearance', 'Color',
-          'Smell / Aroma', 'Texture / Firmness', 'Humidity / Condensation',
-          'Dehydration / Shriveling', 'Moulds / Decay', 'Internal Browning'
-        ];
+        // Unit conversion — sourced from config (v2.1); local fallback returns value.
+        const convertValue = globalConfig.convertValue
+          ? globalConfig.convertValue.bind(globalConfig)
+          : ((val) => val);
 
-        const PERFOTEC_TECHNOLOGIES = [
-          'Respiration Measurement (FRM)',
-          'Laser Micro Perforation',
-          'Laser Nano Perforation',
-          'Gas Flush (O2 Control)',
-          'CO2 Shock',
-          'PerfoTec Retail Film',
-          'PerfoTec Liner',
-          'PerfoTec Pallet Cover'
-        ];
+        const DEFAULT_CRITERIA = DEFAULT_CRITERIA_I18N.map(x => x.value);
+
+        const PERFOTEC_TECHNOLOGIES = PERFOTEC_TECHNOLOGIES_I18N.map(x => x.value);
 
         const DEFAULT_SUPPLY_CHAIN = globalConfig.DEFAULT_SUPPLY_CHAIN || [
           { stage: 'Farm / Harvest', tempStart: '15', tempEnd: '', daysStart: '0.5', daysEnd: '', action: 'none' },
@@ -90,9 +95,9 @@
         ];
 
         // --- HELPER CLASSES ---
-        const inputClass = "w-full bg-slate-50 border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block p-3 shadow-sm transition-all hover:bg-slate-100 focus:bg-white";
+        const inputClass = (globalConfig.UI_CLASSES && globalConfig.UI_CLASSES.input) || "w-full bg-slate-50 border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block p-3 shadow-sm transition-all hover:bg-slate-100 focus:bg-white";
         const narrowInputClass = "w-full bg-slate-50 border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block py-2.5 px-1 text-center shadow-sm transition-all hover:bg-slate-100 focus:bg-white [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] min-w-0";
-        const labelClass = "block mb-2 text-xs font-bold tracking-wide text-slate-600 uppercase";
+        const labelClass = (globalConfig.UI_CLASSES && globalConfig.UI_CLASSES.label) || "block mb-2 text-xs font-bold tracking-wide text-slate-600 uppercase";
 
         // --- HELPER FUNCTIONS ---
         const getStageIcon = (name) => {
@@ -286,7 +291,13 @@
                 <button onClick={handleWordExport} className="bg-blue-600 text-white px-6 py-3 rounded-full shadow-xl font-bold flex items-center gap-2 hover:bg-blue-700 transition">
                   <FileArchive size={20} /> Download Word
                 </button>
-                <button onClick={() => window.print()} className="bg-green-600 text-white px-6 py-3 rounded-full shadow-xl font-bold flex items-center gap-2 hover:bg-green-700 transition">
+                <button onClick={() => {
+                  const company = clientInfo.companyName || 'Client';
+                  const product = project.productName || 'Product';
+                  const suggested = `PerfoTec_Proposal_${company}_${product}`;
+                  if (globalConfig.printWithFilename) globalConfig.printWithFilename(suggested);
+                  else window.print();
+                }} className="bg-green-600 text-white px-6 py-3 rounded-full shadow-xl font-bold flex items-center gap-2 hover:bg-green-700 transition">
                   <Printer size={18} /> Download PDF
                 </button>
               </div>
@@ -294,25 +305,26 @@
               <div id="print-content" className="max-w-[21cm] mx-auto bg-white shadow-2xl min-h-[29.7cm] p-12 relative print:shadow-none print:max-w-full print:w-full print:p-0 text-slate-800">
                 
                 {/* --- COVER PAGE --- */}
-                <div className="h-[27cm] flex flex-col justify-between items-center text-center pt-24">
+                <div className="h-[27cm] print:h-auto print:min-h-[calc(100vh-24mm)] flex flex-col justify-between items-center text-center pt-16 break-inside-avoid">
                    <div className="w-full flex flex-col items-center">
-                      <div className="flex justify-between items-start w-full px-8">
-                          <div className="w-1/2 flex justify-start">
+                      {/* Logos: flex-1 halves + gap-12 guarantee a 48px separator regardless of logo dimensions */}
+                      <div className="w-full flex items-center justify-between gap-12 px-8">
+                          <div className="flex-1 min-w-0 flex justify-start">
                             {project.logo && (
-                               <img src={project.logo} alt="PerfoTec Logo" className="h-32 max-w-[400px] object-contain" crossOrigin="anonymous" />
+                               <img src={project.logo} alt="PerfoTec Logo" className="h-32 print:h-28 max-h-40 max-w-[90%] object-contain" crossOrigin="anonymous" />
                             )}
                           </div>
-                          <div className="w-1/2 flex justify-end">
-                            {project.clientLogo && (
-                               <img src={project.clientLogo} alt="Client Logo" className="h-32 max-w-[400px] object-contain" crossOrigin="anonymous" />
+                          <div className="flex-1 min-w-0 flex justify-end">
+                            {clientInfo.logo && (
+                               <img src={clientInfo.logo} alt="Client Logo" className="h-32 print:h-28 max-h-40 max-w-[90%] object-contain" crossOrigin="anonymous" />
                             )}
                           </div>
                       </div>
 
                       <h1 className="text-5xl font-bold uppercase mt-16 mb-4 brand-heading" style={{ color: BRAND.colors.green }}>{project.reportTitle || 'Trial Proposal'}</h1>
-                      <h2 className="text-5xl font-light brand-heading text-slate-600 mb-16">{project.productName || '<Product Name>'}</h2>
-                      
-                      <div className="w-full h-[450px] overflow-hidden flex items-center justify-center relative bg-transparent border-none mt-8 rounded-2xl">
+                      <h2 className="text-4xl font-light brand-heading text-slate-600 mb-12">{project.productName || '<Product Name>'}</h2>
+
+                      <div className="w-full h-[380px] overflow-hidden flex items-center justify-center relative bg-transparent border-none mt-6 rounded-2xl">
                          {project.coverImage ? <img src={project.coverImage} className="w-full h-full object-contain" crossOrigin="anonymous" /> : project.startImage ? <img src={project.startImage} className="w-full h-full object-contain" crossOrigin="anonymous" /> : <span className="text-slate-300 italic font-medium">No Cover Photo</span>}
                       </div>
                    </div>
@@ -324,7 +336,7 @@
                 <div className="page-break"></div>
 
                 {/* --- TABLE OF CONTENTS --- */}
-                <div className="min-h-[27cm] flex flex-col pt-12">
+                <div className="flex flex-col pt-12 break-inside-avoid">
                     <h2 className="text-4xl font-extrabold uppercase mb-8 brand-heading" style={{ color: BRAND.colors.green, borderBottom: `3px solid ${BRAND.colors.gray}`, paddingBottom: '1rem' }}>Table of Contents</h2>
                     <ul className="text-xl space-y-4 font-medium text-slate-700">
                         <li className="flex justify-between border-b border-slate-200 pb-2"><span>1. Introduction & Objectives</span></li>
@@ -342,26 +354,30 @@
                 {/* --- PAGE 1: INTRO & SETTING --- */}
                 <div className="pt-4">
                   <h2 className={reportTitleClass} style={reportTitleStyle}>1. Introduction & Objectives</h2>
-                  <div className="text-base leading-relaxed text-justify text-slate-800 mb-8">
-                     <div className="mb-6 whitespace-pre-wrap pdf-rich-text" dangerouslySetInnerHTML={{ __html: proposal?.intro || '' }}></div>
-                     
-                     {project.currentChallenge && (
-                       <div className="mb-6 bg-orange-50 p-5 rounded-2xl border border-orange-100">
-                         <h4 className="font-bold text-lg mb-2 text-orange-800">Current Challenge:</h4>
-                         <div className="whitespace-pre-wrap text-slate-700">{project.currentChallenge}</div>
+                  <div className="text-base print:text-xs leading-relaxed print:leading-tight text-justify text-slate-800 mb-8 print:mb-3">
+                     <div className="mb-6 print:mb-2 whitespace-pre-wrap pdf-rich-text" dangerouslySetInnerHTML={{ __html: proposal?.intro || '' }}></div>
+
+                     {/* Challenge + Target side by side on print to save vertical space */}
+                     {(project.currentChallenge || project.trialTarget) && (
+                       <div className="grid grid-cols-1 sm:grid-cols-2 print:grid-cols-2 gap-6 print:gap-3 mb-6 print:mb-2">
+                         {project.currentChallenge && (
+                           <div className="bg-orange-50 p-5 print:p-3 rounded-2xl border border-orange-100">
+                             <h4 className="font-bold text-lg print:text-sm mb-2 print:mb-1 text-orange-800">Current Challenge:</h4>
+                             <div className="whitespace-pre-wrap text-slate-700 leading-snug print:leading-tight">{project.currentChallenge}</div>
+                           </div>
+                         )}
+                         {project.trialTarget && (
+                           <div className="bg-green-50 p-5 print:p-3 rounded-2xl border border-green-100">
+                             <h4 className="font-bold text-lg print:text-sm mb-2 print:mb-1 text-green-800">Trial Target:</h4>
+                             <div className="whitespace-pre-wrap text-slate-700 leading-snug print:leading-tight">{project.trialTarget}</div>
+                           </div>
+                         )}
                        </div>
                      )}
 
-                     {project.trialTarget && (
-                       <div className="mb-6 bg-green-50 p-5 rounded-2xl border border-green-100">
-                         <h4 className="font-bold text-lg mb-2 text-green-800">Trial Target:</h4>
-                         <div className="whitespace-pre-wrap text-slate-700">{project.trialTarget}</div>
-                       </div>
-                     )}
-                     
                      {proposal?.expectedOutcomes && (
-                       <div className="mb-6">
-                         <h4 className="font-bold text-lg mb-2" style={{color: BRAND.colors.blue}}>Expected Outcomes:</h4>
+                       <div className="mb-6 print:mb-2">
+                         <h4 className="font-bold text-lg print:text-sm mb-2 print:mb-1" style={{color: BRAND.colors.blue}}>Expected Outcomes:</h4>
                          <div className="whitespace-pre-wrap pdf-rich-text" dangerouslySetInnerHTML={{ __html: proposal.expectedOutcomes }}></div>
                        </div>
                      )}
@@ -372,34 +388,34 @@
 
                 <div className="pt-4">
                   <h2 className={reportTitleClass} style={reportTitleStyle}>2. Company & Project Info</h2>
-                  <div className="grid grid-cols-[180px_1fr] gap-y-3 text-base text-slate-800 bg-slate-50 p-6 rounded-2xl border border-slate-200">
-                     <div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Product :</div> <div className="font-bold">{project.productName || '-'} {project.type ? `(${project.type})` : ''}</div>
-                     <div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">State of product :</div> <div className="font-medium">{project.processingType === 'Whole' ? 'Whole' : 'Processed / Fresh-cut'}</div>
-                     <div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Product Origin :</div> <div className="font-medium">{project.origin || '-'}</div>
-                     
+                  <div className="grid grid-cols-[180px_1fr] print:grid-cols-[130px_1fr] gap-y-3 print:gap-y-1 text-base print:text-xs text-slate-800 bg-slate-50 p-6 print:p-3 rounded-2xl border border-slate-200 leading-snug print:leading-tight">
+                     <div className="font-bold text-slate-500 uppercase tracking-wide text-xs print:text-[10px] flex items-center">Product :</div> <div className="font-bold">{project.productName || '-'} {project.type ? `(${project.type})` : ''}</div>
+                     <div className="font-bold text-slate-500 uppercase tracking-wide text-xs print:text-[10px] flex items-center">State of product :</div> <div className="font-medium">{project.processingType === 'Whole' ? 'Whole' : 'Processed / Fresh-cut'}</div>
+                     <div className="font-bold text-slate-500 uppercase tracking-wide text-xs print:text-[10px] flex items-center">Product Origin :</div> <div className="font-medium">{project.origin || '-'}</div>
+
                      {(clientInfo.companyName || clientInfo.street || clientInfo.contactName || clientInfo.email || clientInfo.phone) && (
-                       <div className="font-bold col-span-2 mt-4 border-t border-slate-200 pt-4 text-lg" style={{color: BRAND.colors.green}}>Company Info</div>
+                       <div className="font-bold col-span-2 mt-4 print:mt-2 border-t border-slate-200 pt-4 print:pt-2 text-lg print:text-sm" style={{color: BRAND.colors.green}}>Company Info</div>
                      )}
-                     {clientInfo.companyName && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Company Name :</div> <div className="font-bold">{clientInfo.companyName}</div></>}
-                     
+                     {clientInfo.companyName && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs print:text-[10px] flex items-center">Company Name :</div> <div className="font-bold">{clientInfo.companyName}</div></>}
+
                      {(() => {
                        const streetPart = [clientInfo.street, clientInfo.houseNumber].filter(Boolean).join(' ');
                        const cityPart = [clientInfo.zipCode, clientInfo.city].filter(Boolean).join(' ');
-                       const addressStr = [streetPart, cityPart, clientInfo.country].filter(Boolean).join(', ');
-                       return addressStr ? <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Address :</div> <div className="font-medium">{addressStr}</div></> : null;
+                       const addressStr = [streetPart, clientInfo.addressExtra, cityPart, clientInfo.country].filter(Boolean).join(', ');
+                       return addressStr ? <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs print:text-[10px] flex items-center">Address :</div> <div className="font-medium">{addressStr}</div></> : null;
                      })()}
 
-                     {clientInfo.contactName && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Contact Person :</div> <div className="font-medium">{clientInfo.contactName} {clientInfo.role && <span className="text-slate-500">({clientInfo.role})</span>}</div></>}
-                     {(clientInfo.email || clientInfo.phone) && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Contact Details :</div> <div className="font-medium">{[clientInfo.email, clientInfo.phone].filter(Boolean).join(' | ')}</div></>}
+                     {clientInfo.contactName && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs print:text-[10px] flex items-center">Contact Person :</div> <div className="font-medium">{clientInfo.contactName} {clientInfo.role && <span className="text-slate-500">({clientInfo.role})</span>}</div></>}
+                     {(clientInfo.email || clientInfo.phone) && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs print:text-[10px] flex items-center">Contact Details :</div> <div className="font-medium">{[clientInfo.email, clientInfo.phone].filter(Boolean).join(' | ')}</div></>}
 
-                     <div className="font-bold col-span-2 mt-4 border-t border-slate-200 pt-4 text-lg" style={{color: BRAND.colors.green}}>PerfoTec Support</div>
-                     {project.employee && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">PerfoTec Employee :</div> <div className="font-medium">{project.employee}</div></>}
-                     {(project.employeeEmail || project.employeePhone) && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Contact Details :</div> <div className="font-medium">{[project.employeeEmail, project.employeePhone].filter(Boolean).join(' | ')}</div></>}
-                     
-                     <div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-start mt-1">Technology :</div> 
+                     <div className="font-bold col-span-2 mt-4 print:mt-2 border-t border-slate-200 pt-4 print:pt-2 text-lg print:text-sm" style={{color: BRAND.colors.green}}>PerfoTec Support</div>
+                     {project.employee && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs print:text-[10px] flex items-center">PerfoTec Employee :</div> <div className="font-medium">{project.employee}</div></>}
+                     {(project.employeeEmail || project.employeePhone) && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs print:text-[10px] flex items-center">Contact Details :</div> <div className="font-medium">{[project.employeeEmail, project.employeePhone].filter(Boolean).join(' | ')}</div></>}
+
+                     <div className="font-bold text-slate-500 uppercase tracking-wide text-xs print:text-[10px] flex items-start mt-1">Technology :</div>
                      <div className="font-medium">
                        {project.technologies && project.technologies.length > 0 ? (
-                          <ul className="list-disc pl-4 space-y-1">
+                          <ul className="list-disc pl-4 space-y-1 print:space-y-0">
                             {project.technologies.map((t, i) => <li key={i}>{t}</li>)}
                           </ul>
                        ) : (
@@ -415,33 +431,33 @@
                 <div className="pt-4">
                   <h2 className={reportTitleClass} style={reportTitleStyle}>3. Product Characteristics & Defect Prevention</h2>
                   
-                  <div className="mb-8 grid grid-cols-4 gap-4 text-sm">
-                      {project.acpO2 && <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 shadow-sm"><strong className="text-blue-800 block mb-1 uppercase tracking-wide text-xs">O₂ min (ACP):</strong><span className="text-xl font-extrabold text-[#004B87]">{project.acpO2}</span></div>}
-                      {project.co2Max && <div className="bg-red-50 p-4 rounded-xl border border-red-100 shadow-sm"><strong className="text-red-800 block mb-1 uppercase tracking-wide text-xs">CO₂ max:</strong><span className="text-xl font-extrabold text-red-600">{project.co2Max}</span></div>}
-                      {project.co2Shock && <div className="bg-orange-50 p-4 rounded-xl border border-orange-100 shadow-sm"><strong className="text-orange-800 block mb-1 uppercase tracking-wide text-xs">CO₂ shock:</strong><span className="text-xl font-extrabold text-orange-600">{project.co2Shock}</span>{project.co2ShockHours && <div className="text-xs text-orange-600/80 mt-1 font-medium leading-tight">Drop &lt; {project.co2Max || 'max'}% within {project.co2ShockHours}h</div>}</div>}
-                      {project.tempMin && <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-sm"><strong className="text-slate-500 block mb-1 uppercase tracking-wide text-xs">Temp min:</strong><span className="text-xl font-extrabold text-slate-800">{project.tempMin}</span></div>}
+                  <div className="mb-8 print:mb-3 grid grid-cols-4 gap-4 print:gap-2 text-sm print:text-xs">
+                      {project.acpO2 && <div className="bg-blue-50 p-4 print:p-2 rounded-xl border border-blue-100 shadow-sm"><strong className="text-blue-800 block mb-1 uppercase tracking-wide text-xs print:text-[9px]">O₂ min (ACP):</strong><span className="text-xl print:text-base font-extrabold text-[#004B87]">{project.acpO2}</span></div>}
+                      {project.co2Max && <div className="bg-red-50 p-4 print:p-2 rounded-xl border border-red-100 shadow-sm"><strong className="text-red-800 block mb-1 uppercase tracking-wide text-xs print:text-[9px]">CO₂ max:</strong><span className="text-xl print:text-base font-extrabold text-red-600">{project.co2Max}</span></div>}
+                      {project.co2Shock && <div className="bg-orange-50 p-4 print:p-2 rounded-xl border border-orange-100 shadow-sm"><strong className="text-orange-800 block mb-1 uppercase tracking-wide text-xs print:text-[9px]">CO₂ shock:</strong><span className="text-xl print:text-base font-extrabold text-orange-600">{project.co2Shock}</span>{project.co2ShockHours && <div className="text-xs print:text-[9px] text-orange-600/80 mt-1 font-medium leading-tight">Drop &lt; {project.co2Max || 'max'}% within {project.co2ShockHours}h</div>}</div>}
+                      {project.tempMin && <div className="bg-slate-50 p-4 print:p-2 rounded-xl border border-slate-200 shadow-sm"><strong className="text-slate-500 block mb-1 uppercase tracking-wide text-xs print:text-[9px]">Temp min:</strong><span className="text-xl print:text-base font-extrabold text-slate-800">{project.tempMin}</span></div>}
                   </div>
 
                   {project.defectsMatrix && project.defectsMatrix.length > 0 && (
-                      <div className="break-inside-avoid mb-8">
-                          <h3 className="font-bold text-xl mb-4 brand-heading" style={{ color: BRAND.colors.green }}>Defects & Prevention Matrix</h3>
+                      <div className="break-inside-avoid mb-8 print:mb-3">
+                          <h3 className="font-bold text-xl print:text-sm mb-4 print:mb-2 brand-heading" style={{ color: BRAND.colors.green }}>Defects & Prevention Matrix</h3>
                           <div className="overflow-hidden rounded-xl border border-slate-200 shadow-sm">
-                              <table className="w-full text-sm border-collapse">
+                              <table className="w-full text-sm print:text-xs border-collapse">
                                   <thead>
                                       <tr>
-                                          <th className="p-3 text-left text-white font-bold" style={{backgroundColor: '#004B87'}}>DEFECT</th>
-                                          <th className="p-3 text-left text-white font-bold" style={{backgroundColor: '#004B87'}}>PHYSIOLOGICAL CAUSE</th>
-                                          <th className="p-3 text-left text-white font-bold" style={{backgroundColor: '#5B9BD5'}}>EFFECT MHP (MOISTURE)</th>
-                                          <th className="p-3 text-left text-white font-bold" style={{backgroundColor: '#007C27'}}>EFFECT MAP (GAS)</th>
+                                          <th className="p-3 print:p-2 text-left text-white font-bold" style={{backgroundColor: '#004B87'}}>DEFECT</th>
+                                          <th className="p-3 print:p-2 text-left text-white font-bold" style={{backgroundColor: '#004B87'}}>PHYSIOLOGICAL CAUSE</th>
+                                          <th className="p-3 print:p-2 text-left text-white font-bold" style={{backgroundColor: '#5B9BD5'}}>EFFECT MHP (MOISTURE)</th>
+                                          <th className="p-3 print:p-2 text-left text-white font-bold" style={{backgroundColor: '#007C27'}}>EFFECT MAP (GAS)</th>
                                       </tr>
                                   </thead>
                                   <tbody className="divide-y divide-slate-200">
                                       {project.defectsMatrix.map((row, i) => (
                                           <tr key={row.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                                              <td className="p-3 font-bold text-slate-800">{row.defect}</td>
-                                              <td className="p-3 text-slate-700">{row.cause}</td>
-                                              <td className="p-3 text-slate-700 font-medium">{row.effectMHP}</td>
-                                              <td className="p-3 text-slate-700 font-medium">{row.effectMAP}</td>
+                                              <td className="p-3 print:p-2 font-bold text-slate-800">{row.defect}</td>
+                                              <td className="p-3 print:p-2 text-slate-700">{row.cause}</td>
+                                              <td className="p-3 print:p-2 text-slate-700 font-medium">{row.effectMHP}</td>
+                                              <td className="p-3 print:p-2 text-slate-700 font-medium">{row.effectMAP}</td>
                                           </tr>
                                       ))}
                                   </tbody>
@@ -456,19 +472,19 @@
                 {/* --- PAGE 4: SUPPLY CHAIN --- */}
                 <div className="pt-4">
                   <h2 className={reportTitleClass} style={reportTitleStyle}>4. Simulated Supply Chain</h2>
-                  <div className="text-base text-slate-800 mb-8">
-                     <p className="mb-4 leading-relaxed">To ensure the trial is representative of the real-world conditions, we propose to test the product using the following temperature and time profile:</p>
-                     
+                  <div className="text-base print:text-xs text-slate-800 mb-8 print:mb-3">
+                     <p className="mb-4 print:mb-2 leading-relaxed print:leading-tight">To ensure the trial is representative of the real-world conditions, we propose to test the product using the following temperature and time profile:</p>
+
                      {project.transportMode && (
-                       <div className="mb-4 inline-block bg-indigo-50 border border-indigo-100 text-indigo-800 px-4 py-2 rounded-lg">
+                       <div className="mb-4 print:mb-2 inline-block bg-indigo-50 border border-indigo-100 text-indigo-800 px-4 py-2 print:px-3 print:py-1 rounded-lg">
                          <strong>Transport Mode:</strong> {project.transportMode}
                        </div>
                      )}
-                     
+
                      <div className="w-full mt-2 break-inside-avoid">
                        <ProductSupplyChainFlow chain={supplyChain} />
                      </div>
-                     <div className="mt-6 bg-slate-50 p-4 rounded-xl border border-slate-200 text-sm space-y-2">
+                     <div className="mt-6 print:mt-2 bg-slate-50 p-4 print:p-3 rounded-xl border border-slate-200 text-sm print:text-xs space-y-2 print:space-y-0.5 leading-snug print:leading-tight">
                          <p className="italic text-slate-500">* Temperatures and durations are simulated based on provided information.</p>
                          <p>Stored at <strong>{tempString}</strong> for <strong>{totalDays} days</strong> total.</p>
                          <p>The product was packed on <strong>{formatDateToDDMMYYYY(project.packingDate || project.date)}</strong>.</p>
@@ -481,11 +497,11 @@
 
                 <div className="pt-4">
                   <h2 className={reportTitleClass} style={reportTitleStyle}>5. Proposed Trial Setup</h2>
-                  <div className="text-base text-slate-800 mb-8">
-                      <p className="mb-6 leading-relaxed">The Fast Respiration Meter System will be used to measure the exact product respiration rate. Based on this, we calculate the optimal micro perforation pattern for the PerfoTec variant. The proposed variants to compare are:</p>
-                      
+                  <div className="text-base print:text-xs text-slate-800 mb-8 print:mb-3">
+                      <p className="mb-6 print:mb-2 leading-relaxed print:leading-tight">The Fast Respiration Meter System will be used to measure the exact product respiration rate. Based on this, we calculate the optimal micro perforation pattern for the PerfoTec variant. The proposed variants to compare are:</p>
+
                       <div className="overflow-hidden rounded-xl border border-slate-200 shadow-sm break-inside-avoid">
-                          <table className="report-table w-full text-sm">
+                          <table className="report-table w-full text-sm print:text-xs">
                             <thead>
                               <tr>
                                 <th className="w-1/4">Variant</th>
@@ -504,33 +520,33 @@
                                 const weightUnit = isLargeBulk ? 'kg' : 'g';
                                 return (
                                   <tr key={g.id} className="bg-white">
-                                    <td className="font-bold py-4" style={{ borderLeft: `4px solid ${CHART_COLORS[i % CHART_COLORS.length].stroke}` }}>
+                                    <td className="font-bold py-4 print:py-2" style={{ borderLeft: `4px solid ${CHART_COLORS[i % CHART_COLORS.length].stroke}` }}>
                                       {g.name}
                                     </td>
-                                    <td className="text-center py-4">{g.specs?.packaging || '-'}</td>
-                                    <td className="text-center py-4">{g.specs?.material || '-'}</td>
-                                    <td className="text-center py-4">{g.specs?.length || '-'}x{g.specs?.width || '-'}x{g.specs?.height || '-'} {dimUnit}</td>
-                                    <td className="text-center py-4">{project.startWeight || '-'} {weightUnit}</td>
-                                    <td className="text-center py-4 font-bold">{g.specs?.holes || '-'}</td>
-                                    <td className="text-center py-4 font-medium text-slate-500">{g.measurements.filter(m => parseFloat(m.day) > 0).map(m => `P+${m.day}`).join(', ')}</td>
+                                    <td className="text-center py-4 print:py-2">{g.specs?.packaging || '-'}</td>
+                                    <td className="text-center py-4 print:py-2">{g.specs?.material || '-'}</td>
+                                    <td className="text-center py-4 print:py-2">{g.specs?.length || '-'}x{g.specs?.width || '-'}x{g.specs?.height || '-'} {dimUnit}</td>
+                                    <td className="text-center py-4 print:py-2">{project.startWeight || '-'} {weightUnit}</td>
+                                    <td className="text-center py-4 print:py-2 font-bold">{g.specs?.holes || '-'}</td>
+                                    <td className="text-center py-4 print:py-2 font-medium text-slate-500">{g.measurements.filter(m => parseFloat(m.day) > 0).map(m => `P+${m.day}`).join(', ')}</td>
                                   </tr>
                                 );
                               })}
                             </tbody>
                           </table>
                       </div>
-                      
+
                       {/* PREDICTED GAS GRAPHS */}
                       {groups.some(g => g.predictedImage) && (
-                          <div className="mt-10 break-inside-avoid bg-slate-50 p-8 rounded-2xl border border-slate-200">
-                             <h4 className="font-bold mb-8 text-2xl text-slate-800">Predicted Gas Levels</h4>
-                             <div className="flex flex-col gap-12 w-full">
+                          <div className="mt-10 print:mt-3 break-inside-avoid bg-slate-50 p-8 print:p-3 rounded-2xl border border-slate-200">
+                             <h4 className="font-bold mb-8 print:mb-3 text-2xl print:text-sm text-slate-800">Predicted Gas Levels</h4>
+                             <div className="flex flex-col gap-12 print:gap-4 w-full">
                                {groups.map((g, idx) => {
                                   if (!g.predictedImage) return null;
                                   return (
                                      <div key={g.id} className="flex flex-col items-center w-full break-inside-avoid">
-                                        <div className="text-lg font-bold mb-4 text-center text-slate-700 bg-white px-6 py-2 rounded-full shadow-sm border border-slate-200">{g.name || 'Variant'}</div>
-                                        <div className="w-full flex justify-center bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+                                        <div className="text-lg print:text-xs font-bold mb-4 print:mb-2 text-center text-slate-700 bg-white px-6 py-2 print:px-3 print:py-1 rounded-full shadow-sm border border-slate-200">{g.name || 'Variant'}</div>
+                                        <div className="w-full flex justify-center bg-white border border-slate-200 rounded-xl p-6 print:p-2 shadow-sm">
                                            <img src={g.predictedImage} className="w-full h-auto object-contain" crossOrigin="anonymous" />
                                         </div>
                                      </div>
@@ -548,30 +564,30 @@
                 {/* --- PAGE 6: EVALUATION PLAN --- */}
                 <div className="pt-4">
                   <h2 className={reportTitleClass} style={reportTitleStyle}>6. Evaluation Plan</h2>
-                  <div className="text-base space-y-6 text-slate-800">
-                     <p className="leading-relaxed">During the trial, the product quality and atmospheric conditions will be continuously monitored according to the schedule below.</p>
-                     
-                     <div className="mb-8">
-                       <h3 className="font-bold text-xl mb-6 text-slate-800">Detailed Evaluation Schedule</h3>
+                  <div className="text-base print:text-xs space-y-6 print:space-y-2 text-slate-800">
+                     <p className="leading-relaxed print:leading-tight">During the trial, the product quality and atmospheric conditions will be continuously monitored according to the schedule below.</p>
+
+                     <div className="mb-8 print:mb-3">
+                       <h3 className="font-bold text-xl print:text-sm mb-6 print:mb-2 text-slate-800">Detailed Evaluation Schedule</h3>
                        {groups.map((g, i) => (
-                         <div key={g.id} className="mb-8 break-inside-avoid shadow-sm rounded-xl overflow-hidden border border-slate-200">
-                           <h4 className="font-bold text-lg text-white p-3" style={{backgroundColor: CHART_COLORS[i % CHART_COLORS.length].stroke}}>{g.name}</h4>
-                           <table className="w-full text-sm text-left bg-white">
+                         <div key={g.id} className="mb-8 print:mb-2 break-inside-avoid shadow-sm rounded-xl overflow-hidden border border-slate-200">
+                           <h4 className="font-bold text-lg print:text-sm text-white p-3 print:p-2" style={{backgroundColor: CHART_COLORS[i % CHART_COLORS.length].stroke}}>{g.name}</h4>
+                           <table className="w-full text-sm print:text-xs text-left bg-white">
                              <thead>
                                <tr className="bg-slate-50 text-slate-600 border-b border-slate-200">
-                                 <th className="p-3 w-20 text-center font-bold uppercase tracking-wider text-xs">Day</th>
-                                 <th className="p-3 font-bold uppercase tracking-wider text-xs">Measurements (O₂, CO₂, Weight)</th>
-                                 <th className="p-3 font-bold uppercase tracking-wider text-xs">Opening Moment</th>
-                                 <th className="p-3 font-bold uppercase tracking-wider text-xs">Quality Evaluation</th>
+                                 <th className="p-3 print:p-2 w-20 text-center font-bold uppercase tracking-wider text-xs print:text-[9px]">Day</th>
+                                 <th className="p-3 print:p-2 font-bold uppercase tracking-wider text-xs print:text-[9px]">Measurements (O₂, CO₂, Weight)</th>
+                                 <th className="p-3 print:p-2 font-bold uppercase tracking-wider text-xs print:text-[9px]">Opening Moment</th>
+                                 <th className="p-3 print:p-2 font-bold uppercase tracking-wider text-xs print:text-[9px]">Quality Evaluation</th>
                                </tr>
                              </thead>
                              <tbody className="divide-y divide-slate-100">
                                {g.measurements.sort((a,b) => parseFloat(a.day) - parseFloat(b.day)).map((m, idx) => (
                                  <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                                   <td className="p-3 text-center font-extrabold text-slate-700 bg-slate-50/50">P+{m.day}</td>
-                                   <td className="p-3 text-slate-600 font-medium">{(m.measure||[]).length > 0 ? (m.measure||[]).map(s => `S${s}`).join(', ') : '-'}</td>
-                                   <td className="p-3 text-orange-600 font-bold">{(m.open||[]).length > 0 ? (m.open||[]).map(s => `S${s}`).join(', ') : '-'}</td>
-                                   <td className="p-3 text-green-700 font-bold">{(m.evaluate||[]).length > 0 ? (m.evaluate||[]).map(s => `S${s}`).join(', ') : '-'}</td>
+                                   <td className="p-3 print:p-2 text-center font-extrabold text-slate-700 bg-slate-50/50">P+{m.day}</td>
+                                   <td className="p-3 print:p-2 text-slate-600 font-medium">{(m.measure||[]).length > 0 ? (m.measure||[]).map(s => `S${s}`).join(', ') : '-'}</td>
+                                   <td className="p-3 print:p-2 text-orange-600 font-bold">{(m.open||[]).length > 0 ? (m.open||[]).map(s => `S${s}`).join(', ') : '-'}</td>
+                                   <td className="p-3 print:p-2 text-green-700 font-bold">{(m.evaluate||[]).length > 0 ? (m.evaluate||[]).map(s => `S${s}`).join(', ') : '-'}</td>
                                  </tr>
                                ))}
                              </tbody>
@@ -580,15 +596,15 @@
                        ))}
                      </div>
 
-                     <div className="break-inside-avoid mt-8 pt-6 border-t border-slate-200 bg-slate-50 p-6 rounded-2xl">
-                       <h4 className="font-bold mb-4 text-xl text-slate-800">Methodology</h4>
-                       <ul className="list-disc pl-6 space-y-3 text-slate-700">
+                     <div className="break-inside-avoid mt-8 print:mt-3 pt-6 print:pt-2 border-t border-slate-200 bg-slate-50 p-6 print:p-3 rounded-2xl">
+                       <h4 className="font-bold mb-4 print:mb-2 text-xl print:text-sm text-slate-800">Methodology</h4>
+                       <ul className="list-disc pl-6 print:pl-4 space-y-3 print:space-y-1 text-slate-700 leading-snug print:leading-tight">
                          <li><strong>Gas Analysis:</strong> Measuring O₂ and CO₂ percentages inside the packaging.</li>
                          <li><strong>Weight Tracking:</strong> Monitoring moisture/weight loss from Day 0.</li>
                          <li><strong>Visual Quality:</strong> Taking photographic evidence of the product state.</li>
                          <li>
                             <strong>Detailed Quality Assessment:</strong> Scoring the following criteria on a 1-10 scale (where 6+ is acceptable):
-                            <ul className="list-circle pl-6 mt-3 grid grid-cols-2 gap-2 text-sm font-medium text-slate-600">
+                            <ul className="list-circle pl-6 print:pl-4 mt-3 print:mt-1 grid grid-cols-2 print:grid-cols-3 gap-x-4 gap-y-2 print:gap-x-3 print:gap-y-0 text-sm print:text-xs font-medium text-slate-600 leading-snug print:leading-tight">
                                 {(project.criteria || []).map((c, i) => <li key={i}>{c}</li>)}
                             </ul>
                          </li>
@@ -602,7 +618,7 @@
 
                 <div className="pt-4">
                   <h2 className={reportTitleClass} style={reportTitleStyle}>7. Requirements & Agreements</h2>
-                  <div className="text-base space-y-6 text-slate-800">
+                  <div className="text-base print:text-xs space-y-6 print:space-y-2 text-slate-800">
                      {proposal?.requirements && (
                          <div className="break-inside-avoid">
                              {(() => {
@@ -612,23 +628,23 @@
                                  return total + (weightPerSample * totalSamples);
                                }, 0);
                                const totalRequiredWeightKg = (totalRequiredWeightGrams / 1000).toFixed(1);
-                               
+
                                const totalSamplesCount = groups.reduce((total, g) => {
                                  return total + (parseFloat(g.specs?.sampleCount) || 0);
                                }, 0);
 
                                return (
-                                 <div className="mb-6 bg-blue-50 border border-blue-200 p-5 text-sm text-blue-900 rounded-2xl flex items-start gap-4 shadow-sm">
+                                 <div className="mb-6 print:mb-2 bg-blue-50 border border-blue-200 p-5 print:p-3 text-sm print:text-xs text-blue-900 rounded-2xl flex items-start gap-4 print:gap-2 shadow-sm">
                                    <AlertCircle className="text-blue-500 shrink-0 mt-0.5" size={20} />
-                                   <div>
-                                      <strong className="block text-base mb-1 text-blue-950">Required Product</strong> 
+                                   <div className="leading-snug print:leading-tight">
+                                      <strong className="block text-base print:text-sm mb-1 text-blue-950">Required Product</strong>
                                       A minimum of <strong>{totalRequiredWeightKg} kg</strong> of fresh product is required to conduct this trial (based on a total of {totalSamplesCount} uniquely tracked physical samples across all variants).
                                    </div>
                                  </div>
                                );
                              })()}
 
-                             <div className="whitespace-pre-wrap pdf-rich-text bg-slate-50 p-6 rounded-2xl border border-slate-200" dangerouslySetInnerHTML={{ __html: proposal.requirements }}></div>
+                             <div className="whitespace-pre-wrap pdf-rich-text bg-slate-50 p-6 print:p-3 rounded-2xl border border-slate-200" dangerouslySetInnerHTML={{ __html: proposal.requirements }}></div>
                          </div>
                      )}
                   </div>
@@ -641,12 +657,16 @@
 
         // --- MAIN APPLICATION ---
         const App = () => {
-          // Force language to English for this file
-          const [lang, setLang] = useState('en');
-
-          useEffect(() => {
-             if (globalConfig.setLanguage) globalConfig.setLanguage('en');
-          }, []);
+          // v2.0: Dynamic language — no more separate files per language
+          const getInitialLang = () => {
+            if (globalConfig.getLanguage) return globalConfig.getLanguage();
+            const saved = localStorage.getItem('perfotec_lang');
+            if (saved && T[saved]) return saved;
+            const browser = (navigator.language || '').substring(0, 2).toLowerCase();
+            if (T[browser]) return browser;
+            return 'en';
+          };
+          const [lang, setLang] = useState(getInitialLang);
 
           // Define translation object matching the interface
           const T = {
@@ -751,37 +771,223 @@
             }
           };
 
-          // Always resolve to English for this file
-          const t = T['en'];
+          // Resolve translation based on current language
+          const t = T[lang] || T['en'];
+
+          // UI-specific labels for header/tabs/editor (translated)
+          const PT = {
+            en: {
+              loadJson: 'Load JSON', saveAs: 'Save As...', previewProposal: 'Preview Proposal',
+              tabSetup: 'Project & Product', tabGroups: 'Variants & Planning', tabTexts: 'Proposal Texts',
+              home: 'Home',
+              // Setup tab
+              secProject: '1. Project Details', proposalTitle: 'Proposal Title', projectName: 'Project Name', productName: 'Product Name',
+              proposalDate: 'Proposal Date', packingDate: 'Packing Date', totalDuration: 'Total Duration (Days)',
+              retailSim: 'Retail Simulation (after opening)', processingType: 'State of product',
+              whole: 'Whole', processed: 'Processed / Fresh-cut',
+              prodType: 'Variety / Type', prodOrigin: 'Origin', netWeight: 'Net Weight',
+              packType: 'Packaging Type', currentMaterial: 'Current Material', dimens: 'Packaging dimensions (Internal)', len: 'Length', wid: 'Width', widSeal: 'Seal Width', hei: 'Height',
+              maturityStage: 'Maturity stage', postHarvest: 'Post-harvest treatment',
+              respirationData: 'Respiration Data', measuredAt: 'Measured at (°C)',
+              uploadPerfoTecLogo: 'Upload PerfoTec Logo', uploadClientLogo: 'Upload Client Logo', clickUpload: 'Click to upload',
+              coverPhoto: 'Cover Photo (Page 1)', refPhoto: 'Product Photo',
+              secCompany: '2. Company & Contact Details', companyName: 'Company Name', perfoTecEmployee: 'PerfoTec Employee',
+              employeeEmail: 'Employee Email', employeePhone: 'Employee Phone',
+              street: 'Street', houseNo: 'House No.', addressExtra: 'Additional Info (floor, building, etc.)', zipCode: 'Zip code', city: 'City', country: 'Country',
+              contactPerson: 'Contact Person', role: 'Role', email: 'Email', phone: 'Phone', phoneDirect: 'Phone (Direct)', phoneWork: 'Phone (Work)', addContactBtn: 'Add Contact',
+              secProduct: '3. Product Details',
+              secA: 'A. Product & Packaging', secB: 'B. Challenge & Objectives', secC: 'C. Current Supply Chain',
+              qualityCrit: 'Quality Criteria', qualityCritDesc: 'Click a criterion to toggle it on or off.',
+              secGoals: '3. Challenge & Objectives', currentChallenge: 'Current Challenge', trialTarget: 'Target Goal',
+              secSupplyChain: '4. Product Supply Chain', transportMode: 'Transport & Storage',
+              step: 'Step', phase: 'Phase (Activity)', temp: 'Temp (°C)', days: 'Time (Days)', action: 'Action',
+              actNone: '- None -', actPack: 'Pack', actUnpack: 'Unpack', addStep: 'Add Extra Step',
+              // Groups tab
+              globalCriteria: 'Global Assessment Criteria', noCriteria: 'No criteria selected.',
+              selectCriterion: 'Select standard criterion...', addCriterion: 'Add Criterion',
+              globalEvalDays: 'Global Evaluation Days', evalDaysDesc: 'Specify the days on which packs are opened and evaluated.',
+              addEvalDay: 'Add Evaluation Day', perfoTecTech: 'PerfoTec Technology',
+              addVariant: 'Add Variant', variantConfig: 'Variant Configuration',
+              variantName: 'Variant Name', packagingType: 'Packaging Type',
+              packagingSpecs: 'Packaging Specs & Samples',
+              lengthMm: 'Length (mm)', widthMm: 'Width (mm)', heightMm: 'Height (mm)',
+              material: 'Material', transmissionValue: 'Transmission Value', samplesPerMeasurement: 'Samples / Measurement',
+              timelineEvents: 'Timeline & Events',
+              timelineDesc: 'Select the specific sample numbers (e.g., 1, 2, 3) representing the physical packages to be processed for each action.',
+              thDay: 'Day', thMeasure: 'Measure Gas/Wt.', thOpen: 'Open Pack', thEvaluate: 'Evaluate Quality',
+              timelineNote: "Once a sample is marked as 'Open' on a previous day, it can no longer be selected for gas/weight measurements (the button will be greyed out).",
+              predictedGraph: 'Predicted Gas Graph', predictedGraphDesc: 'Upload a screenshot of the prediction for this specific variant',
+              uploadImage: 'Upload Image',
+              // Proposal texts tab
+              proposalEvalText: 'Proposal & Evaluation Text',
+              introLabel: 'Introduction / Current Challenge', goalsLabel: 'Goals / Expected Outcomes', requirementsLabel: 'Requirements & Agreements',
+              introPlaceholder: 'Describe the challenge and why we are conducting this trial...',
+              goalsPlaceholder: 'What do we hope to achieve with this trial?',
+              requirementsPlaceholder: 'What must the client provide? What agreements have been made?',
+              // Modal
+              warning: 'Warning', warningText: 'You are about to overwrite the current Prediction Graph with a new image. Do you want to continue?',
+              cancel: 'Cancel', overwrite: 'Overwrite',
+              warningFillCompany: 'Warning: Fill in company details!',
+              removeStep: 'Remove Step',
+              day: 'Day', variant: 'Variant', duplicate: 'Duplicate', remove: 'Remove',
+              transportRoad: 'Transport by road', transportSea: 'Seafreight', transportAir: 'Airfreight', transportStorage: 'Storage',
+              stagePlaceholder: 'e.g. Farm, Transport...', min: 'Min', max: 'Max',
+              metric: 'Metric', imperial: 'Imperial', supplyChainFlow: 'Supply Chain Flow'
+            },
+            nl: {
+              loadJson: 'Laden JSON', saveAs: 'Opslaan als...', previewProposal: 'Preview Voorstel',
+              tabSetup: 'Project & Product', tabGroups: 'Varianten & Planning', tabTexts: 'Voorstel Teksten',
+              home: 'Home',
+              secProject: '1. Projectgegevens', proposalTitle: 'Titel Voorstel', projectName: 'Projectnaam', productName: 'Productnaam',
+              proposalDate: 'Datum Voorstel', packingDate: 'Verpakdatum', totalDuration: 'Totale Duur (Dagen)',
+              retailSim: 'Retail Simulatie (na opening)', processingType: 'Staat van het product',
+              whole: 'Heel', processed: 'Verwerkt / Gesneden',
+              prodType: 'Variëteit / Type', prodOrigin: 'Herkomst', netWeight: 'Netto Gewicht',
+              packType: 'Type Verpakking', currentMaterial: 'Huidig Materiaal', dimens: 'Afmetingen verpakking (Binnenmaat)', len: 'Lengte', wid: 'Breedte', widSeal: 'Seal Breedte', hei: 'Hoogte',
+              maturityStage: 'Rijpheidsstadium', postHarvest: 'Standaard Behandeling',
+              respirationData: 'Respiratie Data', measuredAt: 'Gemeten bij (°C)',
+              uploadPerfoTecLogo: 'Upload PerfoTec Logo', uploadClientLogo: 'Upload Klant Logo', clickUpload: 'Klik om te uploaden',
+              coverPhoto: 'Omslagfoto', refPhoto: 'Product Foto',
+              secCompany: '2. Bedrijfs- & Contactgegevens', companyName: 'Bedrijfsnaam', perfoTecEmployee: 'PerfoTec Medewerker',
+              employeeEmail: 'E-mailadres Medewerker', employeePhone: 'Telefoon Medewerker',
+              street: 'Straat', houseNo: 'Huisnummer', addressExtra: 'Extra (verdieping, gebouw, etc.)', zipCode: 'Postcode', city: 'Plaats / Stad', country: 'Land',
+              contactPerson: 'Naam Contactpersoon', role: 'Functie', email: 'E-mailadres', phone: 'Telefoon', phoneDirect: 'Telefoon (Direct)', phoneWork: 'Telefoon (Werk)', addContactBtn: 'Contactpersoon Toevoegen',
+              secProduct: '3. Product(en) voor de Test',
+              secA: 'A. Product & Verpakking', secB: 'B. Uitdaging & Doelstelling', secC: 'C. Huidige Supply Chain',
+              qualityCrit: 'Kwaliteitscriteria', qualityCritDesc: 'Klik op een criterium om deze in of uit te schakelen.',
+              secGoals: '3. Uitdaging & Doelstelling', currentChallenge: 'Huidige Uitdaging', trialTarget: 'Beoogd Doel',
+              secSupplyChain: '4. Product Supply Chain', transportMode: 'Transport & Opslag',
+              step: 'Stap', phase: 'Fase (Activiteit)', temp: 'Temp (°C)', days: 'Tijd (Dagen)', action: 'Actie',
+              actNone: '- Geen -', actPack: 'Inpakken', actUnpack: 'Uitpakken', addStep: 'Extra Stap Toevoegen',
+              globalCriteria: 'Globale Beoordelingscriteria', noCriteria: 'Geen criteria geselecteerd.',
+              selectCriterion: 'Selecteer standaard criterium...', addCriterion: 'Criterium Toevoegen',
+              globalEvalDays: 'Globale Evaluatiedagen', evalDaysDesc: 'Geef de dagen op waarop verpakkingen worden geopend en beoordeeld.',
+              addEvalDay: 'Evaluatiedag Toevoegen', perfoTecTech: 'PerfoTec Technologie',
+              addVariant: 'Variant Toevoegen', variantConfig: 'Variant Configuratie',
+              variantName: 'Variant Naam', packagingType: 'Type Verpakking',
+              packagingSpecs: 'Verpakkingsspecificaties & Monsters',
+              lengthMm: 'Lengte (mm)', widthMm: 'Breedte (mm)', heightMm: 'Hoogte (mm)',
+              material: 'Materiaal', transmissionValue: 'Transmissiewaarde', samplesPerMeasurement: 'Monsters / Meting',
+              timelineEvents: 'Tijdlijn & Gebeurtenissen',
+              timelineDesc: 'Selecteer de specifieke monsternummers (bijv. 1, 2, 3) die de fysieke verpakkingen vertegenwoordigen die per actie worden verwerkt.',
+              thDay: 'Dag', thMeasure: 'Meet Gas/Gew.', thOpen: 'Open Verpakking', thEvaluate: 'Beoordeel Kwaliteit',
+              timelineNote: 'Zodra een monster op een eerdere dag als \'Open\' is gemarkeerd, kan het niet meer worden geselecteerd voor gas-/gewichtsmetingen (de knop wordt grijs).',
+              predictedGraph: 'Voorspelde Gas Grafiek', predictedGraphDesc: 'Upload een screenshot van de voorspelling voor deze specifieke variant',
+              uploadImage: 'Afbeelding Uploaden',
+              proposalEvalText: 'Voorstel & Evaluatie Tekst',
+              introLabel: 'Introductie / Huidige Uitdaging', goalsLabel: 'Doelen / Verwachte Resultaten', requirementsLabel: 'Vereisten & Afspraken',
+              introPlaceholder: 'Beschrijf de uitdaging en waarom we deze test uitvoeren...',
+              goalsPlaceholder: 'Wat hopen we te bereiken met deze test?',
+              requirementsPlaceholder: 'Wat moet de klant leveren? Welke afspraken zijn gemaakt?',
+              warning: 'Waarschuwing', warningText: 'U staat op het punt de huidige Voorspellingsgrafiek te overschrijven met een nieuw beeld. Wilt u doorgaan?',
+              cancel: 'Annuleren', overwrite: 'Overschrijven',
+              warningFillCompany: 'Waarschuwing: Vul bedrijfsgegevens in!',
+              removeStep: 'Verwijder Stap',
+              day: 'Dag', variant: 'Variant', duplicate: 'Dupliceren', remove: 'Verwijderen',
+              transportRoad: 'Wegtransport', transportSea: 'Zeevracht', transportAir: 'Luchtvracht', transportStorage: 'Opslag',
+              stagePlaceholder: 'bijv. Boerderij, Transport...', min: 'Min', max: 'Max',
+              metric: 'Metrisch', imperial: 'Imperiaal', supplyChainFlow: 'Supply Chain Flow'
+            },
+            es: {
+              loadJson: 'Cargar JSON', saveAs: 'Guardar como...', previewProposal: 'Ver Propuesta',
+              tabSetup: 'Proyecto y Producto', tabGroups: 'Variantes y Planificación', tabTexts: 'Textos de Propuesta',
+              home: 'Inicio',
+              secProject: '1. Detalles del Proyecto', proposalTitle: 'Título de Propuesta', projectName: 'Nombre del Proyecto', productName: 'Nombre del Producto',
+              proposalDate: 'Fecha de Propuesta', packingDate: 'Fecha de Empaque', totalDuration: 'Duración Total (Días)',
+              retailSim: 'Simulación Retail (después de abrir)', processingType: 'Estado del producto',
+              whole: 'Entero', processed: 'Procesado / Cortado',
+              prodType: 'Variedad / Tipo', prodOrigin: 'Origen', netWeight: 'Peso Neto',
+              packType: 'Tipo de Empaque', currentMaterial: 'Material Actual', dimens: 'Dimensiones del empaque (Internas)', len: 'Longitud', wid: 'Ancho', widSeal: 'Ancho del Sello', hei: 'Altura',
+              maturityStage: 'Etapa de madurez', postHarvest: 'Tratamiento estándar',
+              respirationData: 'Datos de Respiración', measuredAt: 'Medido a (°C)',
+              uploadPerfoTecLogo: 'Subir Logo PerfoTec', uploadClientLogo: 'Subir Logo Cliente', clickUpload: 'Pulsar para subir',
+              coverPhoto: 'Foto de Portada (Página 1)', refPhoto: 'Foto del Producto',
+              secCompany: '2. Detalles de la Empresa y Contacto', companyName: 'Nombre de Empresa', perfoTecEmployee: 'Empleado PerfoTec',
+              employeeEmail: 'Email Empleado', employeePhone: 'Teléfono Empleado',
+              street: 'Calle', houseNo: 'Número', addressExtra: 'Información adicional (piso, edificio, etc.)', zipCode: 'Código Postal', city: 'Ciudad', country: 'País',
+              contactPerson: 'Persona de Contacto', role: 'Cargo', email: 'Correo', phone: 'Teléfono', phoneDirect: 'Teléfono (Directo)', phoneWork: 'Teléfono (Trabajo)', addContactBtn: 'Añadir Contacto',
+              secProduct: '3. Detalles del Producto',
+              secA: 'A. Producto y Empaque', secB: 'B. Desafío y Objetivos', secC: 'C. Cadena de Suministro Actual',
+              qualityCrit: 'Criterios de Calidad', qualityCritDesc: 'Haga clic en un criterio para activarlo o desactivarlo.',
+              secGoals: '3. Desafío y Objetivos', currentChallenge: 'Desafío Actual', trialTarget: 'Objetivo',
+              secSupplyChain: '4. Cadena de Suministro', transportMode: 'Transporte y Almacenamiento',
+              step: 'Paso', phase: 'Fase (Actividad)', temp: 'Temp (°C)', days: 'Tiempo (Días)', action: 'Acción',
+              actNone: '- Ninguna -', actPack: 'Empacar', actUnpack: 'Desempacar', addStep: 'Añadir Paso',
+              globalCriteria: 'Criterios de Evaluación Global', noCriteria: 'Ningún criterio seleccionado.',
+              selectCriterion: 'Seleccionar criterio estándar...', addCriterion: 'Añadir Criterio',
+              globalEvalDays: 'Días de Evaluación Global', evalDaysDesc: 'Especifique los días en que se abren y evalúan los paquetes.',
+              addEvalDay: 'Añadir Día de Evaluación', perfoTecTech: 'Tecnología PerfoTec',
+              addVariant: 'Añadir Variante', variantConfig: 'Configuración de Variante',
+              variantName: 'Nombre de Variante', packagingType: 'Tipo de Empaque',
+              packagingSpecs: 'Especificaciones y Muestras',
+              lengthMm: 'Largo (mm)', widthMm: 'Ancho (mm)', heightMm: 'Alto (mm)',
+              material: 'Material', transmissionValue: 'Valor de Transmisión', samplesPerMeasurement: 'Muestras / Medición',
+              timelineEvents: 'Cronograma y Eventos',
+              timelineDesc: 'Seleccione los números de muestra específicos (ej. 1, 2, 3) que representan los paquetes físicos a procesar para cada acción.',
+              thDay: 'Día', thMeasure: 'Medir Gas/Peso', thOpen: 'Abrir Paquete', thEvaluate: 'Evaluar Calidad',
+              timelineNote: 'Una vez que una muestra se marca como \'Abierta\' en un día anterior, ya no se puede seleccionar para mediciones de gas/peso (el botón se desactivará).',
+              predictedGraph: 'Gráfico de Gas Predicho', predictedGraphDesc: 'Suba una captura de la predicción para esta variante específica',
+              uploadImage: 'Subir Imagen',
+              proposalEvalText: 'Texto de Propuesta y Evaluación',
+              introLabel: 'Introducción / Desafío Actual', goalsLabel: 'Objetivos / Resultados Esperados', requirementsLabel: 'Requisitos y Acuerdos',
+              introPlaceholder: 'Describa el desafío y por qué estamos realizando esta prueba...',
+              goalsPlaceholder: '¿Qué esperamos lograr con esta prueba?',
+              requirementsPlaceholder: '¿Qué debe proporcionar el cliente? ¿Qué acuerdos se han hecho?',
+              warning: 'Advertencia', warningText: 'Está a punto de sobrescribir el Gráfico de Predicción actual con una nueva imagen. ¿Desea continuar?',
+              cancel: 'Cancelar', overwrite: 'Sobrescribir',
+              warningFillCompany: '¡Advertencia: Complete los datos de la empresa!',
+              removeStep: 'Eliminar Paso',
+              day: 'Día', variant: 'Variante', duplicate: 'Duplicar', remove: 'Eliminar',
+              transportRoad: 'Transporte Terrestre', transportSea: 'Transporte Marítimo', transportAir: 'Transporte Aéreo', transportStorage: 'Almacenamiento',
+              stagePlaceholder: 'ej. Granja, Transporte...', min: 'Mín', max: 'Máx',
+              metric: 'Métrico', imperial: 'Imperial', supplyChainFlow: 'Flujo de la Cadena de Suministro'
+            }
+          };
+          const pt = PT[lang] || PT['en'];
 
           const [activeTab, setActiveTab] = useState('setup');
           const [activeGroupId, setActiveGroupId] = useState(1);
           const [isPreview, setIsPreview] = useState(false);
+          const [unitSystem, setUnitSystem] = useState('metric'); // 'metric' or 'imperial'
           const fileInputRef = useRef(null);
 
           const [pendingImageReplace, setPendingImageReplace] = useState(null);
 
           // --- DATA STATE ---
           const [clientInfo, setClientInfo] = useState({
-            companyName: '', street: '', houseNumber: '', zipCode: '', city: '', country: '',
-            contactName: '', role: '', email: '', phone: '', logo: null
+            companyName: '', street: '', houseNumber: '', addressExtra: '', zipCode: '', city: '', country: '', website: '',
+            contactName: '', role: '', email: '', phone: '', phoneDirect: '', phoneWork: '',
+            contacts: [{ id: Date.now(), name: '', role: '', email: '', phoneDirect: '', phoneWork: '' }],
+            logo: null
           });
 
           const [project, setProject] = useState({
-            reportTitle: 'Trial Proposal', 
+            reportTitle: 'Trial Proposal',
             productName: '', processingType: 'Whole', type: '', origin: '', company: '', contactName: '', contactEmail: '', contactPhone: '', employee: '', employeeEmail: '', employeePhone: '', trialTarget: '', currentChallenge: '',
-            rrO2: '', rrCO2: '', rrTemp: '', startWeight: '', 
-            acpO2: '', co2Max: '', co2Shock: '', co2ShockHours: '', tempMin: '', 
-            totalDuration: '', transportMode: '',
+            rrO2: '', rrCO2: '', rrTemp: '', startWeight: '',
+            packagingType: 'Retail', material: '', length: '', width: '', height: '',
+            acpO2: '', co2Max: '', co2Shock: '', co2ShockHours: '', tempMin: '',
+            totalDuration: '', retailOpenDays: '', transportMode: '',
             criteria: [],
             technologies: [],
             date: new Date().toISOString().split('T')[0], packingDate: new Date().toISOString().split('T')[0],
-            logo: BRAND.logos.default, clientLogo: null, startImage: null, coverImage: null,
+            logo: BRAND.logos.default, startImage: null, coverImage: null,
             maturityStage: '', postHarvestTreatment: '',
-            defectsMatrix: [] 
+            defectsMatrix: []
           });
 
-          const [supplyChain, setSupplyChain] = useState(JSON.parse(JSON.stringify(DEFAULT_SUPPLY_CHAIN)));
+          const [supplyChain, setSupplyChain] = useState(JSON.parse(JSON.stringify(DEFAULT_SUPPLY_CHAIN)).map(s => ({...s, stage: (globalConfig.translateLabel ? globalConfig.translateLabel(s.stage, lang) : s.stage)})));
+
+          // Re-translate supply-chain stage labels when the user switches UI language.
+          // Shared logic with intake.html via globalConfig.retranslateStage — only
+          // canonical stages are remapped; free-text entries are preserved.
+          useEffect(() => {
+            if (!globalConfig.retranslateStage) return;
+            setSupplyChain(prev => prev.map(step => ({
+              ...step,
+              stage: globalConfig.retranslateStage(step.stage, lang)
+            })));
+          }, [lang]);
 
           const [groups, setGroups] = useState([
             {
@@ -846,11 +1052,38 @@
             setClientInfo(prev => ({ ...prev, [field]: value }));
           };
 
+          const handleContactChange = (id, field, value) => {
+             setClientInfo(prev => ({
+                 ...prev,
+                 contacts: prev.contacts.map(c => c.id === id ? { ...c, [field]: value } : c)
+             }));
+          };
+
+          const addContact = () => {
+             setClientInfo(prev => ({
+                 ...prev,
+                 contacts: [...prev.contacts, { id: Date.now(), name: '', role: '', email: '', phoneDirect: '', phoneWork: '' }]
+             }));
+          };
+
+          const removeContact = (id) => {
+             setClientInfo(prev => ({
+                 ...prev,
+                 contacts: prev.contacts.filter(c => c.id !== id)
+             }));
+          };
+
           const handleImgUpload = (e, field) => { 
              const f = e.target.files[0]; 
              if(f) { 
                 const r = new FileReader(); 
-                r.onloadend = () => { setProject(p => ({...p, [field]: r.result})); }; 
+                r.onloadend = () => { 
+                   if (field === 'clientLogo') {
+                      setClientInfo(c => ({...c, logo: r.result}));
+                   } else {
+                      setProject(p => ({...p, [field]: r.result}));
+                   }
+                }; 
                 r.readAsDataURL(f); 
              }
           };
@@ -882,6 +1115,42 @@
           };
 
           const handleProjectChange = (f, v) => setProject(p => ({...p, [f]: v}));
+
+          // Metric/Imperial toggle — converts project-level dimensions/weight,
+          // supply-chain temperatures, and per-variant specs to the other system.
+          const handleUnitToggle = () => {
+            const toImperial = unitSystem === 'metric';
+            const newSys = toImperial ? 'imperial' : 'metric';
+            setProject(p => {
+              const isBulk = p.packagingType === 'Cube crate' || p.packagingType === 'Pallet';
+              return {
+                ...p,
+                startWeight: convertValue(p.startWeight, 'weight', isBulk, toImperial),
+                length:      convertValue(p.length,      'length', isBulk, toImperial),
+                width:       convertValue(p.width,       'length', isBulk, toImperial),
+                height:      convertValue(p.height,      'length', isBulk, toImperial)
+              };
+            });
+            setSupplyChain(chain => chain.map(s => ({
+              ...s,
+              tempStart: convertValue(s.tempStart, 'temp', false, toImperial),
+              tempEnd:   convertValue(s.tempEnd,   'temp', false, toImperial)
+            })));
+            setGroups(gs => gs.map(g => {
+              const isBulk = g.specs?.packaging === 'Cube crate' || g.specs?.packaging === 'Pallet';
+              return {
+                ...g,
+                specs: {
+                  ...g.specs,
+                  length:      convertValue(g.specs?.length,      'length', isBulk, toImperial),
+                  width:       convertValue(g.specs?.width,       'length', isBulk, toImperial),
+                  height:      convertValue(g.specs?.height,      'length', isBulk, toImperial),
+                  startWeight: convertValue(g.specs?.startWeight, 'weight', isBulk, toImperial)
+                }
+              };
+            }));
+            setUnitSystem(newSys);
+          };
           
           const handleDurationChange = (e) => {
             setProject(p => ({...p, totalDuration: e.target.value}));
@@ -905,7 +1174,20 @@
               }))
             }));
 
-            const data = { project, clientInfo, supplyChain, groups: exportGroups, proposal };
+            // Rebuild canonical contacts[] so proposal exports round-trip cleanly.
+            const normalizedClientInfo = globalConfig.buildContactsArray
+              ? { ...clientInfo, contacts: globalConfig.buildContactsArray(clientInfo) }
+              : clientInfo;
+
+            const data = {
+              isPerfoTecProposal: true,
+              schemaVersion: globalConfig.SCHEMA_VERSION || '2.1',
+              appVersion: globalConfig.APP_VERSION || '',
+              exportDate: new Date().toISOString(),
+              language: lang,
+              unitSystem: unitSystem,
+              project, clientInfo: normalizedClientInfo, supplyChain, groups: exportGroups, proposal
+            };
             const cleanCompanyName = clientInfo.companyName ? clientInfo.companyName.replace(/[^a-z0-9]/gi, '_').toLowerCase() : 'client';
             const filename = `perfotec_proposal_${cleanCompanyName}.json`; 
             
@@ -920,40 +1202,126 @@
             }
           };
 
-          const importData = (e) => { 
-            const file = e.target.files[0]; if(!file) return; 
-            
-            const processData = (d) => {
+          const importData = (e) => {
+            const file = e.target.files[0]; if(!file) return;
+
+            // Canonical contact projection comes from config; fallback to a
+            // local no-op in the unlikely event config is missing.
+            const extractPrimaryContact = globalConfig.extractPrimaryContact
+              ? globalConfig.extractPrimaryContact.bind(globalConfig)
+              : (c) => ({ contactName: '', role: '', email: '', phone: '', phoneDirect: '', phoneWork: '', contacts: [] });
+
+            const processData = (raw) => {
+                // Normalise legacy shapes (flat contacts, targetGoal alias, missing
+                // schemaVersion) before we read from the payload.
+                const d = globalConfig.migrateSchema ? globalConfig.migrateSchema(raw) : raw;
+                // Apply language from source if present
+                if (d.language && ['en','nl','es'].includes(d.language)) {
+                   setLang(d.language);
+                   if (globalConfig.setLanguage) globalConfig.setLanguage(d.language);
+                }
+                // Apply unit system from source if present
+                if (d.unitSystem) setUnitSystem(d.unitSystem);
+                
                 if(d.isPerfoTecIntake) {
-                   const client = d.client || {}; const prod = d.products?.[0] || {};
+                   // === INTAKE IMPORT (intake.html --> proposal.html) ===
+                   const client = d.client || {}; 
+                   const prod = d.products?.[0] || {};
+                   const contactData = extractPrimaryContact(client);
+                   
                    setClientInfo({
-                     companyName: client.companyName||'', street: client.street||'', houseNumber: client.houseNumber||'', zipCode: client.zipCode||'', city: client.city||'', country: client.country||'', contactName: client.contactName||'', role: client.role||'', email: client.email||'', phone: client.phone||'', logo: client.logo||null
+                     companyName: client.companyName || '',
+                     street: client.street || '',
+                     houseNumber: client.houseNumber || '',
+                     addressExtra: client.addressExtra || '',
+                     zipCode: client.zipCode || '',
+                     city: client.city || '',
+                     country: client.country || '',
+                     website: client.website || '',
+                     ...contactData,
+                     logo: client.logo || null
                    });
-                   setProject(p => ({ ...p, 
-                     productName: prod.name||'', processingType: prod.processingType||'Whole', type: prod.type||'', origin: prod.origin||'', maturityStage: prod.maturityStage||'', postHarvestTreatment: prod.postHarvestTreatment||'', currentChallenge: prod.currentChallenge||'', trialTarget: prod.targetGoal||'', transportMode: prod.transportMode || (prod.transportModes?.[0] || ''), criteria: prod.qualityCriteria||[], startImage: prod.photo||null,
+                   setProject(p => ({ ...p,
+                     productName: prod.name || '',
+                     processingType: prod.processingType || 'Whole', 
+                     type: prod.type || '', 
+                     origin: prod.origin || '', 
+                     maturityStage: prod.maturityStage || '', 
+                     postHarvestTreatment: prod.postHarvestTreatment || '', 
+                     currentChallenge: prod.currentChallenge || '', 
+                     trialTarget: prod.trialTarget || prod.targetGoal || '',
+                     transportMode: prod.transportMode || (prod.transportModes?.[0] || ''), 
+                     criteria: prod.qualityCriteria || [], 
+                     startImage: prod.photo || null,
                      startWeight: prod.weight || p.startWeight,
                      technologies: prod.technologies || p.technologies || []
                    }));
                    if (prod.supplyChain) setSupplyChain(prod.supplyChain);
-                   setGroups(p => { const ug = [...p]; if(ug[0]) { ug[0].specs = { ...ug[0].specs, packaging: prod.packagingType||'Retail', material: prod.material||'', length: prod.length||'', width: prod.width||'', height: prod.height||'' }; } return ug; });
+                   setGroups(p => { 
+                     const ug = [...p]; 
+                     if(ug[0]) { 
+                       ug[0].specs = { 
+                         ...ug[0].specs, 
+                         packaging: prod.packagingType || 'Retail', 
+                         material: prod.material || '', 
+                         length: prod.length || '', 
+                         width: prod.width || '', 
+                         height: prod.height || '' 
+                       }; 
+                     } 
+                     return ug; 
+                   });
                 } else {
+                   // === PROPOSAL/REPORT IMPORT (own format, or report export back into proposal) ===
                    if(d.clientInfo) {
-                       setClientInfo(d.clientInfo);
-                   } else if (d.client) {
-                       setClientInfo(d.client);
-                   } else if (d.project) {
+                       // Robust: handle both old (with contacts[]) and new exports
+                       const ci = d.clientInfo;
+                       const contactData = extractPrimaryContact(ci);
                        setClientInfo({
-                         companyName: d.project.company || '', 
-                         street: d.project.street || '', 
-                         houseNumber: d.project.houseNumber || '', 
-                         zipCode: d.project.zipCode || '', 
-                         city: d.project.city || '', 
-                         country: d.project.country || '', 
+                         companyName: ci.companyName || '',
+                         street: ci.street || '',
+                         houseNumber: ci.houseNumber || '',
+                         addressExtra: ci.addressExtra || '',
+                         zipCode: ci.zipCode || '',
+                         city: ci.city || '',
+                         country: ci.country || '',
+                         website: ci.website || '',
+                         ...contactData,
+                         logo: ci.logo || null
+                       });
+                   } else if (d.client) {
+                       const contactData = extractPrimaryContact(d.client);
+                       setClientInfo({
+                         companyName: d.client.companyName || '',
+                         street: d.client.street || '',
+                         houseNumber: d.client.houseNumber || '',
+                         addressExtra: d.client.addressExtra || '',
+                         zipCode: d.client.zipCode || '',
+                         city: d.client.city || '',
+                         country: d.client.country || '',
+                         website: d.client.website || '',
+                         ...contactData,
+                         logo: d.client.logo || null
+                       });
+                   } else if (d.project) {
+                       // Legacy: client info flattened into project
+                       setClientInfo({
+                         companyName: d.project.company || '',
+                         street: d.project.street || '',
+                         houseNumber: d.project.houseNumber || '',
+                         addressExtra: d.project.addressExtra || '',
+                         zipCode: d.project.zipCode || '',
+                         city: d.project.city || '',
+                         country: d.project.country || '',
+                         website: d.project.website || '',
                          contactName: d.project.contactName || '', 
                          role: d.project.contactRole || d.project.role || '', 
                          email: d.project.contactEmail || d.project.email || '', 
-                         phone: d.project.contactPhone || d.project.phone || '', 
-                         logo: d.project.logo || null
+                         phone: d.project.contactPhone || d.project.phone || '',
+                         phoneDirect: d.project.phoneDirect || '',
+                         phoneWork: d.project.phoneWork || '',
+                         contacts: [],
+                         logo: d.project.clientLogo || null  // legacy: proposal used project.clientLogo
                        });
                    }
                    if(d.project) {
@@ -963,7 +1331,9 @@
                            packingDate: d.project.packingDate || d.project.date || new Date().toISOString().split('T')[0], 
                            transportMode: d.project.transportMode || '',
                            startWeight: d.project.startWeight || d.groups?.[0]?.specs?.startWeight || '',
-                           technologies: d.project.technologies || []
+                           technologies: d.project.technologies || [],
+                           // Make sure project.logo falls back to default if missing
+                           logo: d.project.logo || BRAND.logos.default
                        })); 
                    }
                    if(d.supplyChain) setSupplyChain(d.supplyChain); 
@@ -1070,6 +1440,21 @@
             }
           };
 
+          // FIX v2.0: moveGroup was missing — caused crash when clicking variant up/down arrows
+          const moveGroup = (id, direction) => {
+            setGroups(prev => {
+              const idx = prev.findIndex(g => g.id === id);
+              if (idx < 0) return prev;
+              const newArr = [...prev];
+              if (direction === 'up' && idx > 0) {
+                [newArr[idx], newArr[idx - 1]] = [newArr[idx - 1], newArr[idx]];
+              } else if (direction === 'down' && idx < newArr.length - 1) {
+                [newArr[idx], newArr[idx + 1]] = [newArr[idx + 1], newArr[idx]];
+              }
+              return newArr;
+            });
+          };
+
           // Timeline Events Handling
           const addEvaluationDay = (groupId) => {
               setGroups(prev => prev.map(g => {
@@ -1137,12 +1522,12 @@
                   <div className="bg-white p-8 rounded-3xl shadow-2xl max-w-sm w-full border-t-8 border-orange-500 transform transition-all">
                      <div className="flex items-center gap-4 mb-6 text-orange-600 bg-orange-50 p-4 rounded-xl">
                         <AlertTriangle size={28} />
-                        <h3 className="font-extrabold text-xl">Warning</h3>
+                        <h3 className="font-extrabold text-xl">{pt.warning}</h3>
                      </div>
-                     <p className="mb-8 text-base text-slate-700 leading-relaxed">You are about to overwrite the current Prediction Graph with a new image. Do you want to continue?</p>
+                     <p className="mb-8 text-base text-slate-700 leading-relaxed">{pt.warningText}</p>
                      <div className="flex justify-end gap-3">
-                       <button onClick={() => setPendingImageReplace(null)} className="px-6 py-3 bg-slate-100 text-slate-700 rounded-full hover:bg-slate-200 font-bold transition">Cancel</button>
-                       <button onClick={confirmReplaceImage} className="px-6 py-3 bg-orange-600 text-white rounded-full hover:bg-orange-700 font-bold shadow-lg shadow-orange-200 transition">Overwrite</button>
+                       <button onClick={() => setPendingImageReplace(null)} className="px-6 py-3 bg-slate-100 text-slate-700 rounded-full hover:bg-slate-200 font-bold transition">{pt.cancel}</button>
+                       <button onClick={confirmReplaceImage} className="px-6 py-3 bg-orange-600 text-white rounded-full hover:bg-orange-700 font-bold shadow-lg shadow-orange-200 transition">{pt.overwrite}</button>
                      </div>
                   </div>
                 </div>
@@ -1150,56 +1535,58 @@
               
               {/* HEADER */}
               <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40 shadow-sm">
-                <div className="max-w-7xl mx-auto px-4 md:px-6 py-4 flex justify-between items-center">
-                  <div className="flex items-center gap-4">
-                    <img src={BRAND.logos.default} alt="PerfoTec" className="h-9 md:h-12 object-contain" />
-                    <div className="border-l-2 border-slate-200 pl-4 ml-2 hidden sm:block">
-                      <h1 className="font-extrabold text-2xl tracking-tight leading-none" style={{color: BRAND.colors.blue}}>PerfoTec Manager</h1>
-                      <p className="text-xs text-slate-500 font-bold uppercase tracking-widest mt-1">PROPOSAL TOOL</p>
+                <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 flex items-center gap-3 md:gap-4">
+                  {/* LEFT: Logo + Home */}
+                  <div className="flex items-center gap-2 md:gap-3 shrink-0">
+                    <img src={BRAND.logos.default} alt="PerfoTec" className="h-7 md:h-9 object-contain" />
+                    <a href="index.html" className="bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-800 p-2 xl:px-3 xl:py-2 rounded-lg text-xs font-bold transition-all border border-slate-200 flex items-center gap-1.5 whitespace-nowrap" title={pt.home}>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" /></svg>
+                      <span className="hidden xl:inline">{pt.home}</span>
+                    </a>
+                  </div>
+
+                  {/* CENTER: Title — dedicated space, visible from md */}
+                  <div className="hidden md:flex flex-1 min-w-0 border-l-2 border-slate-200 pl-3 md:pl-4">
+                    <div className="min-w-0">
+                      <h1 className="font-extrabold text-base md:text-lg lg:text-xl xl:text-2xl tracking-tight leading-tight truncate" style={{color: BRAND.colors.blue}}>PerfoTec Manager</h1>
+                      <p className="text-[10px] md:text-xs text-slate-500 font-bold uppercase tracking-widest mt-0.5 truncate">PROPOSAL TOOL</p>
                     </div>
                   </div>
-                  
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center bg-slate-100 hover:bg-slate-200 transition-colors rounded-xl px-3 py-2 border border-slate-200 shadow-sm">
-                       <Globe size={18} className="text-slate-500 mr-2" />
-                       <select 
-                         className="bg-transparent text-sm font-bold text-slate-700 outline-none cursor-pointer w-full" 
-                         value={lang} 
-                         onChange={(e) => {
-                           const val = e.target.value;
-                           setLang(val);
-                           if (globalConfig.setLanguage) globalConfig.setLanguage(val);
-                           if (val !== 'en') {
-                               setTimeout(() => {
-                                   try { 
-                                       window.location.assign(`proposal_${val}.html`); 
-                                   } catch(err) {
-                                       console.warn("Navigation failed", err);
-                                   }
-                               }, 100);
-                           }
-                         }}
-                       >
-                         {globalConfig.LANGUAGES ? globalConfig.LANGUAGES.map(l => (
-                             <option key={l.code} value={l.code}>{l.label}</option>
-                         )) : (
-                             <option value="en">EN</option>
-                         )}
-                       </select>
-                    </div>
-                    
-                    <div className="h-8 border-l border-slate-300 mx-1 hidden md:block"></div>
 
-                    <label className="cursor-pointer bg-white border border-slate-300 text-slate-700 px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm">
-                      <FolderOpen size={18} className="text-blue-600"/> <span className="hidden md:inline">Load JSON</span>
+                  {/* SPACER for mobile when title is hidden */}
+                  <div className="md:hidden flex-1"></div>
+
+                  {/* RIGHT: Action buttons + Language selector (lang always rightmost) */}
+                  <div className="flex items-center gap-1.5 md:gap-2 xl:gap-3 shrink-0">
+                    <label className="cursor-pointer bg-white border border-slate-300 text-slate-700 p-2 lg:pr-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm" title={pt.loadJson}>
+                      <FolderOpen size={18} className="text-blue-600 shrink-0"/>
+                      <span className="hidden lg:flex flex-col items-start leading-[1.05] text-[10px] uppercase tracking-tight">
+                        {(pt.loadJson || '').split(' ').map((w, i) => <span key={i} className={i === 0 ? '' : 'opacity-60 font-medium'}>{w}</span>)}
+                      </span>
                       <input type="file" accept=".json" className="hidden" onChange={importData} ref={fileInputRef} />
                     </label>
-                    <button onClick={exportData} className="bg-white border border-slate-300 text-slate-700 px-4 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm">
-                      <Save size={18} className="text-green-600"/> <span className="hidden md:inline">Save As...</span>
+                    <button onClick={exportData} className="bg-white border border-slate-300 text-slate-700 p-2 lg:pr-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm" title={pt.saveAs}>
+                      <Save size={18} className="text-green-600 shrink-0"/>
+                      <span className="hidden lg:flex flex-col items-start leading-[1.05] text-[10px] uppercase tracking-tight">
+                        {(pt.saveAs || '').split(' ').map((w, i) => <span key={i} className={i === 0 ? '' : 'opacity-60 font-medium'}>{w}</span>)}
+                      </span>
                     </button>
-                    <button onClick={() => { if(!clientInfo.companyName) alert('Warning: Fill in company details!'); setIsPreview(true); }} className="bg-blue-600 text-white px-6 py-2.5 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-blue-700 transition-all shadow-md hover:shadow-blue-500/30 ml-2">
-                      <FileText size={18}/> <span className="hidden md:inline">Preview Proposal</span>
+                    <button onClick={() => { if(!clientInfo.companyName) alert(pt.warningFillCompany); setIsPreview(true); }} className="bg-blue-600 text-white p-2 lg:pr-3 rounded-xl font-bold flex items-center gap-2 hover:bg-blue-700 transition-all shadow-md hover:shadow-blue-500/30" title={pt.previewProposal}>
+                      <FileText size={18} className="shrink-0"/>
+                      <span className="hidden lg:flex flex-col items-start leading-[1.05] text-[10px] uppercase tracking-tight">
+                        {(pt.previewProposal || '').split(' ').map((w, i) => <span key={i} className={i === 0 ? '' : 'opacity-80 font-medium'}>{w}</span>)}
+                      </span>
                     </button>
+
+                    <div className="h-8 border-l border-slate-300 mx-1 hidden lg:block"></div>
+
+                    <div className="lang-selector" role="radiogroup" aria-label="Language">
+                      {(globalConfig.LANGUAGES || [{code:'en',label:'EN'},{code:'nl',label:'NL'},{code:'es',label:'ES'}]).map(l => (
+                        <button key={l.code} type="button" role="radio" aria-checked={lang === l.code} className={`lang-btn ${lang === l.code ? 'active' : ''}`} onClick={() => { setLang(l.code); if (globalConfig.setLanguage) globalConfig.setLanguage(l.code); document.documentElement.lang = l.code; }}>
+                          {l.label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </header>
@@ -1209,290 +1596,545 @@
                   {['setup', 'groups', 'proposal'].map(tab => (
                     <button key={tab} onClick={() => setActiveTab(tab)} className={`px-5 sm:px-8 py-3.5 font-bold rounded-t-xl transition-all flex items-center gap-2 ${activeTab === tab ? 'text-white shadow-sm transform scale-105 origin-bottom' : 'bg-white text-slate-500 hover:bg-slate-100 border border-b-0 border-slate-200'}`} style={{ backgroundColor: activeTab === tab ? BRAND.colors.green : undefined }}>
                       {tab === 'setup' && <Settings size={18}/>}{tab === 'groups' && <Package size={18}/>}{tab === 'proposal' && <FileText size={18}/>}
-                      {tab === 'proposal' ? 'Proposal Texts' : tab === 'groups' ? 'Variants & Planning' : 'Project & Product'}
+                      {tab === 'proposal' ? pt.tabTexts : tab === 'groups' ? pt.tabGroups : pt.tabSetup}
                     </button>
                   ))}
                 </div>
 
-                {/* 1. SETUP TAB */}
+                {/* 1. SETUP TAB — mirrors Intake's 3-part layout (Project / Company / Product A-B-C) */}
                 {activeTab === 'setup' && (
-                  <div className="col-span-1 md:col-span-12 space-y-8">
-                    {/* Project & Product Info */}
-                    <div className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden">
+                  <div className="col-span-1 md:col-span-12 space-y-10 max-w-5xl mx-auto w-full">
+
+
+
+                    {/* ========== DEEL 1 — PROJECT DETAILS ========== */}
+                    <section className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden">
                        <div className="absolute top-0 left-0 w-full h-1" style={{ backgroundColor: BRAND.colors.green }}></div>
-                       <h2 className="font-extrabold text-2xl mb-8 text-slate-800 border-b-2 border-slate-100 pb-4">1. Project & Product</h2>
-                       
-                       <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-                         <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-6">
-                           <div className="sm:col-span-2"><label className={labelClass}>Proposal Title</label><input type="text" className={`${inputClass} text-lg font-bold`} value={project.reportTitle || ''} onChange={e => handleProjectChange('reportTitle', e.target.value)} /></div>
-                           <div className="sm:col-span-2"><label className={labelClass}>Product Name <span className="text-red-500">*</span></label><input type="text" className={`${inputClass} text-lg font-bold`} value={project.productName || ''} onChange={e => handleProjectChange('productName', e.target.value)} /></div>
-                           <div><label className={labelClass}>Proposal Date</label><input type="date" className={inputClass} value={project.date || ''} onChange={e => handleProjectChange('date', e.target.value)} /></div>
+                       <div className="flex items-center justify-between border-b-2 border-slate-100 pb-6 mb-8">
+                         <div className="flex items-center gap-4">
+                           <div className="p-3 bg-green-50 rounded-xl">
+                             <ClipboardList size={28} color={BRAND.colors.green} />
+                           </div>
+                           <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">{pt.secProject}</h2>
+                         </div>
+                       </div>
+                       {/* lg:items-start keeps the left column at its natural
+                           height so form rows don't stretch to match the two
+                           stacked upload tiles on the right. */}
+                       <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 lg:items-start">
+                         <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 content-start">
+                           <div className="sm:col-span-2"><label className={labelClass}>{pt.projectName}</label><input type="text" className={`${inputClass} text-lg font-bold`} value={project.reportTitle || ''} onChange={e => handleProjectChange('reportTitle', e.target.value)} /></div>
+                           <div><label className={labelClass}>{pt.proposalDate}</label><input type="date" className={inputClass} value={project.date || ''} onChange={e => handleProjectChange('date', e.target.value)} /></div>
+                           <div><label className={labelClass}>{pt.packingDate} <span className="text-red-500">*</span></label><input type="date" className={`${inputClass} bg-amber-50 focus:bg-white`} value={project.packingDate || ''} onChange={e => handleProjectChange('packingDate', e.target.value)} /></div>
+                           <div><label className={labelClass}>{pt.totalDuration} <span className="text-red-500">*</span></label><input type="number" className={`${inputClass} bg-amber-50 focus:bg-white`} value={project.totalDuration || ''} onChange={handleDurationChange} placeholder="e.g. 10" /></div>
+                           <div><label className={labelClass}>{pt.retailSim}</label><input type="number" className={`${inputClass} bg-blue-50 focus:bg-white`} value={project.retailOpenDays || ''} onChange={e => handleProjectChange('retailOpenDays', e.target.value)} placeholder="e.g. 7" /></div>
+                         </div>
+                         {/* Image uploads stacked vertically; each tile matches
+                             the Deel 2 client-logo size (w-full max-w-[240px] aspect-square).
+                             Fields bind to canonical names (project.logo / project.coverImage)
+                             so JSON import/export round-trips correctly. */}
+                         <div className="flex flex-col gap-6 lg:items-center w-full">
+                            <div className="flex flex-col gap-3 lg:items-center w-full">
+                               <label className={labelClass}>{pt.uploadPerfoTecLogo}</label>
+                               <label className="border-2 border-dashed border-slate-300 rounded-2xl w-full max-w-[240px] aspect-square flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-blue-50 hover:border-blue-300 transition-all cursor-pointer relative overflow-hidden shadow-sm group mt-1">
+                                  <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={(e) => handleImgUpload(e, 'logo')} />
+                                  {project.logo ? (
+                                    <img src={project.logo} className="w-full h-full object-contain p-4 group-hover:scale-105 transition-transform" />
+                                  ) : (
+                                    <div className="p-6 flex flex-col items-center">
+                                      <div className="w-16 h-16 bg-white rounded-full shadow-sm flex items-center justify-center mb-4 group-hover:shadow-md transition-all">
+                                        <Upload size={32} className="text-blue-500" />
+                                      </div>
+                                      <span className="font-bold text-sm text-slate-700 block">{pt.clickUpload}</span>
+                                    </div>
+                                  )}
+                               </label>
+                            </div>
+
+                            <div className="flex flex-col gap-3 lg:items-center w-full">
+                               <label className={labelClass}>{pt.coverPhoto}</label>
+                               <label className="border-2 border-dashed border-slate-300 rounded-2xl w-full max-w-[240px] aspect-square flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-blue-50 hover:border-blue-300 transition-all cursor-pointer relative overflow-hidden shadow-sm group mt-1">
+                                  <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={(e) => handleImgUpload(e, 'coverImage')} />
+                                  {project.coverImage ? (
+                                    <img src={project.coverImage} className="w-full h-full object-contain p-4 group-hover:scale-105 transition-transform" />
+                                  ) : (
+                                    <div className="p-6 flex flex-col items-center">
+                                      <div className="w-16 h-16 bg-white rounded-full shadow-sm flex items-center justify-center mb-4 group-hover:shadow-md transition-all">
+                                        <ImageIcon size={32} className="text-green-500" />
+                                      </div>
+                                      <span className="font-bold text-sm text-slate-700 block">{pt.clickUpload}</span>
+                                    </div>
+                                  )}
+                               </label>
+                            </div>
+                         </div>
+                       </div>
+                    </section>
+
+                    {/* ========== DEEL 2 — COMPANY & CONTACT DETAILS ========== */}
+                    <section className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden">
+                       <div className="absolute top-0 left-0 w-full h-1" style={{ backgroundColor: BRAND.colors.green }}></div>
+                       <div className="flex items-center justify-between border-b-2 border-slate-100 pb-6 mb-8">
+                         <div className="flex items-center gap-4">
+                           <div className="p-3 bg-green-50 rounded-xl">
+                             <Building2 size={28} color={BRAND.colors.green} />
+                           </div>
+                           <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">{pt.secCompany}</h2>
+                         </div>
+                       </div>
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                         <div className="lg:col-span-2 flex flex-col gap-8">
                            
-                           <div><label className={labelClass}>Packing Date <span className="text-red-500">*</span></label><input type="date" className={`${inputClass} bg-amber-50 focus:bg-white`} value={project.packingDate || ''} onChange={e => handleProjectChange('packingDate', e.target.value)} /></div>
-                           <div><label className={labelClass}>Total Duration (Days) <span className="text-red-500">*</span></label><input type="number" className={`${inputClass} bg-amber-50 focus:bg-white`} value={project.totalDuration || ''} onChange={handleDurationChange} placeholder="e.g. 10" /></div>
-                           <div><label className={labelClass}>Retail Simulation (after opening)</label><input type="number" className={`${inputClass} bg-blue-50 focus:bg-white`} value={project.retailOpenDays || ''} onChange={e => handleProjectChange('retailOpenDays', e.target.value)} placeholder="e.g. 7" /></div>
+                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                               <div className="sm:col-span-2">
+                                 <label className={labelClass}>{pt.companyName} <span className="text-red-500">*</span></label>
+                                 <input type="text" className={`${inputClass} text-lg font-bold`} value={clientInfo.companyName || ''} onChange={e => handleClientChange('companyName', e.target.value)} />
+                               </div>
+                               <div className="sm:col-span-2">
+                                 <label className={labelClass}>Website</label>
+                                 <div className="relative">
+                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"><Globe size={18}/></span>
+                                    <input type="url" className={`${inputClass} pl-11`} placeholder="https://www.example.com" value={clientInfo.website || ''} onChange={e => handleClientChange('website', e.target.value)} />
+                                 </div>
+                               </div>
+                           </div>
                            
-                           <div className="sm:col-span-2 bg-slate-50 border border-slate-200 p-5 rounded-2xl">
-                              <label className={labelClass}>Processing Type <span className="text-red-500">*</span></label>
+                           {/* ADDRESS BLOCK */}
+                           <div className="bg-slate-50/50 p-6 rounded-2xl border border-slate-200 grid grid-cols-4 gap-5">
+                             <div className="col-span-4 sm:col-span-3">
+                               <label className={labelClass}>{pt.street}</label>
+                               <input type="text" className={inputClass} value={clientInfo.street || ''} onChange={e => handleClientChange('street', e.target.value)} />
+                             </div>
+                             <div className="col-span-4 sm:col-span-1">
+                               <label className={labelClass}>{pt.houseNo}</label>
+                               <input type="text" className={inputClass} value={clientInfo.houseNumber || ''} onChange={e => handleClientChange('houseNumber', e.target.value)} />
+                             </div>
+                             <div className="col-span-4">
+                               <label className={labelClass}>{pt.addressExtra}</label>
+                               <input type="text" className={inputClass} value={clientInfo.addressExtra || ''} onChange={e => handleClientChange('addressExtra', e.target.value)} placeholder={pt.addressExtra} />
+                             </div>
+                             <div className="col-span-4 sm:col-span-2">
+                               <label className={labelClass}>{pt.zipCode}</label>
+                               <input type="text" className={inputClass} value={clientInfo.zipCode || ''} onChange={e => handleClientChange('zipCode', e.target.value)} />
+                             </div>
+                             <div className="col-span-4 sm:col-span-2">
+                               <label className={labelClass}>{pt.city}</label>
+                               <input type="text" className={inputClass} value={clientInfo.city || ''} onChange={e => handleClientChange('city', e.target.value)} />
+                             </div>
+                             <div className="col-span-4">
+                               <label className={labelClass}>{pt.country}</label>
+                               <input type="text" className={inputClass} value={clientInfo.country || ''} onChange={e => handleClientChange('country', e.target.value)} />
+                             </div>
+                           </div>
+
+                           {/* MULTIPLE CONTACTS BLOCK */}
+                           <div className="space-y-6">
+                              {clientInfo.contacts && clientInfo.contacts.map((contact, idx) => (
+                                  <div key={contact.id} className="p-6 bg-slate-50 border border-slate-200 rounded-2xl relative group">
+                                      {clientInfo.contacts.length > 1 && (
+                                        <button onClick={() => removeContact(contact.id)} className="absolute top-4 right-4 text-red-400 hover:text-red-600 bg-white p-2 rounded-lg border border-slate-200 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity" title="Remove contact">
+                                            <Trash2 size={16}/>
+                                        </button>
+                                      )}
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                                          <div>
+                                            <label className={labelClass}>{pt.contactPerson} <span className="text-red-500">*</span></label>
+                                            <input type="text" className={inputClass} value={contact.name || ''} onChange={e => handleContactChange(contact.id, 'name', e.target.value)} />
+                                          </div>
+                                          <div>
+                                            <label className={labelClass}>{pt.role}</label>
+                                            <input type="text" className={inputClass} value={contact.role || ''} onChange={e => handleContactChange(contact.id, 'role', e.target.value)} />
+                                          </div>
+                                          <div className="sm:col-span-2">
+                                            <label className={labelClass}>{pt.email} <span className="text-red-500">*</span></label>
+                                            <input type="email" className={inputClass} value={contact.email || ''} onChange={e => handleContactChange(contact.id, 'email', e.target.value)} />
+                                          </div>
+                                          <div>
+                                            <label className={labelClass}>{pt.phoneDirect || 'Phone (Direct)'}</label>
+                                            <input type="tel" className={inputClass} value={contact.phoneDirect || ''} onChange={e => handleContactChange(contact.id, 'phoneDirect', e.target.value)} />
+                                          </div>
+                                          <div>
+                                            <label className={labelClass}>{pt.phoneWork || 'Phone (Work)'}</label>
+                                            <input type="tel" className={inputClass} value={contact.phoneWork || ''} onChange={e => handleContactChange(contact.id, 'phoneWork', e.target.value)} />
+                                          </div>
+                                      </div>
+                                  </div>
+                              ))}
+                              <button onClick={addContact} className="w-full py-4 rounded-xl border-2 border-dashed border-blue-200 bg-blue-50 text-blue-700 font-bold hover:bg-blue-100 transition-colors flex items-center justify-center gap-2">
+                                  <UserPlus size={18}/> {pt.addContactBtn || 'Add Contact'}
+                              </button>
+                           </div>
+                         </div>
+                         <div className="flex flex-col gap-3 lg:items-center">
+                            <label className={labelClass}>{pt.uploadClientLogo}</label>
+                            <label className="border-2 border-dashed border-slate-300 rounded-2xl w-full max-w-[240px] aspect-square flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-blue-50 hover:border-blue-300 transition-all cursor-pointer relative overflow-hidden shadow-sm group mt-1">
+                               <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={(e) => handleImgUpload(e, 'clientLogo')} />
+                               {clientInfo.logo ? (
+                                 <img src={clientInfo.logo} className="w-full h-full object-contain p-4 group-hover:scale-105 transition-transform" />
+                               ) : (
+                                 <div className="p-6 flex flex-col items-center">
+                                   <div className="w-16 h-16 bg-white rounded-full shadow-sm flex items-center justify-center mb-4 group-hover:shadow-md transition-all">
+                                     <Upload size={32} className="text-blue-500" />
+                                   </div>
+                                   <span className="font-bold text-sm text-slate-700 block">{pt.clickUpload}</span>
+                                 </div>
+                               )}
+                            </label>
+                         </div>
+                       </div>
+
+                       {/* DISTINCT PerfoTec Support sub-block */}
+                       <div className="mt-8 bg-gradient-to-br from-blue-50/60 to-slate-50 p-6 rounded-2xl border-l-4 border-blue-600 shadow-sm">
+                         <div className="flex items-center gap-3 mb-3">
+                           <div className="w-9 h-9 rounded-lg bg-blue-600 flex items-center justify-center shadow"><Building2 size={18} className="text-white"/></div>
+                           <h3 className="font-extrabold text-lg text-blue-900 uppercase tracking-wide">PerfoTec Support</h3>
+                         </div>
+                         <p className="text-sm text-slate-600 mb-4">Contact details of the PerfoTec employee leading this trial.</p>
+                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                           <div><label className={labelClass}>{pt.perfoTecEmployee}</label><input type="text" className={inputClass} value={project.employee || ''} onChange={e => handleProjectChange('employee', e.target.value)} /></div>
+                           <div><label className={labelClass}>{pt.employeeEmail}</label><input type="email" className={inputClass} value={project.employeeEmail || ''} onChange={e => handleProjectChange('employeeEmail', e.target.value)} /></div>
+                           <div><label className={labelClass}>{pt.employeePhone}</label><input type="text" className={inputClass} value={project.employeePhone || ''} onChange={e => handleProjectChange('employeePhone', e.target.value)} /></div>
+                         </div>
+                       </div>
+                    </section>
+
+                    {/* ========== DEEL 3 — PRODUCT DETAILS (A / B / C) ========== */}
+                    <section className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden">
+                       <div className="absolute top-0 left-0 w-full h-1" style={{ backgroundColor: BRAND.colors.green }}></div>
+                       <div className="flex items-center justify-between gap-4 border-b-2 border-slate-100 pb-6 mb-8">
+                         <div className="flex items-center gap-4">
+                           <div className="p-3 bg-green-50 rounded-xl">
+                             <PackagePlus size={28} color={BRAND.colors.green} />
+                           </div>
+                           <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">{pt.secProduct}</h2>
+                         </div>
+                         
+                         {/* UNIT TOGGLE SWITCH — mirrors Intake, with unit hint
+                             underneath (kg/meter · inch/lb) for quick user reference. */}
+                         <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner border border-slate-200">
+                             <button
+                               type="button"
+                               onClick={() => { if (unitSystem !== 'metric') handleUnitToggle(); }}
+                               className={`px-4 py-2 rounded-lg transition-all flex flex-col items-center leading-tight ${unitSystem === 'metric' ? 'bg-white text-slate-800 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
+                             >
+                                 <span className="text-sm font-bold">{pt.metric || 'Metric'}</span>
+                                 <span className="text-[10px] font-medium tracking-wide opacity-70 mt-0.5">(kg/meter)</span>
+                             </button>
+                             <button
+                               type="button"
+                               onClick={() => { if (unitSystem !== 'imperial') handleUnitToggle(); }}
+                               className={`px-4 py-2 rounded-lg transition-all flex flex-col items-center leading-tight ${unitSystem === 'imperial' ? 'bg-white text-slate-800 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}
+                             >
+                                 <span className="text-sm font-bold">{pt.imperial || 'Imperial'}</span>
+                                 <span className="text-[10px] font-medium tracking-wide opacity-70 mt-0.5">(inch/lb)</span>
+                             </button>
+                         </div>
+                       </div>
+                       {/* A. Product & Packaging */}
+                       <div className="mb-10">
+                         <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-3">
+                            <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center"><Target size={16} className="text-green-700"/></div>
+                            <h3 className="font-extrabold text-lg text-slate-800">{pt.secA}</h3>
+                         </div>
+                         
+                         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                           <div className="md:col-span-2">
+                             <label className={labelClass}>{pt.productName} <span className="text-red-500">*</span></label>
+                             <input type="text" className={`${inputClass} text-xl font-bold py-4`} value={project.productName || ''} onChange={e => handleProjectChange('productName', e.target.value)} />
+                           </div>
+                           
+                           <div className="md:col-span-1 md:row-span-4 flex flex-col">
+                              <label className={labelClass}>{pt.refPhoto}</label>
+                              <div className="border-2 border-dashed border-slate-300 rounded-2xl w-full aspect-square max-w-[240px] flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-blue-50 hover:border-blue-300 transition-all cursor-pointer relative overflow-hidden mx-auto shadow-sm group mt-1">
+                                 <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={(e) => handleImgUpload(e, 'startImage')} />
+                                 {project.startImage ? (
+                                   <img src={project.startImage} className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform" />
+                                 ) : (
+                                   <div className="p-4 flex flex-col items-center">
+                                     <div className="w-16 h-16 bg-white rounded-full shadow-sm flex items-center justify-center mb-4 group-hover:shadow-md transition-all">
+                                       <ImageIcon size={32} className="text-blue-500" />
+                                     </div>
+                                     <span className="font-bold text-sm text-slate-700 block">{pt.clickUpload}</span>
+                                   </div>
+                                 )}
+                              </div>
+                           </div>
+
+                           <div className="md:col-span-1"><label className={labelClass}>{pt.prodType}</label><input type="text" className={inputClass} value={project.type || ''} onChange={e => handleProjectChange('type', e.target.value)} /></div>
+                           <div className="md:col-span-1"><label className={labelClass}>{pt.prodOrigin}</label><input type="text" className={inputClass} value={project.origin || ''} onChange={e => handleProjectChange('origin', e.target.value)} /></div>
+
+                           <div className="md:col-span-2 bg-slate-50 border border-slate-200 p-5 rounded-2xl">
+                              <label className={labelClass}>{pt.processingType} <span className="text-red-500">*</span></label>
                               <div className="flex flex-wrap gap-4 mt-3">
                                  {['Whole', 'Processed'].map(type => (
-                                   <button
-                                     key={type}
-                                     type="button"
-                                     onClick={() => handleProjectChange('processingType', type)}
-                                     className={`px-6 py-3 rounded-xl text-sm font-bold transition-all border shadow-sm flex-1 sm:flex-none ${project.processingType === type ? 'bg-blue-600 text-white border-blue-700 ring-4 ring-blue-600/20 transform scale-[1.02]' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'}`}
-                                   >
-                                     {type === 'Whole' ? 'Whole' : 'Processed / Fresh-cut'}
+                                   <button key={type} type="button" onClick={() => handleProjectChange('processingType', type)}
+                                     className={`px-6 py-3 rounded-xl text-sm font-bold transition-all border shadow-sm flex-1 sm:flex-none ${project.processingType === type ? 'bg-blue-600 text-white border-blue-700 ring-4 ring-blue-600/20 transform scale-[1.02]' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100 hover:border-slate-400'}`}>
+                                     {type === 'Whole' ? pt.whole : pt.processed}
                                    </button>
                                  ))}
                               </div>
                            </div>
 
-                           <div><label className={labelClass}>Product Type / Variety</label><input type="text" className={inputClass} value={project.type || ''} onChange={e => handleProjectChange('type', e.target.value)} /></div>
-                           <div><label className={labelClass}>Product Origin</label><input type="text" className={inputClass} value={project.origin || ''} onChange={e => handleProjectChange('origin', e.target.value)} /></div>
-                           
-                           <div>
-                              <label className={labelClass}>Net Weight <span className="text-red-500">*</span></label>
-                              <div className="relative">
-                                 <input type="number" className={`${inputClass} font-extrabold text-blue-900 pr-12`} value={project.startWeight || ''} onChange={e => handleProjectChange('startWeight', e.target.value)} />
-                                 <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">g/kg</span>
-                              </div>
-                           </div>
-                           
-                           <div><label className={labelClass}>Maturity Stage at Packing</label><input type="text" className={inputClass} value={project.maturityStage || ''} onChange={e => handleProjectChange('maturityStage', e.target.value)} /></div>
-                           <div className="sm:col-span-2"><label className={labelClass}>Post-harvest Treatment</label><input type="text" className={inputClass} value={project.postHarvestTreatment || ''} onChange={e => handleProjectChange('postHarvestTreatment', e.target.value)} /></div>
-                           
-                           <div className="sm:col-span-2 bg-gradient-to-br from-slate-50 to-slate-100 p-6 rounded-2xl border border-slate-200 shadow-sm mt-2">
-                              <label className="block mb-4 text-xs font-extrabold tracking-widest text-blue-800 uppercase border-b border-blue-200 pb-2">Respiration Data</label>
+                           <div className="md:col-span-1"><label className={labelClass}>{pt.maturityStage}</label><input type="text" className={inputClass} value={project.maturityStage || ''} onChange={e => handleProjectChange('maturityStage', e.target.value)} /></div>
+                           <div className="md:col-span-1"><label className={labelClass}>{pt.postHarvest}</label><input type="text" className={inputClass} value={project.postHarvestTreatment || ''} onChange={e => handleProjectChange('postHarvestTreatment', e.target.value)} /></div>
+
+                           {/* ALIGNED PACKAGING, MATERIAL AND WEIGHT ROW */}
+                           {(() => {
+                             const isBulk = project.packagingType === 'Cube crate' || project.packagingType === 'Pallet';
+                             const dimUnit = globalConfig.getUnitLabel ? globalConfig.getUnitLabel('length', unitSystem, isBulk) : (isBulk ? 'cm' : 'mm');
+                             const wgtUnit = globalConfig.getUnitLabel ? globalConfig.getUnitLabel('weight', unitSystem, isBulk) : (isBulk ? 'kg' : 'g');
+                             const isPillow = project.packagingType === 'Pillow Bag';
+                             return (
+                               <div className="md:col-span-3 space-y-6 pt-4 mt-2">
+                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
+                                     <div>
+                                       <label className={labelClass}>{pt.packType} <span className="text-red-500">*</span></label>
+                                       <select className={`${inputClass} cursor-pointer bg-white`} value={project.packagingType || 'Retail'} onChange={e => handleProjectChange('packagingType', e.target.value)}>
+                                         {PACKAGING_TYPES.map(t => <option key={t} value={t}>{getI18nLabel(PACKAGING_TYPES_I18N, t, lang)}</option>)}
+                                       </select>
+                                     </div>
+                                     <div>
+                                       <label className={labelClass}>{pt.currentMaterial} <span className="text-red-500">*</span></label>
+                                       <input type="text" className={inputClass} value={project.material || ''} onChange={e => handleProjectChange('material', e.target.value)} />
+                                     </div>
+                                     <div>
+                                       <label className={labelClass}>{pt.netWeight} <span className="text-red-500">*</span></label>
+                                       <div className="relative">
+                                          <input type="number" className={`${inputClass} font-extrabold text-blue-900 pr-12`} value={project.startWeight || ''} onChange={e => handleProjectChange('startWeight', e.target.value)} />
+                                          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{wgtUnit}</span>
+                                       </div>
+                                     </div>
+                                 </div>
+
+                                 {/* FULL WIDTH DIMENSIONS */}
+                                 <div className="bg-gradient-to-br from-slate-50 to-slate-100 p-6 rounded-2xl border border-slate-200 shadow-sm mt-2">
+                                    <label className="block mb-4 text-xs font-extrabold tracking-widest text-blue-800 uppercase border-b border-blue-200 pb-2">{pt.dimens}</label>
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
+                                      <div>
+                                        <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">{pt.len} <span className="text-red-500">*</span></label>
+                                        <div className="relative">
+                                          <input type="number" className={`${inputClass} pl-4 pr-12`} value={project.length || ''} onChange={e => handleProjectChange('length', e.target.value)} />
+                                          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{dimUnit}</span>
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">{isPillow ? pt.widSeal : pt.wid} <span className="text-red-500">*</span></label>
+                                        <div className="relative">
+                                          <input type="number" className={`${inputClass} pl-4 pr-12`} value={project.width || ''} onChange={e => handleProjectChange('width', e.target.value)} />
+                                          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{dimUnit}</span>
+                                        </div>
+                                      </div>
+                                      {!isPillow && (
+                                        <div>
+                                          <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">{pt.hei} <span className="text-red-500">*</span></label>
+                                          <div className="relative">
+                                            <input type="number" className={`${inputClass} pl-4 pr-12`} value={project.height || ''} onChange={e => handleProjectChange('height', e.target.value)} />
+                                            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{dimUnit}</span>
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                 </div>
+                               </div>
+                             );
+                           })()}
+
+                           {/* Respiration Data */}
+                           <div className="md:col-span-3 mt-2 bg-gradient-to-br from-slate-50 to-slate-100 p-6 rounded-2xl border border-slate-200 shadow-sm">
+                              <label className="block mb-4 text-xs font-extrabold tracking-widest text-blue-800 uppercase border-b border-blue-200 pb-2">{pt.respirationData}</label>
                               <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                                 <div><label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">RR O₂</label><input type="text" className={inputClass} value={project.rrO2 || ''} onChange={e => handleProjectChange('rrO2', e.target.value)} /></div>
                                 <div><label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">RR CO₂</label><input type="text" className={inputClass} value={project.rrCO2 || ''} onChange={e => handleProjectChange('rrCO2', e.target.value)} /></div>
-                                <div><label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">Measured at (°C)</label><input type="text" className={inputClass} value={project.rrTemp || ''} onChange={e => handleProjectChange('rrTemp', e.target.value)} /></div>
+                                <div><label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">{pt.measuredAt}</label><input type="text" className={inputClass} value={project.rrTemp || ''} onChange={e => handleProjectChange('rrTemp', e.target.value)} /></div>
+                              </div>
+                           </div>
+
+                           {/* Quality Criteria — click-to-toggle (matches Intake) */}
+                           <div className="md:col-span-3 mt-4">
+                              <label className="block mb-2 text-sm font-extrabold tracking-wide text-slate-800 uppercase flex items-center gap-2">
+                                 <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center"><Beaker size={16} className="text-blue-700"/></div>
+                                 {pt.qualityCrit}
+                              </label>
+                              <p className="text-sm text-slate-500 mb-4">{pt.qualityCritDesc}</p>
+                              <div className="flex flex-wrap gap-3">
+                                 {DEFAULT_CRITERIA.map(c => {
+                                   const isSelected = (project.criteria || []).includes(c);
+                                   return (
+                                     <button key={c} type="button" onClick={() => toggleCriteria(c)}
+                                       className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-all border shadow-sm flex items-center gap-2 ${isSelected ? 'bg-blue-50 text-blue-800 border-blue-400 ring-2 ring-blue-500/20 transform scale-[1.02]' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300'}`}>
+                                       {getI18nLabel(DEFAULT_CRITERIA_I18N, c, lang)} {isSelected && <CheckCircle size={16} className="text-blue-600" />}
+                                     </button>
+                                   );
+                                 })}
                               </div>
                            </div>
                          </div>
-                         
-                         <div className="space-y-6">
-                            <div className="border-2 border-dashed border-slate-300 rounded-2xl p-6 flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-blue-50 hover:border-blue-300 transition-all cursor-pointer relative overflow-hidden shadow-sm group min-h-[140px]">
-                                <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={(e) => handleImgUpload(e, 'logo')} />
-                                {project.logo ? <img src={project.logo} className="h-full object-contain group-hover:scale-105 transition-transform" /> : <><Upload size={28} color={BRAND.colors.blue} className="mb-3"/><span className="font-bold text-sm text-slate-600 block">Upload PerfoTec Logo</span></>}
-                            </div>
-                            <div className="border-2 border-dashed border-slate-300 rounded-2xl p-6 flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-blue-50 hover:border-blue-300 transition-all cursor-pointer relative overflow-hidden shadow-sm group min-h-[140px]">
-                                <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={(e) => handleImgUpload(e, 'clientLogo')} />
-                                {project.clientLogo ? <img src={project.clientLogo} className="h-full object-contain group-hover:scale-105 transition-transform" /> : <><Upload size={28} color={BRAND.colors.green} className="mb-3"/><span className="font-bold text-sm text-slate-600 block">Upload Client Logo</span></>}
-                            </div>
-                            <div className="border-2 border-dashed border-slate-300 rounded-2xl p-6 flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-blue-50 hover:border-blue-300 transition-all cursor-pointer relative overflow-hidden shadow-sm group min-h-[180px]">
-                                <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={(e) => handleImgUpload(e, 'coverImage')} />
-                                {project.coverImage ? <img src={project.coverImage} className="w-full h-full object-cover rounded group-hover:scale-105 transition-transform" /> : <><ImageIcon size={28} color={BRAND.colors.green} className="mb-3"/><span className="font-bold text-sm text-slate-600 block">Cover Photo (Page 1)</span></>}
-                            </div>
-                            <div className="border-2 border-dashed border-slate-300 rounded-2xl p-6 flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-blue-50 hover:border-blue-300 transition-all cursor-pointer relative overflow-hidden shadow-sm group min-h-[180px]">
-                                <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={(e) => handleImgUpload(e, 'startImage')} />
-                                {project.startImage ? <img src={project.startImage} className="w-full h-full object-cover rounded group-hover:scale-105 transition-transform" /> : <><ImageIcon size={28} color={BRAND.colors.green} className="mb-3"/><span className="font-bold text-sm text-slate-600 block">Ref Photo (P+0)</span></>}
-                            </div>
+                       </div>
+
+                       {/* B. Challenge & Objectives */}
+                       <div className="mb-10">
+                         <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-3">
+                            <div className="w-8 h-8 rounded-lg bg-orange-100 flex items-center justify-center"><AlertCircle size={16} className="text-orange-700"/></div>
+                            <h3 className="font-extrabold text-lg text-slate-800">{pt.secB}</h3>
+                         </div>
+                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                           <div>
+                             <label className="block mb-3 text-xs font-bold tracking-wide text-orange-700 uppercase flex items-center gap-2"><AlertCircle size={16}/> {pt.currentChallenge}</label>
+                             <textarea rows="4" className={`${inputClass} resize-y focus:ring-orange-500 focus:border-orange-500`} value={project.currentChallenge || ''} onChange={e => handleProjectChange('currentChallenge', e.target.value)} />
+                           </div>
+                           <div>
+                             <label className="block mb-3 text-xs font-bold tracking-wide text-green-700 uppercase flex items-center gap-2"><CheckCircle size={16}/> {pt.trialTarget}</label>
+                             <textarea rows="4" className={`${inputClass} resize-y focus:ring-green-500 focus:border-green-500`} value={project.trialTarget || ''} onChange={e => handleProjectChange('trialTarget', e.target.value)} />
+                           </div>
                          </div>
                        </div>
-                    </div>
 
-                    <div className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200">
-                       <h2 className="font-extrabold text-2xl mb-8 text-slate-800 border-b-2 border-slate-100 pb-4">2. Company & Contact</h2>
-                       <div className="grid grid-cols-4 gap-6">
-                         <div className="col-span-4 sm:col-span-2"><label className={labelClass}>Company Name <span className="text-red-500">*</span></label><input type="text" className={`${inputClass} font-bold`} value={clientInfo.companyName || ''} onChange={e => handleClientChange('companyName', e.target.value)} /></div>
-                         <div className="col-span-4 sm:col-span-2"><label className={labelClass}>PerfoTec Employee</label><input type="text" className={inputClass} value={project.employee || ''} onChange={e => handleProjectChange('employee', e.target.value)} /></div>
-                         <div className="col-span-4 sm:col-span-2"><label className={labelClass}>Employee Email</label><input type="email" className={inputClass} value={project.employeeEmail || ''} onChange={e => handleProjectChange('employeeEmail', e.target.value)} /></div>
-                         <div className="col-span-4 sm:col-span-2"><label className={labelClass}>Employee Phone</label><input type="text" className={inputClass} value={project.employeePhone || ''} onChange={e => handleProjectChange('employeePhone', e.target.value)} /></div>
-                         
-                         <div className="col-span-4 sm:col-span-3 mt-4"><label className={labelClass}>Street</label><input type="text" className={inputClass} value={clientInfo.street || ''} onChange={e => handleClientChange('street', e.target.value)} /></div>
-                         <div className="col-span-4 sm:col-span-1 mt-4"><label className={labelClass}>House No.</label><input type="text" className={inputClass} value={clientInfo.houseNumber || ''} onChange={e => handleClientChange('houseNumber', e.target.value)} /></div>
-                         
-                         <div className="col-span-4 sm:col-span-1"><label className={labelClass}>Zip Code</label><input type="text" className={inputClass} value={clientInfo.zipCode || ''} onChange={e => handleClientChange('zipCode', e.target.value)} /></div>
-                         <div className="col-span-4 sm:col-span-1"><label className={labelClass}>City</label><input type="text" className={inputClass} value={clientInfo.city || ''} onChange={e => handleClientChange('city', e.target.value)} /></div>
-                         <div className="col-span-4 sm:col-span-2"><label className={labelClass}>Country</label><input type="text" className={inputClass} value={clientInfo.country || ''} onChange={e => handleClientChange('country', e.target.value)} /></div>
-
-                         <div className="col-span-4 sm:col-span-1 mt-4"><label className={labelClass}>Contact Person <span className="text-red-500">*</span></label><input type="text" className={inputClass} value={clientInfo.contactName || ''} onChange={e => handleClientChange('contactName', e.target.value)} /></div>
-                         <div className="col-span-4 sm:col-span-1 mt-4"><label className={labelClass}>Role</label><input type="text" className={inputClass} value={clientInfo.role || ''} onChange={e => handleClientChange('role', e.target.value)} /></div>
-                         <div className="col-span-4 sm:col-span-1 mt-4"><label className={labelClass}>Email <span className="text-red-500">*</span></label><input type="email" className={inputClass} value={clientInfo.email || ''} onChange={e => handleClientChange('email', e.target.value)} /></div>
-                         <div className="col-span-4 sm:col-span-1 mt-4"><label className={labelClass}>Phone</label><input type="text" className={inputClass} value={clientInfo.phone || ''} onChange={e => handleClientChange('phone', e.target.value)} /></div>
-                       </div>
-                    </div>
-
-                    <div className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200">
-                       <h2 className="font-extrabold text-2xl mb-8 text-slate-800 border-b-2 border-slate-100 pb-4">3. Goals & Challenges</h2>
-                       <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                         <div>
-                           <label className="block mb-3 text-xs font-bold tracking-wide text-orange-700 uppercase flex items-center gap-2"><AlertCircle size={16}/> Current Challenge</label>
-                           <textarea rows="4" className={`${inputClass} resize-y focus:ring-orange-500 focus:border-orange-500`} value={project.currentChallenge || ''} onChange={e => handleProjectChange('currentChallenge', e.target.value)} />
+                       {/* C. Current Supply Chain */}
+                       <div>
+                         <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-3">
+                            <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center"><Truck size={16} className="text-indigo-700"/></div>
+                            <h3 className="font-extrabold text-lg text-slate-800">{pt.secC}</h3>
                          </div>
-                         <div>
-                           <label className="block mb-3 text-xs font-bold tracking-wide text-green-700 uppercase flex items-center gap-2"><CheckCircle size={16}/> Trial Target / Goal</label>
-                           <textarea rows="4" className={`${inputClass} resize-y focus:ring-green-500 focus:border-green-500`} value={project.trialTarget || ''} onChange={e => handleProjectChange('trialTarget', e.target.value)} />
+
+                         <div className="mb-8 bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100">
+                           <label className="block mb-3 text-xs font-bold tracking-wide text-indigo-900 uppercase">{pt.transportMode} <span className="text-red-500">*</span></label>
+                           <div className="flex flex-wrap gap-4">
+                             {TRANSPORT_MODES.map(mode => {
+                               const modeDisplay = getI18nLabel(TRANSPORT_MODES_I18N, mode, lang);
+                               return (
+                                   <button key={mode} onClick={() => handleTransportModeToggle(mode)}
+                                     className={`px-5 py-3 rounded-xl text-sm font-bold transition-all border shadow-sm flex items-center gap-2 ${project.transportMode === mode || project.transportModes?.includes(mode) ? 'bg-indigo-600 text-white border-indigo-700 ring-4 ring-indigo-600/20 transform scale-[1.02]' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}>
+                                     {modeDisplay} {(project.transportMode === mode || project.transportModes?.includes(mode)) && <CheckCircle size={16} className="text-white"/>}
+                                   </button>
+                               );
+                             })}
+                           </div>
                          </div>
-                       </div>
-                    </div>
 
-                    <div className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200">
-                      <h2 className="font-extrabold text-2xl mb-8 text-slate-800 border-b-2 border-slate-100 pb-4 flex items-center gap-3"><Truck size={28} className="text-indigo-600"/> 4. Product Supply Chain</h2>
-                      
-                      <div className="mb-8 bg-indigo-50/50 p-6 rounded-2xl border border-indigo-100">
-                        <label className="block mb-3 text-xs font-bold tracking-wide text-indigo-900 uppercase">Transport Mode <span className="text-red-500">*</span></label>
-                        <div className="flex flex-wrap gap-4">
-                          {TRANSPORT_MODES.map(mode => {
-                            let modeDisplay = mode;
-                            if(mode === 'Air Freight') modeDisplay = 'Air Freight';
-                            if(mode === 'Sea Freight') modeDisplay = 'Sea Freight';
-                            if(mode === 'Road Transport') modeDisplay = 'Transport by road';
-                            if(mode === 'Storage') modeDisplay = 'Storage';
-
-                            return (
-                                <button 
-                                key={mode} 
-                                onClick={() => handleTransportModeToggle(mode)}
-                                className={`px-5 py-3 rounded-xl text-sm font-bold transition-all border shadow-sm flex items-center gap-2 ${project.transportMode === mode || project.transportModes?.includes(mode) ? 'bg-indigo-600 text-white border-indigo-700 ring-4 ring-indigo-600/20 transform scale-[1.02]' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}
-                                >
-                                {modeDisplay} {(project.transportMode === mode || project.transportModes?.includes(mode)) && <CheckCircle size={16} className="text-white"/>}
-                                </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      <div className="space-y-3">
-                        <label className="block mb-2 text-xs font-bold tracking-wide text-slate-500 uppercase">Supply Chain Flow</label>
-                        
-                        {/* Desktop Header - CSS GRID */}
-                        <div className="hidden lg:grid grid-cols-[80px_1fr_150px_150px_130px_40px] items-center gap-4 px-4 text-xs font-bold text-slate-500 uppercase tracking-widest">
-                           <div>Step</div>
-                           <div>Phase (Activity) <span className="text-red-500">*</span></div>
-                           <div className="text-center">Temp (°C) <span className="text-red-500">*</span></div>
-                           <div className="text-center">Time (Days) <span className="text-red-500">*</span></div>
-                           <div>Action</div>
-                           <div></div>
-                        </div>
-
-                        {supplyChain.map((step, idx) => (
-                           <div key={idx} className="grid grid-cols-1 lg:grid-cols-[80px_1fr_150px_150px_130px_40px] items-start lg:items-center gap-4 bg-white hover:bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-sm transition-all group">
-                              
-                              {/* Step Controls */}
-                              <div className="flex items-center gap-2 justify-between lg:justify-start">
-                                 <div className="flex lg:flex-col gap-1">
-                                    <button onClick={() => moveChainStep(idx, 'up')} disabled={idx === 0} className="p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700 rounded disabled:opacity-30 transition-colors"><ChevronUp size={16}/></button>
-                                    <button onClick={() => moveChainStep(idx, 'down')} disabled={idx === supplyChain.length - 1} className="p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700 rounded disabled:opacity-30 transition-colors"><ChevronDown size={16}/></button>
+                         <div className="space-y-3">
+                           <label className="block mb-2 text-xs font-bold tracking-wide text-slate-500 uppercase">{pt.supplyChainFlow}</label>
+                           <div className="hidden lg:grid grid-cols-[80px_1fr_150px_150px_130px_40px] items-center gap-4 px-4 text-xs font-bold text-slate-500 uppercase tracking-widest">
+                              <div>{pt.step}</div>
+                              <div>{pt.phase} <span className="text-red-500">*</span></div>
+                              <div className="text-center">{pt.temp} <span className="text-red-500">*</span></div>
+                              <div className="text-center">{pt.days} <span className="text-red-500">*</span></div>
+                              <div>{pt.action}</div>
+                              <div></div>
+                           </div>
+                           {supplyChain.map((step, idx) => (
+                              <div key={idx} className="grid grid-cols-1 lg:grid-cols-[80px_1fr_150px_150px_130px_40px] items-start lg:items-center gap-4 bg-white hover:bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-sm transition-all group">
+                                 <div className="flex items-center gap-2 justify-between lg:justify-start">
+                                    <div className="flex lg:flex-col gap-1">
+                                       <button onClick={() => moveChainStep(idx, 'up')} disabled={idx === 0} className="p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700 rounded disabled:opacity-30 transition-colors"><ChevronUp size={16}/></button>
+                                       <button onClick={() => moveChainStep(idx, 'down')} disabled={idx === supplyChain.length - 1} className="p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-700 rounded disabled:opacity-30 transition-colors"><ChevronDown size={16}/></button>
+                                    </div>
+                                    <div className="w-8 h-8 bg-indigo-100 text-indigo-700 rounded-full flex items-center justify-center font-bold text-sm shadow-sm">{idx + 1}</div>
+                                    <button onClick={() => removeChainStep(idx)} className="lg:hidden p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={18}/></button>
                                  </div>
-                                 <div className="w-8 h-8 bg-indigo-100 text-indigo-700 rounded-full flex items-center justify-center font-bold text-sm shadow-sm">
-                                    {idx + 1}
+                                 <div className="w-full">
+                                    <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">{pt.phase} <span className="text-red-500">*</span></label>
+                                    {idx === 2 ? (
+                                       <select className={`${inputClass} py-2.5 font-bold w-full`} value={step.stage || ''} onChange={e => updateChainStep(idx, 'stage', e.target.value)}>
+                                         <option>{pt.transportRoad}</option><option>{pt.transportSea}</option><option>{pt.transportAir}</option><option>{pt.transportStorage}</option>
+                                       </select>
+                                     ) : (
+                                       <input type="text" className={`${inputClass} py-2.5 font-bold w-full`} value={step.stage || ''} placeholder={pt.stagePlaceholder} onChange={e => updateChainStep(idx, 'stage', e.target.value)} />
+                                     )}
                                  </div>
-                                 <button onClick={() => removeChainStep(idx)} className="lg:hidden p-2 text-red-500 hover:bg-red-50 rounded-lg"><Trash2 size={18}/></button>
-                              </div>
-
-                              {/* Stage Input */}
-                              <div className="w-full">
-                                 <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">Phase (Activity) <span className="text-red-500">*</span></label>
-                                 {idx === 2 ? (
-                                    <select className={`${inputClass} py-2.5 font-bold w-full`} value={step.stage || ''} onChange={e => updateChainStep(idx, 'stage', e.target.value)}>
-                                      <option>Transport by road</option><option>Seafreight</option><option>Airfreight</option><option>Storage</option>
+                                 <div className="w-full">
+                                    <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">{pt.temp} <span className="text-red-500">*</span></label>
+                                    <div className="flex items-center gap-1.5">
+                                       <input type="number" className={`${narrowInputClass} w-full`} value={step.tempStart || ''} placeholder={pt.min} onChange={e => updateChainStep(idx, 'tempStart', e.target.value)} />
+                                       <span className="text-slate-400 font-bold shrink-0">-</span>
+                                       <input type="number" className={`${narrowInputClass} w-full`} value={step.tempEnd || ''} placeholder={pt.max} onChange={e => updateChainStep(idx, 'tempEnd', e.target.value)} />
+                                    </div>
+                                 </div>
+                                 <div className="w-full">
+                                    <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">{pt.days} <span className="text-red-500">*</span></label>
+                                    <div className="flex items-center gap-1.5">
+                                       <input type="number" className={`${narrowInputClass} w-full`} value={step.daysStart || ''} placeholder={pt.min} onChange={e => updateChainStep(idx, 'daysStart', e.target.value)} />
+                                       <span className="text-slate-400 font-bold shrink-0">-</span>
+                                       <input type="number" className={`${narrowInputClass} w-full`} value={step.daysEnd || ''} placeholder={pt.max} onChange={e => updateChainStep(idx, 'daysEnd', e.target.value)} />
+                                    </div>
+                                 </div>
+                                 <div className="w-full">
+                                    <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">{pt.action}</label>
+                                    <select className={`${inputClass} py-2.5 font-bold px-2 w-full text-slate-700`} value={step.action || 'none'} onChange={e => updateChainStep(idx, 'action', e.target.value)}>
+                                      <option value="none">{pt.actNone}</option>
+                                      <option value="pack" className="text-green-700">{pt.actPack}</option>
+                                      <option value="unpack" className="text-red-700">{pt.actUnpack}</option>
                                     </select>
-                                  ) : (
-                                    <input type="text" className={`${inputClass} py-2.5 font-bold w-full`} value={step.stage || ''} placeholder="e.g. Farm, Transport..." onChange={e => updateChainStep(idx, 'stage', e.target.value)} />
-                                  )}
-                              </div>
-
-                              {/* Temp Block */}
-                              <div className="w-full">
-                                 <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">Temp (°C) <span className="text-red-500">*</span></label>
-                                 <div className="flex items-center gap-1.5">
-                                    <input type="number" className={`${narrowInputClass} w-full`} value={step.tempStart || ''} placeholder="Min" onChange={e => updateChainStep(idx, 'tempStart', e.target.value)} />
-                                    <span className="text-slate-400 font-bold shrink-0">-</span>
-                                    <input type="number" className={`${narrowInputClass} w-full`} value={step.tempEnd || ''} placeholder="Max" onChange={e => updateChainStep(idx, 'tempEnd', e.target.value)} />
+                                 </div>
+                                 <div className="hidden lg:flex justify-center w-full">
+                                    <button onClick={() => removeChainStep(idx)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title={pt.removeStep}>
+                                      <Trash2 size={20}/>
+                                    </button>
                                  </div>
                               </div>
-
-                              {/* Days Block */}
-                              <div className="w-full">
-                                 <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">Time (Days) <span className="text-red-500">*</span></label>
-                                 <div className="flex items-center gap-1.5">
-                                    <input type="number" className={`${narrowInputClass} w-full`} value={step.daysStart || ''} placeholder="Min" onChange={e => updateChainStep(idx, 'daysStart', e.target.value)} />
-                                    <span className="text-slate-400 font-bold shrink-0">-</span>
-                                    <input type="number" className={`${narrowInputClass} w-full`} value={step.daysEnd || ''} placeholder="Max" onChange={e => updateChainStep(idx, 'daysEnd', e.target.value)} />
-                                 </div>
-                              </div>
-
-                              {/* Action Block */}
-                              <div className="w-full">
-                                 <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">Action</label>
-                                 <select className={`${inputClass} py-2.5 font-bold px-2 w-full text-slate-700`} value={step.action || 'none'} onChange={e => updateChainStep(idx, 'action', e.target.value)}>
-                                   <option value="none">- None -</option>
-                                   <option value="pack" className="text-green-700">Pack</option>
-                                   <option value="unpack" className="text-red-700">Unpack</option>
-                                 </select>
-                              </div>
-
-                              {/* Desktop Delete */}
-                              <div className="hidden lg:flex justify-center w-full">
-                                 <button onClick={() => removeChainStep(idx)} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Remove Step">
-                                   <Trash2 size={20}/>
-                                 </button>
-                              </div>
-                           </div>
-                        ))}
-                        
-                        <button onClick={addChainStep} className="w-full py-4 mt-4 border-2 border-dashed border-indigo-200 bg-indigo-50/50 hover:bg-indigo-100 text-indigo-700 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-sm">
-                          <div className="bg-white p-1.5 rounded-lg shadow-sm"><Plus size={16} /></div> 
-                          Add Extra Step
-                        </button>
-                      </div>
-                    </div>
+                           ))}
+                           <button onClick={addChainStep} className="w-full py-4 mt-4 border-2 border-dashed border-indigo-200 bg-indigo-50/50 hover:bg-indigo-100 text-indigo-700 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all shadow-sm">
+                             <div className="bg-white p-1.5 rounded-lg shadow-sm"><Plus size={16} /></div>
+                             {pt.addStep}
+                           </button>
+                         </div>
+                       </div>
+                    </section>
 
                   </div>
                 )}
 
                 {/* 2. GROUPS (Inputs) - FULLY REDESIGNED LAYOUT */}
                 {activeTab === 'groups' && (
-                  <div className="col-span-1 md:col-span-12 flex flex-col gap-8">
+                  <div className="col-span-1 md:col-span-12 flex flex-col gap-8 max-w-5xl mx-auto w-full">
                     
                     {/* TOP SECTION: GLOBAL SETTINGS */}
                     <div className="flex flex-col gap-6">
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                            
-                           {/* Criteria */}
+                           {/* Criteria — click-to-toggle grid (mirrors Intake) */}
                            <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col h-full">
-                              <label className="block mb-4 font-extrabold text-slate-800 text-lg border-b border-slate-100 pb-3">Global Assessment Criteria</label>
-                              <div className="flex flex-wrap gap-2 mb-6 flex-1">
-                                {(!project.criteria || project.criteria.length === 0) && <span className="text-sm text-gray-400 italic">No criteria selected.</span>}
-                                {(project.criteria || []).map(c => (
-                                  <span key={c} className="bg-slate-50 border border-slate-300 text-slate-700 text-sm px-3 py-1.5 rounded-lg flex items-center gap-2 whitespace-nowrap shadow-sm font-medium">{c} <button onClick={() => toggleCriteria(c)} className="text-red-400 hover:text-red-600 font-bold ml-1">×</button></span>
-                                ))}
-                              </div>
-                              <div className="flex flex-col sm:flex-row gap-3 mt-auto">
-                                <select className={`${inputClass} flex-1`} value={newCriteria || ''} onChange={e => setNewCriteria(e.target.value)}>
-                                   <option value="">Select standard criterion...</option>
-                                   {DEFAULT_CRITERIA.filter(c => !(project.criteria || []).includes(c)).map(c => <option key={c}>{c}</option>)}
-                                </select>
-                                <button onClick={addNewCriteria} className="bg-slate-800 text-white px-5 py-3 rounded-lg hover:bg-slate-900 flex justify-center items-center font-bold shadow-sm transition-colors shrink-0 gap-2 whitespace-nowrap"><Plus size={18}/> Add Criterion</button>
+                              <label className="block mb-2 font-extrabold text-slate-800 text-lg border-b border-slate-100 pb-3">{pt.globalCriteria}</label>
+                              <p className="text-sm text-slate-500 mb-4">Click a criterion to toggle it on or off.</p>
+                              <div className="flex flex-wrap gap-3">
+                                {DEFAULT_CRITERIA.map(c => {
+                                  const isSelected = (project.criteria || []).includes(c);
+                                  return (
+                                    <button
+                                      key={c}
+                                      type="button"
+                                      onClick={() => toggleCriteria(c)}
+                                      className={`px-4 py-2.5 rounded-xl text-sm font-bold transition-all border shadow-sm flex items-center gap-2 ${isSelected ? 'bg-blue-50 text-blue-800 border-blue-400 ring-2 ring-blue-500/20 transform scale-[1.02]' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300'}`}
+                                    >
+                                      {getI18nLabel(DEFAULT_CRITERIA_I18N, c, lang)} {isSelected && <CheckCircle size={16} className="text-blue-600" />}
+                                    </button>
+                                  );
+                                })}
                               </div>
                            </div>
 
                            {/* Evaluation Days */}
                            <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col h-full">
-                              <label className="block mb-2 font-extrabold text-slate-800 text-lg">Global Evaluation Days</label>
-                              <p className="text-sm text-slate-500 mb-6">Specify the days on which packs are opened and evaluated.</p>
+                              <label className="block mb-2 font-extrabold text-slate-800 text-lg">{pt.globalEvalDays}</label>
+                              <p className="text-sm text-slate-500 mb-6">{pt.evalDaysDesc}</p>
                               
                               <div className="flex flex-wrap gap-3 mb-6 flex-1 items-start">
                                   {(groups[0]?.measurements || []).map((m, i) => (
                                       <div key={i} className="flex gap-2 items-center bg-slate-50 p-2 rounded-xl border border-slate-200 shadow-sm">
-                                          <span className="text-sm font-extrabold text-slate-600 ml-2">Day</span>
+                                          <span className="text-sm font-extrabold text-slate-600 ml-2">{pt.day}</span>
                                           <input type="number" className="w-16 bg-white border border-slate-300 text-blue-700 text-center text-lg font-bold rounded-lg py-1 focus:ring-2 focus:ring-blue-500 outline-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" value={m.day} onChange={e => updateEvaluationDay(groups[0].id, m.day, e.target.value)} />
                                           {i > 0 && <button onClick={() => removeEvaluationDay(groups[0].id, m.day)} className="text-red-400 hover:text-red-600 p-1.5 bg-white rounded-lg border shadow-sm"><X size={16}/></button>}
                                       </div>
                                   ))}
                               </div>
                               <div className="mt-auto">
-                                  <button onClick={() => addEvaluationDay(groups[0].id)} className="w-full sm:w-auto text-sm bg-blue-50 text-blue-700 px-5 py-3 rounded-xl font-bold border border-blue-200 hover:bg-blue-100 transition-colors inline-flex justify-center items-center gap-2"><Plus size={18}/> Add Evaluation Day</button>
+                                  <button onClick={() => addEvaluationDay(groups[0].id)} className="w-full sm:w-auto text-sm bg-blue-50 text-blue-700 px-5 py-3 rounded-xl font-bold border border-blue-200 hover:bg-blue-100 transition-colors inline-flex justify-center items-center gap-2"><Plus size={18}/> {pt.addEvalDay}</button>
                               </div>
                            </div>
                         </div>
 
                         {/* PerfoTec Technology */}
                         <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col h-full">
-                            <label className="block mb-4 font-extrabold text-slate-800 text-lg border-b border-slate-100 pb-3">PerfoTec Technology</label>
+                            <label className="block mb-4 font-extrabold text-slate-800 text-lg border-b border-slate-100 pb-3">{pt.perfoTecTech}</label>
                             <div className="flex flex-wrap gap-3">
                                 {PERFOTEC_TECHNOLOGIES.map(tech => {
                                     const isSelected = project.technologies?.includes(tech);
@@ -1503,7 +2145,7 @@
                                             onClick={() => toggleTechnology(tech)}
                                             className={`px-5 py-3 rounded-xl text-sm font-bold transition-all border shadow-sm flex items-center gap-2 ${isSelected ? 'bg-blue-600 text-white border-blue-700 ring-4 ring-blue-600/20 transform scale-[1.02]' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}
                                         >
-                                            {tech} {isSelected && <CheckCircle size={16} className="text-white" />}
+                                            {getI18nLabel(PERFOTEC_TECHNOLOGIES_I18N, tech, lang)} {isSelected && <CheckCircle size={16} className="text-white" />}
                                         </button>
                                     );
                                 })}
@@ -1518,7 +2160,7 @@
                        <div className="lg:col-span-3 space-y-4">
                            <button onClick={addNewVariant} className="w-full py-4 rounded-2xl font-extrabold border-2 border-dashed border-green-300 hover:border-green-500 bg-green-50/50 hover:bg-green-50 text-green-700 transition flex items-center justify-center gap-2 shadow-sm mb-2">
                               <div className="bg-white p-1 rounded-md shadow-sm"><Plus size={18}/></div>
-                              Add Variant
+                              {pt.addVariant}
                            </button>
 
                            <div className="space-y-3">
@@ -1526,7 +2168,7 @@
                                <div key={g.id} onClick={() => setActiveGroupId(g.id)} className={`p-4 rounded-xl border-2 cursor-pointer transition-all relative group shadow-sm ${activeGroupId === g.id ? 'bg-white border-green-500 transform scale-[1.02]' : 'bg-slate-50 border-slate-200 hover:bg-white hover:border-slate-300'}`}>
                                  <div className="flex items-center gap-3 font-extrabold text-base text-slate-800">
                                    <div className="w-4 h-4 rounded-full shrink-0 shadow-sm" style={{ backgroundColor: CHART_COLORS[idx % CHART_COLORS.length].stroke }}></div>
-                                   <span className="truncate">{g.name || 'Variant'}</span>
+                                   <span className="truncate">{g.name || pt.variant}</span>
                                  </div>
                                  <div className="absolute top-2 right-2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <div className="flex gap-1">
@@ -1534,8 +2176,8 @@
                                       <button onClick={(e) => { e.stopPropagation(); moveGroup(g.id, 'down'); }} className="p-1.5 bg-white border border-slate-200 text-slate-500 rounded-lg hover:bg-slate-100 shadow-sm"><ChevronDown size={16}/></button>
                                     </div>
                                     <div className="flex gap-1 mt-1">
-                                      <button onClick={(e) => { e.stopPropagation(); duplicateGroup(g.id); }} className="p-1.5 bg-blue-50 text-blue-600 border border-blue-100 rounded-lg hover:bg-blue-100 shadow-sm" title="Duplicate"><Copy size={16} /></button>
-                                      <button onClick={(e) => { e.stopPropagation(); removeGroup(g.id); }} className="p-1.5 bg-red-50 text-red-600 border border-red-100 rounded-lg hover:bg-red-100 shadow-sm" title="Remove"><Trash2 size={16} /></button>
+                                      <button onClick={(e) => { e.stopPropagation(); duplicateGroup(g.id); }} className="p-1.5 bg-blue-50 text-blue-600 border border-blue-100 rounded-lg hover:bg-blue-100 shadow-sm" title={pt.duplicate}><Copy size={16} /></button>
+                                      <button onClick={(e) => { e.stopPropagation(); removeGroup(g.id); }} className="p-1.5 bg-red-50 text-red-600 border border-red-100 rounded-lg hover:bg-red-100 shadow-sm" title={pt.remove}><Trash2 size={16} /></button>
                                     </div>
                                  </div>
                                </div>
@@ -1549,40 +2191,40 @@
                            {groups.find(g => g.id === activeGroupId) && (
                              <>
                                <div>
-                                 <h3 className="font-extrabold text-2xl mb-8 text-slate-800 border-b-2 border-slate-100 pb-4">Variant Configuration</h3>
+                                 <h3 className="font-extrabold text-2xl mb-8 text-slate-800 border-b-2 border-slate-100 pb-4">{pt.variantConfig}</h3>
                                  
                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
-                                   <div><label className={labelClass}>Variant Name</label><input type="text" className={`${inputClass} text-lg font-bold`} value={groups.find(g => g.id === activeGroupId).name || ''} onChange={(e) => handleGroupChange(activeGroupId, 'name', null, e.target.value)} /></div>
-                                   <div><label className={labelClass}>Packaging Type</label><select className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.packaging || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'packaging', e.target.value)}>{PACKAGING_TYPES.map(t => <option key={t}>{t}</option>)}</select></div>
+                                   <div><label className={labelClass}>{pt.variantName}</label><input type="text" className={`${inputClass} text-lg font-bold`} value={groups.find(g => g.id === activeGroupId).name || ''} onChange={(e) => handleGroupChange(activeGroupId, 'name', null, e.target.value)} /></div>
+                                   <div><label className={labelClass}>{pt.packagingType}</label><select className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.packaging || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'packaging', e.target.value)}>{PACKAGING_TYPES.map(type => <option key={type} value={type}>{getI18nLabel(PACKAGING_TYPES_I18N, type, lang)}</option>)}</select></div>
                                  </div>
                                  
                                  <div className="bg-gradient-to-br from-slate-50 to-slate-100 p-8 rounded-2xl border border-slate-200 shadow-sm mb-10">
-                                   <label className="block mb-6 text-sm font-extrabold tracking-widest text-blue-900 uppercase border-b border-blue-200 pb-2">Packaging Specs & Samples</label>
+                                   <label className="block mb-6 text-sm font-extrabold tracking-widest text-blue-900 uppercase border-b border-blue-200 pb-2">{pt.packagingSpecs}</label>
                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-6">
-                                      <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">Length (mm)</label><input type="number" className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.length || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'length', e.target.value)} /></div>
-                                      <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">Width (mm)</label><input type="number" className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.width || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'width', e.target.value)} /></div>
-                                      <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">Height (mm)</label><input type="number" className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.height || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'height', e.target.value)} /></div>
+                                      <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">{pt.lengthMm}</label><input type="number" className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.length || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'length', e.target.value)} /></div>
+                                      <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">{pt.widthMm}</label><input type="number" className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.width || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'width', e.target.value)} /></div>
+                                      <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">{pt.heightMm}</label><input type="number" className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.height || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'height', e.target.value)} /></div>
                                    </div>
                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                                     <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">Material</label><input className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.material || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'material', e.target.value)} /></div>
-                                     <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">Transmission Value</label><input type="text" className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.holes || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'holes', e.target.value)} /></div>
-                                     <div><label className="text-xs text-blue-700 font-extrabold uppercase tracking-wider mb-2 block">Samples / Measurement</label><input type="number" min="1" className={`${inputClass} bg-white border-blue-300 ring-2 ring-blue-50 font-extrabold text-blue-900 text-lg`} value={groups.find(g => g.id === activeGroupId).specs.sampleCount || 3} onChange={(e) => handleSampleCountChange(activeGroupId, parseInt(e.target.value))} /></div>
+                                     <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">{pt.material}</label><input className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.material || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'material', e.target.value)} /></div>
+                                     <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">{pt.transmissionValue}</label><input type="text" className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.holes || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'holes', e.target.value)} /></div>
+                                     <div><label className="text-xs text-blue-700 font-extrabold uppercase tracking-wider mb-2 block">{pt.samplesPerMeasurement}</label><input type="number" min="1" className={`${inputClass} bg-white border-blue-300 ring-2 ring-blue-50 font-extrabold text-blue-900 text-lg`} value={groups.find(g => g.id === activeGroupId).specs.sampleCount || 3} onChange={(e) => handleSampleCountChange(activeGroupId, parseInt(e.target.value))} /></div>
                                    </div>
                                  </div>
                                  
                                  <div className="bg-slate-50 p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm mb-10">
                                     <div className="flex flex-col mb-6">
-                                      <h4 className="font-extrabold text-xl text-slate-800 mb-1">Timeline & Events</h4>
-                                      <p className="text-sm text-slate-500">Select the specific sample numbers (e.g., 1, 2, 3) representing the physical packages to be processed for each action.</p>
+                                      <h4 className="font-extrabold text-xl text-slate-800 mb-1">{pt.timelineEvents}</h4>
+                                      <p className="text-sm text-slate-500">{pt.timelineDesc}</p>
                                     </div>
                                     <div className="overflow-x-auto rounded-xl border border-slate-200">
                                       <table className="w-full text-sm bg-white">
                                         <thead className="bg-slate-100 border-b border-slate-200">
                                           <tr className="text-left text-slate-600 uppercase tracking-wider text-[10px] font-bold">
-                                            <th className="p-4 w-20 text-center">Day</th>
-                                            <th className="p-4 border-l border-slate-200">Measure Gas/Wt.</th>
-                                            <th className="p-4 border-l border-slate-200 text-orange-700">Open Pack</th>
-                                            <th className="p-4 border-l border-slate-200 text-green-700">Evaluate Quality</th>
+                                            <th className="p-4 w-20 text-center">{pt.thDay}</th>
+                                            <th className="p-4 border-l border-slate-200">{pt.thMeasure}</th>
+                                            <th className="p-4 border-l border-slate-200 text-orange-700">{pt.thOpen}</th>
+                                            <th className="p-4 border-l border-slate-200 text-green-700">{pt.thEvaluate}</th>
                                           </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
@@ -1615,7 +2257,7 @@
                                     </div>
                                     <div className="mt-4 text-sm font-medium text-slate-500 bg-white p-4 rounded-lg border border-slate-100 inline-flex items-start gap-3">
                                        <AlertCircle size={18} className="text-blue-400 shrink-0 mt-0.5" />
-                                       <span>Once a sample is marked as 'Open' on a previous day, it can no longer be selected for gas/weight measurements (the button will be greyed out).</span>
+                                       <span>{pt.timelineNote}</span>
                                     </div>
                                  </div>
 
@@ -1625,12 +2267,12 @@
                                           <LineChart size={28} className="text-blue-500" />
                                        </div>
                                        <div>
-                                         <div className="font-extrabold text-lg text-blue-950 mb-1">Predicted Gas Graph</div>
-                                         <div className="text-sm font-medium text-blue-700">Upload a screenshot of the prediction for this specific variant</div>
+                                         <div className="font-extrabold text-lg text-blue-950 mb-1">{pt.predictedGraph}</div>
+                                         <div className="text-sm font-medium text-blue-700">{pt.predictedGraphDesc}</div>
                                        </div>
                                     </div>
                                     <label className="cursor-pointer bg-white border border-blue-200 text-blue-700 px-6 py-3 rounded-xl font-bold text-sm hover:bg-blue-100 hover:border-blue-300 transition-all shrink-0 whitespace-nowrap shadow-sm">
-                                       Upload Image
+                                       {pt.uploadImage}
                                        <input 
                                          type="file" 
                                          accept="image/*" 
@@ -1665,42 +2307,45 @@
 
                 {/* 3. PROPOSAL (Texts) */}
                 {activeTab === 'proposal' && (
-                  <div className="col-span-12 space-y-8">
-                    <div className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-10">
-                       <div className="md:col-span-2 border-b-2 border-slate-100 pb-4">
-                          <h2 className="font-extrabold text-2xl text-slate-800 flex items-center gap-3">
-                             <FileText className="text-blue-600" size={28}/>
-                             Proposal & Evaluation Text
-                          </h2>
+                  <div className="col-span-12 space-y-8 max-w-5xl mx-auto w-full">
+                    <section className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden grid grid-cols-1 md:grid-cols-2 gap-10">
+                       <div className="absolute top-0 left-0 w-full h-1" style={{ backgroundColor: BRAND.colors.blue }}></div>
+                       <div className="md:col-span-2 border-b-2 border-slate-100 pb-6 mb-2">
+                          <div className="flex items-center gap-4">
+                            <div className="p-3 bg-blue-50 rounded-xl">
+                              <FileText size={28} color={BRAND.colors.blue}/>
+                            </div>
+                            <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">{pt.proposalEvalText}</h2>
+                          </div>
                        </div>
                        
                        <div className="md:col-span-2">
-                          <label className={`${labelClass} text-sm mb-3`}>Introduction / Current Challenge</label>
+                          <label className={`${labelClass} text-sm mb-3`}>{pt.introLabel}</label>
                           <RichTextEditor 
                              value={proposal.intro} 
                              onChange={(val) => setProposal(prev => ({...prev, intro: val}))} 
-                             placeholder="Describe the challenge and why we are conducting this trial..."
+                             placeholder={pt.introPlaceholder}
                           />
                        </div>
                        
                        <div className="md:col-span-2">
-                          <label className={`${labelClass} text-sm mb-3`}>Goals / Expected Outcomes</label>
+                          <label className={`${labelClass} text-sm mb-3`}>{pt.goalsLabel}</label>
                           <RichTextEditor 
                              value={proposal.expectedOutcomes} 
                              onChange={(val) => setProposal(prev => ({...prev, expectedOutcomes: val}))} 
-                             placeholder="What do we hope to achieve with this trial?"
+                             placeholder={pt.goalsPlaceholder}
                           />
                        </div>
                        
                        <div className="md:col-span-2">
-                          <label className={`${labelClass} text-sm mb-3`}>Requirements & Agreements</label>
+                          <label className={`${labelClass} text-sm mb-3`}>{pt.requirementsLabel}</label>
                           <RichTextEditor 
                              value={proposal.requirements} 
                              onChange={(val) => setProposal(prev => ({...prev, requirements: val}))} 
-                             placeholder="What must the client provide? What agreements have been made?"
+                             placeholder={pt.requirementsPlaceholder}
                           />
                        </div>
-                    </div>
+                    </section>
                   </div>
                 )}
 
