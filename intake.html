@@ -759,7 +759,24 @@
           const handleImportJSON = (e) => {
             const file = e.target.files[0];
             if (!file) return;
-            
+
+            // Normalise a single contact entry so the multi-contact UI can
+            // render it regardless of the field-name shape the JSON used.
+            // Accepts both the canonical {name, role, email, phoneDirect,
+            // phoneWork} shape and legacy aliases (`contactName`, `phone`).
+            const normalizeContact = (c, idx) => {
+              const raw = c && typeof c === 'object' ? c : {};
+              const phoneFallback = raw.phone || '';
+              return {
+                id: raw.id != null ? raw.id : (Date.now() + idx),
+                name:        (raw.name != null ? raw.name : (raw.contactName || '')) + '',
+                role:        (raw.role || '') + '',
+                email:       (raw.email || '') + '',
+                phoneDirect: (raw.phoneDirect || phoneFallback || '') + '',
+                phoneWork:   (raw.phoneWork || '') + ''
+              };
+            };
+
             const processData = (raw) => {
                 // Run through the shared schema migration so legacy exports
                 // (flat contact fields, targetGoal, missing schemaVersion) are
@@ -767,13 +784,27 @@
                 const data = globalConfig.migrateSchema ? globalConfig.migrateSchema(raw) : raw;
 
                 if(data.isPerfoTecIntake) {
-                   const loadedClient = { ...data.client };
+                   const loadedClient = { ...(data.client || {}) };
                    // Strip any stale flat fields so the UI binds only to contacts[]
                    delete loadedClient.contactName; delete loadedClient.role;
                    delete loadedClient.email; delete loadedClient.phone;
                    delete loadedClient.phoneDirect; delete loadedClient.phoneWork;
 
-                   setClientInfo(loadedClient);
+                   // Normalise each contact and guarantee at least one entry so
+                   // the multi-contact UI always renders something. Empty
+                   // exports (e.g. when buildContactsArray returned []) get a
+                   // fresh seed card here.
+                   const rawContacts = Array.isArray(loadedClient.contacts) ? loadedClient.contacts : [];
+                   const normContacts = rawContacts.map(normalizeContact);
+                   loadedClient.contacts = normContacts.length > 0
+                     ? normContacts
+                     : [{ id: Date.now(), name: '', role: '', email: '', phoneDirect: '', phoneWork: '' }];
+
+                   // Merge into prev state so fields the JSON doesn't carry
+                   // (e.g. an older export missing `addressExtra`) don't blank
+                   // out the UI. Loaded fields still win for everything they
+                   // do contain.
+                   setClientInfo(prev => ({ ...prev, ...loadedClient }));
                    if(data.products && data.products.length > 0) {
                        setProducts(data.products);
                    }
