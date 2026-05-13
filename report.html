@@ -1059,14 +1059,17 @@
                   </div>
 
                   <div className="break-inside-avoid mb-10 mt-12">
-                     <h3 className="font-bold text-xl mb-6 brand-heading text-slate-700">4.{analysis.temperatureImage ? '6' : '5'} Score scale</h3>
-                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-slate-600 bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                        {SCORES.map((s, idx) => (
-                           <div key={s[0]} className="flex items-start gap-3 p-2 hover:bg-slate-50 rounded transition-colors">
-                              <strong className="text-white w-8 h-8 rounded flex items-center justify-center shrink-0 font-extrabold shadow-sm" style={{backgroundColor: BRAND.colors.green}}>{s[0]}</strong> 
-                              <span className="pt-1">{s[1]}</span>
-                           </div>
-                        ))}
+                     <h3 className="font-bold text-xl mb-3 brand-heading text-slate-700">4.{analysis.temperatureImage ? '6' : '5'} Score scale</h3>
+                     <div className="grid grid-cols-2 gap-x-8 gap-y-px text-[11px] text-slate-700 bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm">
+                        {SCORES.map(s => {
+                           const bg = s[0] >= 7 ? '#16a34a' : s[0] >= 5 ? '#f97316' : '#dc2626';
+                           return (
+                             <div key={s[0]} className="flex items-start gap-2 py-[3px]">
+                               <strong className="text-white text-[10px] w-5 h-5 rounded flex items-center justify-center shrink-0 font-extrabold mt-px" style={{backgroundColor: bg}}>{s[0]}</strong>
+                               <span className="leading-snug">{s[1]}</span>
+                             </div>
+                           );
+                        })}
                      </div>
                   </div>
                 </div>
@@ -1940,7 +1943,19 @@
                      logo: d.project.logo || BRAND.logos.default
                    })); 
                    if(d.supplyChain) setSupplyChain(d.supplyChain); 
-                   if(d.groups) setGroups(d.groups); 
+                   if(d.groups) setGroups(d.groups.map(g => ({
+                     ...g,
+                     measurements: (g.measurements || []).map(m => ({
+                       ...m,
+                       // When an `evaluate` array is present (proposal origin), derive
+                       // evaluateQuality from it so the Enable Evaluation checkbox matches
+                       // what was ticked in the Variants & Planning timeline.
+                       // Falls back to the explicit boolean for pure report JSONs.
+                       evaluateQuality: Array.isArray(m.evaluate)
+                         ? m.evaluate.length > 0
+                         : (m.evaluateQuality !== undefined ? m.evaluateQuality : false)
+                     }))
+                   })));
                    if(d.analysis) setAnalysis({ graphNotes: d.analysis.graphNotes||'', conclusion: d.analysis.conclusion||'', variantConclusions: d.analysis.variantConclusions||{}, recommendation: d.analysis.recommendation||'retest', nextSteps: d.analysis.nextSteps||[], temperatureImage: d.analysis.temperatureImage||null });
                 }
             };
