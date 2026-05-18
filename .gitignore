@@ -1,0 +1,3 @@
+# config.js contains the Make.com webhook URL and other private settings.
+# Never commit this file to a public repository.
+config.js
