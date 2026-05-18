@@ -651,7 +651,7 @@
           allPhotos.forEach(p => { if (!photosByCat[p.category]) photosByCat[p.category] = []; photosByCat[p.category].push(p); });
           const catsPresent = ['External Quality', 'Internal Quality', 'Loose Produce', 'Box/Crate', 'Weight measurement', 'Gas measurement', 'Other'].filter(c => photosByCat[c] && photosByCat[c].length > 0);
 
-          const reportTitleClass = "text-3xl font-extrabold uppercase mb-6 brand-heading break-after-avoid";
+          const reportTitleClass = "text-3xl font-extrabold uppercase mb-6 brand-heading";
           const reportTitleStyle = { color: BRAND.colors.green, borderBottom: `3px solid ${BRAND.colors.gray}`, paddingBottom: '0.75rem', marginTop: '2rem' };
 
           const handleWordExport = () => {
@@ -717,10 +717,8 @@
                    </div>
                 </div>
 
-                <div className="page-break"></div>
-
                 {/* TABLE OF CONTENTS */}
-                <div className="flex flex-col pt-12 break-inside-avoid">
+                <div className="page-break flex flex-col pt-12">
                     <h2 className="text-4xl font-extrabold uppercase mb-8 brand-heading" style={{ color: BRAND.colors.green, borderBottom: `3px solid ${BRAND.colors.gray}`, paddingBottom: '1rem' }}>Contents</h2>
                     <ul className="text-xl space-y-4 font-medium text-slate-700">
                         <li className="flex justify-between border-b border-slate-200 pb-2"><span>1. Setting</span></li>
@@ -737,10 +735,8 @@
                     </ul>
                 </div>
 
-                <div className="page-break"></div>
-
                 {/* 1. SETTING */}
-                <div className="pt-4" id="sec-1">
+                <div className="page-break pt-4" id="sec-1">
                   <h2 className={reportTitleClass} style={reportTitleStyle}>1. Setting</h2>
                   <div className="grid grid-cols-[180px_1fr] gap-y-3 text-base text-slate-800 bg-slate-50 p-6 rounded-2xl border border-slate-200">
                      <div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Product :</div> <div className="font-bold">{project.productName || '-'} {project.type ? `(${project.type})` : ''}</div>
@@ -789,10 +785,8 @@
                   </div>
                 </div>
 
-                <div className="page-break"></div>
-
                 {/* 2. SUMMARY AND CONCLUSIONS */}
-                <div className="pt-4" id="sec-2">
+                <div className="page-break pt-4" id="sec-2">
                   <h2 className={reportTitleClass} style={reportTitleStyle}>2. Summary and Conclusions</h2>
                   <div className="text-base leading-relaxed text-justify text-slate-800 mb-8">
                      <h4 className="font-bold mb-3 text-xl" style={{color: BRAND.colors.black}}>Main Conclusion:</h4>
@@ -825,10 +819,8 @@
                   </div>
                 </div>
 
-                <div className="page-break"></div>
-
                 {/* 3. TRIAL SET UP */}
-                <div className="pt-4" id="sec-3">
+                <div className="page-break pt-4" id="sec-3">
                   <h2 className={reportTitleClass} style={reportTitleStyle}>3. Trial set up</h2>
                   <div className="text-base space-y-6 text-slate-800">
                      <div className="break-inside-avoid">
@@ -894,11 +886,9 @@
                   </div>
                 </div>
 
-                <div className="page-break"></div>
-
                 {/* 4. TRIAL RESULTS */}
-                <div className="pt-4" id="sec-4">
-                  <h2 className="text-3xl font-extrabold uppercase mb-6 brand-heading break-after-avoid" style={{ color: BRAND.colors.green, borderBottom: `3px solid ${BRAND.colors.gray}`, paddingBottom: '0.75rem', marginTop: '2rem' }}>4. Trial results</h2>
+                <div className="page-break pt-4" id="sec-4">
+                  <h2 className="text-3xl font-extrabold uppercase mb-6 brand-heading" style={{ color: BRAND.colors.green, borderBottom: `3px solid ${BRAND.colors.gray}`, paddingBottom: '0.75rem', marginTop: '2rem' }}>4. Trial results</h2>
                   
                   {(() => {
                     const mapGroups = groups.filter(g => !g.specs?.atmosphereStrategy || g.specs.atmosphereStrategy === 'MAP');
@@ -1074,11 +1064,9 @@
                   </div>
                 </div>
 
-                <div className="page-break"></div>
-
                 {/* --- PAGE 5: PHOTOS --- */}
-                <div className="pt-4" id="sec-5">
-                  <h2 className="text-3xl font-extrabold uppercase mb-8 print:mb-4 brand-heading break-after-avoid" style={{ color: BRAND.colors.green, borderBottom: `3px solid ${BRAND.colors.gray}`, paddingBottom: '0.75rem', marginTop: '2rem' }}>5. Photos</h2>
+                <div className="page-break pt-4" id="sec-5">
+                  <h2 className="text-3xl font-extrabold uppercase mb-8 print:mb-4 brand-heading" style={{ color: BRAND.colors.green, borderBottom: `3px solid ${BRAND.colors.gray}`, paddingBottom: '0.75rem', marginTop: '2rem' }}>5. Photos</h2>
                   <div className="grid grid-cols-2 gap-10 print:gap-4">
                      {/* Reference Start Photo */}
                      {project.startImage && (
