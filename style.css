@@ -342,15 +342,17 @@ h1, h2, h3, h4, h5, h6 {
         page-break-inside: avoid !important;
     }
 
-    /* Protect visually-bound blocks from being split across pages. */
+    /* Protect visually-bound blocks from being split across pages.
+       rounded-2xl / rounded-xl intentionally excluded: large section
+       containers use those classes and must be allowed to break across
+       pages. Small cards that need protection carry break-inside-avoid
+       explicitly in the JSX. */
     svg,
     img,
     figure,
     table,
     .report-table,
-    .report-section-title + *,
-    .rounded-2xl,
-    .rounded-xl {
+    .report-section-title + * {
         break-inside: avoid;
         page-break-inside: avoid;
     }
