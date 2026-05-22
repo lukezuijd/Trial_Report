@@ -8,9 +8,16 @@
     <meta name="author" content="PerfoTec B.V.">
     <meta name="theme-color" content="#007C27">
     
+    <!-- Preconnect speeds up the Google Fonts waterfall so Montserrat is
+         ready before the user clicks Download PDF. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- Eagerly load Montserrat so the browser has the font cached before print -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap">
+
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
+
     <!-- Babel compiler for in-browser React (JSX) -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
@@ -57,9 +64,9 @@
           logos: {
             default: globalConfig.BRAND?.logos?.default || 'https://cdn.prod.website-files.com/68b594c756c22085ddc6c1ea/68b59ba2f027bfeecd25261b_PerfoTec%20logo.png'
           },
-          fonts: { 
-            heading: '"League Spartan", sans-serif', 
-            body: '"Inter", sans-serif' 
+          fonts: {
+            heading: '"Montserrat", sans-serif',
+            body: '"Montserrat", sans-serif'
           }
         };
 
@@ -631,6 +638,7 @@
         };
 
         const PrintPreview = ({ clientInfo, project, groups, analysis, supplyChain, onBack, unitSystem = 'metric' }) => {
+          const [isPrinting, setIsPrinting] = useState(false);
           let allTemps = [];
           (supplyChain || []).forEach(s => {
               const ts = parseFloat(s.tempStart); if(!isNaN(ts)) allTemps.push(ts);
@@ -650,6 +658,41 @@
           const photosByCat = {};
           allPhotos.forEach(p => { if (!photosByCat[p.category]) photosByCat[p.category] = []; photosByCat[p.category].push(p); });
           const catsPresent = ['External Quality', 'Internal Quality', 'Loose Produce', 'Box/Crate', 'Weight measurement', 'Gas measurement', 'Other'].filter(c => photosByCat[c] && photosByCat[c].length > 0);
+
+          // Auto-detect which optional sections have data to render.
+          const mapGroupsList = groups.filter(g => !g.specs?.atmosphereStrategy || g.specs.atmosphereStrategy === 'MAP');
+          const autoShowGas = mapGroupsList.some(g =>
+            (g.measurements || []).some(m =>
+              parseFloat(m.day) > 0 &&
+              (m.samples || []).some(s => s.o2 !== '' && s.o2 !== undefined && s.o2 !== null)
+            )
+          );
+          const autoShowHub = mapGroupsList.some(g => !!g.predictedImage);
+          const autoShowWeight = groups.some(g => {
+            const daysWithWeight = (g.measurements || []).filter(m =>
+              (m.samples || []).some(s => s.weight !== '' && s.weight !== undefined && s.weight !== null && parseFloat(s.weight) > 0)
+            );
+            return daysWithWeight.length >= 2;
+          });
+
+          // Effective values — null/undefined = "auto", true/false = manual override.
+          // Use ?? (nullish coalescing) so that both null AND undefined (old JSON files) fall through to auto.
+          const showGas = analysis.showGasSection ?? autoShowGas;
+          const showAnyHubPrediction = analysis.showHubPredictions ?? autoShowHub;
+          const showWeight = analysis.showWeightLoss ?? autoShowWeight;
+
+          // Dynamic section numbering for 4.x — depends on which optional sections are visible.
+          const sec4Nums = (() => {
+            let n = 0;
+            return {
+              gas:      showGas                   ? ++n : null,
+              temp:     !!analysis.temperatureImage ? ++n : null,
+              weight:   showWeight                ? ++n : null,
+              visual:   ++n,
+              detailed: ++n,
+              score:    ++n,
+            };
+          })();
 
           const reportTitleClass = "text-3xl font-extrabold uppercase mb-6 brand-heading";
           const reportTitleStyle = { color: BRAND.colors.green, borderBottom: `3px solid ${BRAND.colors.gray}`, paddingBottom: '0.75rem', marginTop: '2rem' };
@@ -676,14 +719,26 @@
                 <button onClick={handleWordExport} className="bg-blue-600 text-white px-6 py-3 rounded-full shadow-lg font-bold flex items-center gap-2 hover:bg-blue-700 transition">
                   <FileArchive size={20} /> Download Word
                 </button>
-                <button onClick={() => {
-                  const company = clientInfo.companyName || 'Client';
-                  const product = project.productName || 'Product';
-                  const suggested = `PerfoTec_Report_${company}_${product}`;
-                  if (globalConfig.printWithFilename) globalConfig.printWithFilename(suggested);
-                  else window.print();
-                }} className="bg-green-600 text-white px-6 py-3 rounded-full shadow-lg font-bold flex items-center gap-2 hover:bg-green-700 transition">
-                  <Printer size={18} /> Download PDF
+                <button
+                  disabled={isPrinting}
+                  onClick={async () => {
+                    setIsPrinting(true);
+                    const company = clientInfo.companyName || 'Client';
+                    const product = project.productName || 'Product';
+                    const suggested = `PerfoTec_Report_${company}_${product}`;
+                    // Wait for all web fonts (Montserrat) to be fully loaded before
+                    // opening the print dialog — prevents layout recalculation delay.
+                    await document.fonts.ready;
+                    if (globalConfig.printWithFilename) globalConfig.printWithFilename(suggested);
+                    else window.print();
+                    setIsPrinting(false);
+                  }}
+                  className="bg-green-600 text-white px-6 py-3 rounded-full shadow-lg font-bold flex items-center gap-2 hover:bg-green-700 transition disabled:opacity-70 disabled:cursor-wait"
+                >
+                  {isPrinting
+                    ? <><svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg> Preparing...</>
+                    : <><Printer size={18}/> Download PDF</>
+                  }
                 </button>
               </div>
 
@@ -725,12 +780,12 @@
                         <li className="flex justify-between border-b border-slate-200 pb-2"><span>2. Summary and Conclusions</span></li>
                         <li className="flex justify-between border-b border-slate-200 pb-2"><span>3. Trial set up</span></li>
                         <li className="flex justify-between border-b border-slate-200 pb-2"><span>4. Trial results</span></li>
-                        <li className="flex justify-between border-b border-slate-200 pb-2"><span className="pl-6">4.1 Gas Levels</span></li>
-                        {analysis.temperatureImage && <li className="flex justify-between border-b border-slate-200 pb-2"><span className="pl-6">4.2 Temperature Logger Profile</span></li>}
-                        <li className="flex justify-between border-b border-slate-200 pb-2"><span className="pl-6">4.{analysis.temperatureImage ? '3' : '2'} Weight Loss Comparison</span></li>
-                        <li className="flex justify-between border-b border-slate-200 pb-2"><span className="pl-6">4.{analysis.temperatureImage ? '4' : '3'} Visual quality</span></li>
-                        <li className="flex justify-between border-b border-slate-200 pb-2"><span className="pl-6">4.{analysis.temperatureImage ? '5' : '4'} Detailed Quality Parameters</span></li>
-                        <li className="flex justify-between border-b border-slate-200 pb-2"><span className="pl-6">4.{analysis.temperatureImage ? '6' : '5'} Score scale</span></li>
+                        {sec4Nums.gas   !== null && <li className="flex justify-between border-b border-slate-200 pb-2"><span className="pl-6">4.{sec4Nums.gas} Gas Levels</span></li>}
+                        {analysis.temperatureImage && <li className="flex justify-between border-b border-slate-200 pb-2"><span className="pl-6">4.{sec4Nums.temp} {analysis.temperatureLabel || 'Temperature Logger Profile'}</span></li>}
+                        {sec4Nums.weight !== null && <li className="flex justify-between border-b border-slate-200 pb-2"><span className="pl-6">4.{sec4Nums.weight} Weight Loss Comparison</span></li>}
+                        <li className="flex justify-between border-b border-slate-200 pb-2"><span className="pl-6">4.{sec4Nums.visual} Visual quality</span></li>
+                        <li className="flex justify-between border-b border-slate-200 pb-2"><span className="pl-6">4.{sec4Nums.detailed} Detailed Quality Parameters</span></li>
+                        <li className="flex justify-between border-b border-slate-200 pb-2"><span className="pl-6">4.{sec4Nums.score} Score scale</span></li>
                         <li className="flex justify-between border-b border-slate-200 pb-2"><span>5. Photos</span></li>
                     </ul>
                 </div>
@@ -764,13 +819,13 @@
 
                      <div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-start mt-1">Technology :</div>
                      <div className="font-medium">
-                       {project.technologies && project.technologies.length > 0 ? (
-                          <ul className="list-disc pl-4 space-y-1">
-                            {project.technologies.map((t, i) => <li key={i}>{t}</li>)}
-                          </ul>
-                       ) : (
-                          'PerfoTec Laser Perforation & Respiration Measuring'
-                       )}
+                       <ul className="list-disc pl-4 space-y-1">
+                         {(project.technologies && project.technologies.length > 0)
+                           ? project.technologies.map((t, i) => <li key={i}>{t}</li>)
+                           : <li>PerfoTec Laser Perforation &amp; Respiration Measuring</li>
+                         }
+                         {project.technologyNote && <li className="text-slate-600 italic">{project.technologyNote}</li>}
+                       </ul>
                      </div>
 
                      {project.trialTarget && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Trial Target :</div> <div className="font-medium">{project.trialTarget}</div></>}
@@ -865,7 +920,9 @@
                      )}
 
                      <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-3">
-                         <p>The Fast Respiration Meter System was used to measure the product respiration rate (RR O₂: <strong>{project.rrO2 || '-'}</strong>, RR CO₂: <strong>{project.rrCO2 || '-'}</strong>) at <strong>{project.rrTemp || '-'}°C</strong>. This allowed PerfoTec to calculate the optimal micro perforation pattern.</p>
+                         {[project.rrO2, project.rrCO2, project.rrTemp].some(v => v && !isNaN(parseFloat(v))) && (
+                           <p>The Fast Respiration Meter System was used to measure the product respiration rate (RR O₂: <strong>{project.rrO2 || '-'}</strong>, RR CO₂: <strong>{project.rrCO2 || '-'}</strong>) at <strong>{project.rrTemp || '-'}°C</strong>. This allowed PerfoTec to calculate the optimal micro perforation pattern.</p>
+                         )}
                          
                          {groups[0]?.specs?.startWeight && <p>The product weight tested was approx. <strong>{groups[0].specs.startWeight} {weightUnit}</strong> per unit.</p>}
                          {(project.maturityStage && project.maturityStage !== 'N/A' && project.maturityStage !== '-') && <p>Maturity stage at packing: <strong>{project.maturityStage}</strong>.</p>}
@@ -893,36 +950,45 @@
                 <div className="page-break pt-4" id="sec-4">
                   <h2 className="text-3xl font-extrabold uppercase mb-6 brand-heading" style={{ color: BRAND.colors.green, borderBottom: `3px solid ${BRAND.colors.gray}`, paddingBottom: '0.75rem', marginTop: '2rem' }}>4. Trial results</h2>
                   
-                  {(() => {
-                    const mapGroups = groups.filter(g => !g.specs?.atmosphereStrategy || g.specs.atmosphereStrategy === 'MAP');
+                  {showGas && (() => {
+                    const mapGroups = mapGroupsList;
                     if (mapGroups.length === 0) return null;
                     return (
                       <div className="mb-10">
-                          <h3 id="sec-4-1" className="font-bold text-xl mb-4 brand-heading text-slate-700" style={{ pageBreakAfter: 'avoid' }}>4.1 Gas Levels</h3>
+                          <h3 id="sec-4-1" className="font-bold text-xl mb-4 brand-heading text-slate-700" style={{ pageBreakAfter: 'avoid' }}>4.{sec4Nums.gas} Gas Levels</h3>
                           <div className="text-base mb-6 brand-body text-slate-800 pdf-rich-text" dangerouslySetInnerHTML={{ __html: analysis.graphNotes || 'Gas levels were monitored throughout the shelf life period.' }}></div>
 
-                          <div className="flex gap-6 mb-4 px-2">
-                             <div className="w-1/2 font-extrabold text-sm text-slate-500 text-center border-b-2 border-slate-200 pb-2 uppercase tracking-wider">Prediction (Hub)</div>
-                             <div className="w-1/2 font-extrabold text-sm text-slate-500 text-center border-b-2 border-slate-200 pb-2 uppercase tracking-wider">Actual Results</div>
-                          </div>
+                          {showAnyHubPrediction && (
+                            <div className="flex gap-6 mb-4 px-2">
+                               <div className="w-1/2 font-extrabold text-sm text-slate-500 text-center border-b-2 border-slate-200 pb-2 uppercase tracking-wider">Prediction (Hub)</div>
+                               <div className="w-1/2 font-extrabold text-sm text-slate-500 text-center border-b-2 border-slate-200 pb-2 uppercase tracking-wider">Actual Results</div>
+                            </div>
+                          )}
 
                           <div className="grid grid-cols-1 gap-8 mb-8">
                             {mapGroups.map((g, idx) => (
-                              <div key={idx} className="flex flex-row gap-6 break-inside-avoid items-stretch">
-                                 <div className="w-1/2 flex flex-col border border-slate-200 rounded-2xl bg-slate-50 p-5 shadow-sm">
-                                    <h5 className="text-center font-extrabold text-sm mb-4 text-slate-800 border-b border-slate-200 pb-2">{g.name || 'Variant'}</h5>
-                                    <div className="flex-1 flex items-center justify-center p-2 bg-white rounded-xl border border-slate-100">
-                                       {g.predictedImage ? (
-                                         <img src={g.predictedImage} className="w-full h-auto max-h-[220px] object-contain" />
-                                       ) : (
-                                         <span className="text-slate-300 italic text-xs font-medium">No Prediction Uploaded</span>
-                                       )}
-                                    </div>
-                                 </div>
-                                 <div className="w-1/2 flex flex-col">
-                                    <VariantGasChart group={g} packedDays={project.totalDuration} />
-                                 </div>
-                              </div>
+                              showAnyHubPrediction ? (
+                                <div key={idx} className="flex flex-row gap-6 break-inside-avoid items-stretch">
+                                   <div className="w-1/2 flex flex-col border border-slate-200 rounded-2xl bg-slate-50 p-5 shadow-sm">
+                                      <h5 className="text-center font-extrabold text-sm mb-4 text-slate-800 border-b border-slate-200 pb-2">{g.name || 'Variant'}</h5>
+                                      <div className="flex-1 flex items-center justify-center p-2 bg-white rounded-xl border border-slate-100">
+                                         {g.predictedImage ? (
+                                           <img src={g.predictedImage} className="w-full h-auto max-h-[220px] object-contain" />
+                                         ) : (
+                                           <span className="text-slate-300 italic text-xs font-medium">No Prediction Uploaded</span>
+                                         )}
+                                      </div>
+                                   </div>
+                                   <div className="w-1/2 flex flex-col">
+                                      <VariantGasChart group={g} packedDays={project.totalDuration} />
+                                   </div>
+                                </div>
+                              ) : (
+                                <div key={idx} className="break-inside-avoid">
+                                   <h5 className="font-extrabold text-sm mb-3 text-slate-800">{g.name || 'Variant'}</h5>
+                                   <VariantGasChart group={g} packedDays={project.totalDuration} />
+                                </div>
+                              )
                             ))}
                           </div>
                       </div>
@@ -931,20 +997,22 @@
 
                   {analysis.temperatureImage && (
                      <div className="break-inside-avoid mb-10">
-                       <h3 className="font-bold text-xl mb-4 mt-8 brand-heading text-slate-700">4.2 Temperature Logger Profile</h3>
+                       <h3 className="font-bold text-xl mb-4 mt-8 brand-heading text-slate-700">4.{sec4Nums.temp} {analysis.temperatureLabel || 'Temperature Logger Profile'}</h3>
                        <div className="w-full border border-slate-200 rounded-3xl p-6 bg-white flex justify-center items-center shadow-sm">
                            <img src={analysis.temperatureImage} className="w-full h-auto max-h-[400px] object-contain" />
                        </div>
                      </div>
                   )}
 
-                  <div className="break-inside-avoid mb-10">
-                      <h3 className="font-bold text-xl mb-6 mt-12 brand-heading text-slate-700">4.{analysis.temperatureImage ? '3' : '2'} Weight Loss Comparison</h3>
-                      <WeightLossChart groups={groups} />
-                  </div>
+                  {showWeight && (
+                    <div className="break-inside-avoid mb-10">
+                        <h3 className="font-bold text-xl mb-6 mt-12 brand-heading text-slate-700">4.{sec4Nums.weight} Weight Loss Comparison</h3>
+                        <WeightLossChart groups={groups} />
+                    </div>
+                  )}
 
                   <div className="break-inside-avoid mb-10">
-                      <h3 className="font-bold text-xl mb-4 mt-12 brand-heading text-slate-700">4.{analysis.temperatureImage ? '4' : '3'} Visual quality Overview</h3>
+                      <h3 className="font-bold text-xl mb-4 mt-12 brand-heading text-slate-700">4.{sec4Nums.visual} Visual quality Overview</h3>
                       <p className="text-base mb-6 brand-body text-slate-800">
                          On Day {groups[0]?.measurements?.[groups[0].measurements.length-1]?.day || ''}, the visual quality was assessed.
                       </p>
@@ -983,7 +1051,7 @@
                   </div>
 
                   <div className="break-inside-avoid mb-10">
-                      <h3 className="font-bold text-xl mb-6 mt-12 brand-heading text-slate-700">4.{analysis.temperatureImage ? '5' : '4'} Detailed Quality Parameters</h3>
+                      <h3 className="font-bold text-xl mb-6 mt-12 brand-heading text-slate-700">4.{sec4Nums.detailed} Detailed Quality Parameters</h3>
                       {(() => {
                          const allEvalDays = Array.from(new Set(
                            groups.flatMap(g => 
@@ -1052,7 +1120,7 @@
                   </div>
 
                   <div className="break-inside-avoid mb-10 mt-12">
-                     <h3 className="font-bold text-xl mb-3 brand-heading text-slate-700">4.{analysis.temperatureImage ? '6' : '5'} Score scale</h3>
+                     <h3 className="font-bold text-xl mb-3 brand-heading text-slate-700">4.{sec4Nums.score} Score scale</h3>
                      <div className="grid grid-cols-2 gap-x-8 gap-y-px text-[11px] text-slate-700 bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm">
                         {SCORES.map(s => {
                            const bg = s[0] >= 7 ? '#16a34a' : s[0] >= 5 ? '#f97316' : '#dc2626';
@@ -1218,6 +1286,10 @@
               addActionPoint: 'Add action point or detailed conclusion...', general: 'General',
               gasAnalysis: 'Gas Levels Analysis (Section 4.1)', tempLogger: 'Temperature Logger Profile (Optional)',
               uploadTempGraph: 'Upload Temperature Graph',
+              technologyNote: 'Additional Technology Notes', technologyNotePlaceholder: 'e.g. Including RespirO2 Measurement...',
+              temperatureLabel: 'Section Title', temperatureLabelPlaceholder: 'Temperature Logger Profile',
+              sectionVisibility: 'Section Visibility', sectionVisibilityHint: 'Auto-enabled when data is present. Uncheck to always hide.',
+              showGasSection: 'Gas Levels (4.1)', showHubPredictions: 'HUB Predictions', showWeightLoss: 'Weight Loss Graph',
               recommendation: 'Final Recommendation', retest: 'Retest needed', approved: 'Approved for implementation',
               nextSteps: 'Next Steps',
               transportRoad: 'Transport by road', transportSea: 'Seafreight', transportAir: 'Airfreight', transportStorage: 'Storage',
@@ -1326,6 +1398,10 @@
               addActionPoint: 'Actiepunt of gedetailleerde conclusie toevoegen...', general: 'Algemeen',
               gasAnalysis: 'Gaswaarden Analyse (Sectie 4.1)', tempLogger: 'Temperatuur Logger Profiel (Optioneel)',
               uploadTempGraph: 'Upload Temperatuurgrafiek',
+              technologyNote: 'Aanvullende Technologie Notities', technologyNotePlaceholder: 'bijv. Inclusief RespirO2 Meting...',
+              temperatureLabel: 'Sectietitel', temperatureLabelPlaceholder: 'Temperatuur Logger Profiel',
+              sectionVisibility: 'Sectie Zichtbaarheid', sectionVisibilityHint: 'Automatisch aan wanneer data aanwezig is. Vink uit om altijd te verbergen.',
+              showGasSection: 'Gaswaarden (4.1)', showHubPredictions: 'HUB Voorspellingen', showWeightLoss: 'Gewichtsverlies Grafiek',
               recommendation: 'Eindadvies', retest: 'Hertest nodig', approved: 'Goedgekeurd voor implementatie',
               nextSteps: 'Vervolgstappen',
               transportRoad: 'Wegtransport', transportSea: 'Zeevracht', transportAir: 'Luchtvracht', transportStorage: 'Opslag',
@@ -1434,6 +1510,10 @@
               addActionPoint: 'Añadir punto de acción o conclusión detallada...', general: 'General',
               gasAnalysis: 'Análisis de Niveles de Gas (Sección 4.1)', tempLogger: 'Perfil de Temperatura (Opcional)',
               uploadTempGraph: 'Subir Gráfico de Temperatura',
+              technologyNote: 'Notas Adicionales de Tecnología', technologyNotePlaceholder: 'ej. Incluye Medición RespirO2...',
+              temperatureLabel: 'Título de Sección', temperatureLabelPlaceholder: 'Perfil de Temperatura',
+              sectionVisibility: 'Visibilidad de Secciones', sectionVisibilityHint: 'Activado automáticamente cuando hay datos. Desmarque para ocultar siempre.',
+              showGasSection: 'Niveles de Gas (4.1)', showHubPredictions: 'Predicciones HUB', showWeightLoss: 'Gráfico de Pérdida de Peso',
               recommendation: 'Recomendación Final', retest: 'Se necesita repetir prueba', approved: 'Aprobado para implementación',
               nextSteps: 'Próximos Pasos',
               transportRoad: 'Transporte Terrestre', transportSea: 'Transporte Marítimo', transportAir: 'Transporte Aéreo', transportStorage: 'Almacenamiento',
@@ -1507,7 +1587,7 @@
             acpO2: '', co2Max: '', co2Shock: '', co2ShockHours: '', tempMin: '',
             o2Target: '', co2Target: '', ethyleneProfile: '',
             totalDuration: '', retailOpenDays: '', transportMode: '',
-            criteria: [], technologies: [],
+            criteria: [], technologies: [], technologyNote: '',
             date: new Date().toISOString().split('T')[0], packingDate: new Date().toISOString().split('T')[0],
             logo: BRAND.logos.default, clientLogo: null, startImage: null, coverImage: null,
             maturityStage: '', postHarvestTreatment: '',
@@ -1526,7 +1606,7 @@
             }
           ]);
 
-          const [analysis, setAnalysis] = useState({ graphNotes: '', conclusion: '', variantConclusions: {}, recommendation: 'retest', nextSteps: [], temperatureImage: null });
+          const [analysis, setAnalysis] = useState({ graphNotes: '', conclusion: '', variantConclusions: {}, recommendation: 'retest', nextSteps: [], temperatureImage: null, temperatureLabel: '', showGasSection: null, showHubPredictions: null, showWeightLoss: null });
           const [newStep, setNewStep] = useState('');
           const [newStepVariant, setNewStepVariant] = useState('general');
           const [newCriteria, setNewCriteria] = useState('');
@@ -2283,6 +2363,24 @@
           if (isPreview) {
             return <PrintPreview clientInfo={clientInfo} project={project} groups={groups} supplyChain={supplyChain} onBack={() => setIsPreview(false)} analysis={analysis} unitSystem={unitSystem} />;
           }
+
+          // Auto-detect section visibility for checkbox defaults (null = auto, true/false = manual override)
+          const autoShowGas = groups.some(g =>
+            (!g.specs?.atmosphereStrategy || g.specs.atmosphereStrategy === 'MAP') &&
+            (g.measurements || []).some(m =>
+              parseFloat(m.day) > 0 &&
+              (m.samples || []).some(s => s.o2 !== '' && s.o2 !== undefined && s.o2 !== null)
+            )
+          );
+          const autoShowHub = groups.some(g =>
+            (!g.specs?.atmosphereStrategy || g.specs.atmosphereStrategy === 'MAP') && !!g.predictedImage
+          );
+          const autoShowWeight = groups.some(g => {
+            const daysWithWeight = (g.measurements || []).filter(m =>
+              (m.samples || []).some(s => s.weight !== '' && s.weight !== undefined && s.weight !== null && parseFloat(s.weight) > 0)
+            );
+            return daysWithWeight.length >= 2;
+          });
 
           // --- EDITOR VIEW ---
           return (
@@ -3067,6 +3165,10 @@
                                       );
                                   })}
                               </div>
+                              <div className="mt-4">
+                                 <label className={labelClass}>{rt.technologyNote}</label>
+                                 <input type="text" className={inputClass} placeholder={rt.technologyNotePlaceholder} value={project.technologyNote || ''} onChange={e => setProject(prev => ({...prev, technologyNote: e.target.value}))} />
+                              </div>
                            </div>
                         </div>
 
@@ -3313,29 +3415,60 @@
                        </div>
 
                        <div className="md:col-span-1 mt-6">
-                         <label className={`${labelClass} text-sm mb-3`}>{rt.tempLogger}</label>
+                         <div className="flex items-center gap-2 mb-2">
+                           <input
+                             type="text"
+                             className="flex-1 text-xs font-bold tracking-wide uppercase bg-transparent border-b border-dashed border-slate-400 outline-none focus:border-blue-500 py-0.5 text-slate-600 placeholder-slate-400 transition-colors"
+                             placeholder={rt.temperatureLabelPlaceholder}
+                             value={analysis.temperatureLabel || ''}
+                             onChange={e => setAnalysis(prev => ({...prev, temperatureLabel: e.target.value}))}
+                           />
+                           <span className="text-[9px] text-slate-400 italic shrink-0">(optional)</span>
+                         </div>
                          <div className="border-2 border-dashed border-slate-300 rounded-2xl p-6 flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-blue-50 hover:border-blue-300 transition-all cursor-pointer relative overflow-hidden shadow-sm group min-h-[160px] h-full">
-                            <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={(e) => {
-                                const file = e.target.files[0];
-                                if (file) {
-                                  const reader = new FileReader();
-                                  reader.onloadend = () => setAnalysis(prev => ({...prev, temperatureImage: reader.result}));
-                                  reader.readAsDataURL(file);
-                                }
-                            }} />
-                            {analysis.temperatureImage ? (
-                                <div className="relative w-full h-full flex items-center justify-center">
-                                    <img src={analysis.temperatureImage} className="max-w-full h-full max-h-48 object-contain rounded-lg shadow-sm" />
-                                    <button onClick={(e) => { e.preventDefault(); setAnalysis(prev => ({...prev, temperatureImage: null})); }} className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-all shadow-lg hover:bg-red-600 hover:scale-110 z-20"><Trash2 size={16}/></button>
-                                </div>
-                            ) : (
-                                <div className="flex flex-col items-center">
-                                    <div className="w-16 h-16 bg-white rounded-full shadow-sm flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                                        <Upload size={28} className="text-blue-500"/>
-                                    </div>
-                                    <span className="font-extrabold text-sm text-slate-700 block">{rt.uploadTempGraph}</span>
-                                </div>
-                            )}
+                           <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={(e) => {
+                               const file = e.target.files[0];
+                               if (file) {
+                                 const reader = new FileReader();
+                                 reader.onloadend = () => setAnalysis(prev => ({...prev, temperatureImage: reader.result}));
+                                 reader.readAsDataURL(file);
+                               }
+                           }} />
+                           {analysis.temperatureImage ? (
+                               <div className="relative w-full h-full flex items-center justify-center">
+                                   <img src={analysis.temperatureImage} className="max-w-full h-full max-h-48 object-contain rounded-lg shadow-sm" />
+                                   <button onClick={(e) => { e.preventDefault(); setAnalysis(prev => ({...prev, temperatureImage: null})); }} className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-all shadow-lg hover:bg-red-600 hover:scale-110 z-20"><Trash2 size={16}/></button>
+                               </div>
+                           ) : (
+                               <div className="flex flex-col items-center">
+                                   <div className="w-16 h-16 bg-white rounded-full shadow-sm flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                                       <Upload size={28} className="text-blue-500"/>
+                                   </div>
+                                   <span className="font-extrabold text-sm text-slate-700 block">{rt.uploadTempGraph}</span>
+                               </div>
+                           )}
+                         </div>
+                       </div>
+
+                       <div className="md:col-span-1 mt-6">
+                         <label className={`${labelClass} text-sm mb-1`}>{rt.sectionVisibility}</label>
+                         <p className="text-xs text-slate-400 mb-3">{rt.sectionVisibilityHint}</p>
+                         <div className="flex flex-col gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                           <label className="flex items-center gap-3 cursor-pointer select-none">
+                             <input type="checkbox" checked={analysis.showGasSection ?? autoShowGas} onChange={e => setAnalysis(prev => ({...prev, showGasSection: e.target.checked}))} className="w-4 h-4 accent-green-600 shrink-0" />
+                             <span className="text-sm font-medium text-slate-700">{rt.showGasSection}</span>
+                             {(analysis.showGasSection === null) && <span className="text-[10px] text-slate-400 italic ml-auto">auto</span>}
+                           </label>
+                           <label className="flex items-center gap-3 cursor-pointer select-none">
+                             <input type="checkbox" checked={analysis.showHubPredictions ?? autoShowHub} onChange={e => setAnalysis(prev => ({...prev, showHubPredictions: e.target.checked}))} className="w-4 h-4 accent-green-600 shrink-0" />
+                             <span className="text-sm font-medium text-slate-700">{rt.showHubPredictions}</span>
+                             {(analysis.showHubPredictions === null) && <span className="text-[10px] text-slate-400 italic ml-auto">auto</span>}
+                           </label>
+                           <label className="flex items-center gap-3 cursor-pointer select-none">
+                             <input type="checkbox" checked={analysis.showWeightLoss ?? autoShowWeight} onChange={e => setAnalysis(prev => ({...prev, showWeightLoss: e.target.checked}))} className="w-4 h-4 accent-green-600 shrink-0" />
+                             <span className="text-sm font-medium text-slate-700">{rt.showWeightLoss}</span>
+                             {(analysis.showWeightLoss === null) && <span className="text-[10px] text-slate-400 italic ml-auto">auto</span>}
+                           </label>
                          </div>
                        </div>
                     </section>
