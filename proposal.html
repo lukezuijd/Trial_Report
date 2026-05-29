@@ -8,9 +8,16 @@
     <meta name="author" content="PerfoTec B.V.">
     <meta name="theme-color" content="#007C27">
     
+    <!-- Preconnect speeds up the Google Fonts waterfall so Montserrat is
+         ready before the user clicks Download PDF. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- Eagerly load Montserrat so the browser has the font cached before print -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap">
+
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
+
     <!-- Babel compiler for in-browser React (JSX) -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 
@@ -45,13 +52,18 @@
         const globalConfig = window.PERFOTEC_CONFIG || {};
 
         const BRAND = {
-          colors: { 
-            green: globalConfig.BRAND?.colors?.primary?.green || '#007C27', 
-            blue: globalConfig.BRAND?.colors?.primary?.blue || '#054E9A', 
-            black: globalConfig.BRAND?.colors?.neutral?.black || '#211A1A' 
+          colors: {
+            green: globalConfig.BRAND?.colors?.primary?.green || '#007C27',
+            blue: globalConfig.BRAND?.colors?.primary?.blue || '#054E9A',
+            black: globalConfig.BRAND?.colors?.neutral?.black || '#211A1A',
+            gray: globalConfig.BRAND?.colors?.neutral?.lightGray || '#E9E9E9',
           },
           logos: {
             default: globalConfig.BRAND?.logos?.default || 'https://cdn.prod.website-files.com/68b594c756c22085ddc6c1ea/68b59ba2f027bfeecd25261b_PerfoTec%20logo.png'
+          },
+          fonts: {
+            heading: '"Montserrat", sans-serif',
+            body: '"Montserrat", sans-serif',
           }
         };
 
@@ -84,6 +96,20 @@
         const DEFAULT_CRITERIA = DEFAULT_CRITERIA_I18N.map(x => x.value);
 
         const PERFOTEC_TECHNOLOGIES = PERFOTEC_TECHNOLOGIES_I18N.map(x => x.value);
+
+        // Rating scale — sourced from config so all tools share one definition.
+        const SCORES = globalConfig.SCORES || [
+          [10, 'excellent – exceptionally appealing quality, exceptional good'],
+          [9,  'very good – natural quality of the product, full strong characteristic quality attributes'],
+          [8,  'good – natural quality, with few specimens with slightly light impairment'],
+          [7,  'commendable – natural quality, with several specimens with light impairment'],
+          [6,  'satisfactory – slightly reduced quality attributes'],
+          [5,  'unacceptable – impairment of natural quality attributes'],
+          [4,  'beyond unacceptable – clear impairment of quality attributes'],
+          [3,  'poor – generally severe loss of quality, no longer appealing'],
+          [2,  'bad – strong and severe quality loss, strongly unpleasant'],
+          [1,  'very bad – complete quality decay, spoiled and repulsive']
+        ];
 
         const DEFAULT_SUPPLY_CHAIN = globalConfig.DEFAULT_SUPPLY_CHAIN || [
           { stage: 'Farm / Harvest', tempStart: '15', tempEnd: '', daysStart: '0.5', daysEnd: '', action: 'none' },
@@ -327,6 +353,7 @@
             methodVisual: 'Visual Quality:', methodVisualDesc: 'Taking photographic evidence of the product state.',
             methodQuality: 'Detailed Quality Assessment:',
             methodQualityDesc: 'Scoring the following criteria on a 1-10 scale (where 6+ is acceptable):',
+            scoreScaleTitle: 'Score Scale',
             // Section 7
             requiredProductTitle: 'Required Product',
             requiredProductTemplate: 'A minimum of {weight} of fresh product is required to conduct this trial (based on a total of {samples} uniquely tracked physical samples across all variants).'
@@ -391,6 +418,7 @@
             methodVisual: 'Visuele Kwaliteit:', methodVisualDesc: 'Vastleggen van fotomateriaal van de productstaat.',
             methodQuality: 'Gedetailleerde Kwaliteitsbeoordeling:',
             methodQualityDesc: 'Scoren van de volgende criteria op een 1-10 schaal (waarbij 6+ acceptabel is):',
+            scoreScaleTitle: 'Score Schaal',
             requiredProductTitle: 'Benodigd Product',
             requiredProductTemplate: 'Er is minimaal {weight} vers product nodig om deze trial uit te voeren (gebaseerd op in totaal {samples} uniek getraceerde fysieke monsters over alle varianten).'
           },
@@ -454,6 +482,7 @@
             methodVisual: 'Calidad Visual:', methodVisualDesc: 'Registro fotográfico del estado del producto.',
             methodQuality: 'Evaluación Detallada de Calidad:',
             methodQualityDesc: 'Puntuación de los siguientes criterios en una escala 1-10 (donde 6+ es aceptable):',
+            scoreScaleTitle: 'Escala de Puntuación',
             requiredProductTitle: 'Producto Requerido',
             requiredProductTemplate: 'Se requiere un mínimo de {weight} de producto fresco para realizar esta prueba (basado en un total de {samples} muestras físicas únicas rastreadas en todas las variantes).'
           }
@@ -690,7 +719,13 @@
                       <div className="break-inside-avoid mb-8 print:mb-3">
                           <h3 className="font-bold text-xl print:text-sm mb-4 print:mb-2 brand-heading" style={{ color: BRAND.colors.green }}>{pv.defectsMatrixTitle}</h3>
                           <div className="overflow-hidden rounded-xl border border-slate-200 shadow-sm">
-                              <table className="w-full text-sm print:text-xs border-collapse">
+                              <table className="w-full text-sm print:text-xs border-collapse table-fixed">
+                                  <colgroup>
+                                      <col style={{width:'15%'}} />
+                                      <col style={{width:'25%'}} />
+                                      <col style={{width:'30%'}} />
+                                      <col style={{width:'30%'}} />
+                                  </colgroup>
                                   <thead>
                                       <tr>
                                           <th className="p-3 print:p-2 text-left text-white font-bold" style={{backgroundColor: '#004B87'}}>{pv.matrixDefect}</th>
@@ -702,10 +737,10 @@
                                   <tbody className="divide-y divide-slate-200">
                                       {project.defectsMatrix.map((row, i) => (
                                           <tr key={row.id} className={i % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                                              <td className="p-3 print:p-2 font-bold text-slate-800">{row.defect}</td>
-                                              <td className="p-3 print:p-2 text-slate-700">{row.cause}</td>
-                                              <td className="p-3 print:p-2 text-slate-700 font-medium">{row.effectMHP}</td>
-                                              <td className="p-3 print:p-2 text-slate-700 font-medium">{row.effectMAP}</td>
+                                              <td className="p-3 print:p-2 font-bold text-slate-800 align-top break-words">{row.defect}</td>
+                                              <td className="p-3 print:p-2 text-slate-700 align-top break-words">{row.cause}</td>
+                                              <td className="p-3 print:p-2 text-slate-700 font-medium align-top break-words">{row.effectMHP}</td>
+                                              <td className="p-3 print:p-2 text-slate-700 font-medium align-top break-words">{row.effectMAP}</td>
                                           </tr>
                                       ))}
                                   </tbody>
@@ -857,6 +892,21 @@
                             <ul className="list-circle pl-6 print:pl-4 mt-3 print:mt-1 grid grid-cols-2 print:grid-cols-3 gap-x-4 gap-y-2 print:gap-x-3 print:gap-y-0 text-sm print:text-xs font-medium text-slate-600 leading-snug print:leading-tight">
                                 {(project.criteria || []).map((c, i) => <li key={i}>{(globalConfig.getI18nLabel && globalConfig.DEFAULT_CRITERIA_I18N) ? globalConfig.getI18nLabel(globalConfig.DEFAULT_CRITERIA_I18N, c, lang) : c}</li>)}
                             </ul>
+                            {/* Compact score scale — lives here so it follows the criteria list logically */}
+                            <div className="mt-3 print:mt-2">
+                              <p className="text-[10px] font-extrabold text-slate-400 mb-1.5 uppercase tracking-widest">{pv.scoreScaleTitle}</p>
+                              <div className="grid grid-cols-2 gap-x-8 gap-y-px text-[11px] text-slate-700 bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm">
+                                {SCORES.map(s => {
+                                  const bg = s[0] >= 7 ? '#16a34a' : s[0] >= 5 ? '#f97316' : '#dc2626';
+                                  return (
+                                    <div key={s[0]} className="flex items-start gap-2 py-[3px]">
+                                      <strong className="text-white text-[10px] w-5 h-5 rounded flex items-center justify-center shrink-0 font-extrabold mt-px" style={{backgroundColor: bg}}>{s[0]}</strong>
+                                      <span className="leading-snug">{s[1]}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
                          </li>
                        </ul>
                      </div>
@@ -882,7 +932,7 @@
                                // even with mixed packaging, then convert once
                                // at the end to a single display unit.
                                const isImperial = unitSystem === 'imperial';
-                               const projIsBulk = project.packagingType === 'Cube crate' || project.packagingType === 'Pallet';
+                               const projIsBulk = (project.packagings?.[0]?.packagingType || project.packagingType || 'Retail') === 'Cube crate' || (project.packagings?.[0]?.packagingType || project.packagingType || 'Retail') === 'Pallet';
                                // Conversion to base unit (g or oz) per source unit:
                                //   metric bulk:    kg  → × 1000  → g
                                //   metric retail:  g   → × 1     → g
@@ -1132,7 +1182,8 @@
               productSheetDropDesc: 'Drag a PerfoTec product-sheet HTML file here, or click to upload. The defects matrix and gas/temperature targets will be filled automatically.',
               productSheetBrowse: 'Choose product-sheet file',
               productSheetDropActive: 'Drop the file to import…',
-              productSheetParseFail: 'Could not parse this product sheet. Check that it contains a defects matrix and an "Optimal Conditions" section.'
+              productSheetParseFail: 'Could not parse this product sheet. Check that it contains a defects matrix and an "Optimal Conditions" section.',
+              addPackaging: '+ Add Packaging', removePackaging: 'Remove', packaging: 'Packaging'
             },
             nl: {
               loadJson: 'Laden JSON', saveAs: 'Opslaan als...', previewProposal: 'Preview Voorstel',
@@ -1212,7 +1263,8 @@
               productSheetDropDesc: 'Sleep een PerfoTec product-sheet HTML hier, of klik om te uploaden. De defectenmatrix en gas/temperatuur targets worden automatisch ingevuld.',
               productSheetBrowse: 'Kies product-sheet bestand',
               productSheetDropActive: 'Laat het bestand los om te importeren…',
-              productSheetParseFail: 'Kon deze product sheet niet inlezen. Controleer of er een defectenmatrix en een "Optimale Condities" sectie in staat.'
+              productSheetParseFail: 'Kon deze product sheet niet inlezen. Controleer of er een defectenmatrix en een "Optimale Condities" sectie in staat.',
+              addPackaging: '+ Verpakking Toevoegen', removePackaging: 'Verwijderen', packaging: 'Verpakking'
             },
             es: {
               loadJson: 'Cargar JSON', saveAs: 'Guardar como...', previewProposal: 'Ver Propuesta',
@@ -1292,7 +1344,8 @@
               productSheetDropDesc: 'Arrastre un archivo HTML de ficha de producto PerfoTec aquí, o haga clic para subirlo. La matriz de defectos y los objetivos de gas/temperatura se rellenarán automáticamente.',
               productSheetBrowse: 'Elegir archivo de ficha',
               productSheetDropActive: 'Suelte el archivo para importar…',
-              productSheetParseFail: 'No se pudo procesar esta ficha. Verifique que contenga una matriz de defectos y una sección "Condiciones Óptimas".'
+              productSheetParseFail: 'No se pudo procesar esta ficha. Verifique que contenga una matriz de defectos y una sección "Condiciones Óptimas".',
+              addPackaging: '+ Añadir Envase', removePackaging: 'Eliminar', packaging: 'Envase'
             }
           };
           const pt = PT[lang] || PT['en'];
@@ -1321,7 +1374,7 @@
             reportTitle: 'Trial Proposal',
             productName: '', processingType: 'Whole', type: '', origin: '', company: '', contactName: '', contactEmail: '', contactPhone: '', employee: '', employeeEmail: '', employeePhone: '', trialTarget: '', currentChallenge: '',
             rrO2: '', rrCO2: '', rrTemp: '', startWeight: '',
-            packagingType: 'Retail', material: '', length: '', width: '', height: '',
+            packagings: [{ id: 1, packagingType: 'Retail', material: '', length: '', width: '', height: '', startWeight: '' }],
             acpO2: '', co2Max: '', co2Shock: '', co2ShockHours: '', tempMin: '',
             // Product-sheet derived gas / temp targets and ethylene profile.
             // Additive — existing acpO2 / co2Max / tempMin keep their meaning
@@ -1542,7 +1595,9 @@
                  notes: '',
                  images: [],
                  qualityParams: [],
-                 evaluateQuality: true,
+                 // Derive evaluateQuality from the evaluate toggles: checked if at least
+                 // one sample was marked for evaluation on this day, unchecked otherwise.
+                 evaluateQuality: (m.evaluate || []).length > 0,
                  measure: m.measure || [],
                  open: m.open || [],
                  evaluate: m.evaluate || []
@@ -1614,13 +1669,13 @@
               transportMode: p.transportMode || (p.transportModes?.[0] || ''),
               criteria: p.qualityCriteria || [],
               startImage: p.photo || null,
-              startWeight: p.weight || prev.startWeight,
+              startWeight: (p.packagings?.[0]?.weight || p.packagings?.[0]?.startWeight || p.weight || prev.startWeight),
               technologies: p.technologies || prev.technologies || [],
-              packagingType: p.packagingType || prev.packagingType || 'Retail',
-              material: p.material || prev.material || '',
-              length: p.length || prev.length || '',
-              width: p.width || prev.width || '',
-              height: p.height || prev.height || ''
+              packagings: p.packagings
+                ? p.packagings.map(pkg => ({ ...pkg, startWeight: pkg.startWeight || pkg.weight || '' }))
+                : (p.packagingType
+                    ? [{ id: 1, packagingType: p.packagingType || 'Retail', material: p.material || '', length: p.length || '', width: p.width || '', height: p.height || '', startWeight: p.weight || '' }]
+                    : (prev.packagings && prev.packagings.length > 0 ? prev.packagings : [{ id: 1, packagingType: 'Retail', material: '', length: '', width: '', height: '', startWeight: '' }])),
             }));
             if (p.supplyChain) setSupplyChain(p.supplyChain);
             setGroups(prev => {
@@ -1628,11 +1683,11 @@
               if (ug[0]) {
                 ug[0].specs = {
                   ...ug[0].specs,
-                  packaging: p.packagingType || 'Retail',
-                  material: p.material || '',
-                  length: p.length || '',
-                  width: p.width || '',
-                  height: p.height || ''
+                  packaging: (p.packagings?.[0]?.packagingType || p.packagingType || 'Retail'),
+                  material: (p.packagings?.[0]?.material || p.material || ''),
+                  length: (p.packagings?.[0]?.length || p.length || ''),
+                  width: (p.packagings?.[0]?.width || p.width || ''),
+                  height: (p.packagings?.[0]?.height || p.height || '')
                 };
               }
               return ug;
@@ -1752,15 +1807,16 @@
                    }
                    if(d.project) {
                        setProject(p => ({
-                           ...p, 
-                           ...d.project, 
-                           packingDate: d.project.packingDate || d.project.date || new Date().toISOString().split('T')[0], 
+                           ...p,
+                           ...d.project,
+                           packingDate: d.project.packingDate || d.project.date || new Date().toISOString().split('T')[0],
                            transportMode: d.project.transportMode || '',
                            startWeight: d.project.startWeight || d.groups?.[0]?.specs?.startWeight || '',
                            technologies: d.project.technologies || [],
                            // Make sure project.logo falls back to default if missing
-                           logo: d.project.logo || BRAND.logos.default
-                       })); 
+                           logo: d.project.logo || BRAND.logos.default,
+                           packagings: d.project.packagings || (d.project.packagingType ? [{ id: 1, packagingType: d.project.packagingType || 'Retail', material: d.project.material || '', length: d.project.length || '', width: d.project.width || '', height: d.project.height || '', startWeight: d.project.startWeight || '' }] : [{ id: 1, packagingType: 'Retail', material: '', length: '', width: '', height: '', startWeight: '' }]),
+                       }));
                    }
                    if(d.supplyChain) setSupplyChain(d.supplyChain); 
                    if(d.groups) {
@@ -2027,12 +2083,12 @@
                 name: `Variant ${groups.length + 1}`, 
                 specs: { 
                     ...groups[0].specs,
-                    packaging: project.packagingType || 'Retail',
-                    material: project.material || '',
-                    length: project.length || '',
-                    width: project.width || '',
-                    height: project.height || '',
-                    startWeight: project.startWeight || groups[0].specs.startWeight || ''
+                    packaging: (project.packagings?.[0]?.packagingType || project.packagingType || 'Retail'),
+                    material: (project.packagings?.[0]?.material || project.material || ''),
+                    length: (project.packagings?.[0]?.length || project.length || ''),
+                    width: (project.packagings?.[0]?.width || project.width || ''),
+                    height: (project.packagings?.[0]?.height || project.height || ''),
+                    startWeight: (project.packagings?.[0]?.startWeight || project.startWeight || groups[0]?.specs?.startWeight || '')
                 }, 
                 measurements: groups[0].measurements.map(m => ({ day: m.day, measure: [], open: [], evaluate: [] })),
                 predictedImage: null
@@ -2577,66 +2633,79 @@
                            <div className="md:col-span-1"><label className={labelClass}>{pt.maturityStage}</label><input type="text" className={inputClass} value={project.maturityStage || ''} onChange={e => handleProjectChange('maturityStage', e.target.value)} /></div>
                            <div className="md:col-span-1"><label className={labelClass}>{pt.postHarvest}</label><input type="text" className={inputClass} value={project.postHarvestTreatment || ''} onChange={e => handleProjectChange('postHarvestTreatment', e.target.value)} /></div>
 
-                           {/* ALIGNED PACKAGING, MATERIAL AND WEIGHT ROW */}
-                           {(() => {
-                             const isBulk = project.packagingType === 'Cube crate' || project.packagingType === 'Pallet';
-                             const dimUnit = globalConfig.getUnitLabel ? globalConfig.getUnitLabel('length', unitSystem, isBulk) : (isBulk ? 'cm' : 'mm');
-                             const wgtUnit = globalConfig.getUnitLabel ? globalConfig.getUnitLabel('weight', unitSystem, isBulk) : (isBulk ? 'kg' : 'g');
-                             const isPillow = project.packagingType === 'Pillow Bag';
-                             return (
-                               <div className="md:col-span-3 space-y-6 pt-4 mt-2">
-                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
+                           {/* PACKAGING CARDS WITH DIMENSIONS */}
+                           <div className="md:col-span-3 space-y-4 pt-4 mt-2">
+                             {(project.packagings || []).map((pkg, pkgIdx) => {
+                               const pkgIsBulk = pkg.packagingType === 'Cube crate' || pkg.packagingType === 'Pallet';
+                               const dimUnit = globalConfig.getUnitLabel ? globalConfig.getUnitLabel('length', unitSystem, pkgIsBulk) : (pkgIsBulk ? 'cm' : 'mm');
+                               const wgtUnit = globalConfig.getUnitLabel ? globalConfig.getUnitLabel('weight', unitSystem, pkgIsBulk) : (pkgIsBulk ? 'kg' : 'g');
+                               const isPillow = pkg.packagingType === 'Pillow Bag';
+                               return (
+                                 <div key={pkg.id} className="bg-gradient-to-br from-slate-50 to-slate-100 p-5 rounded-2xl border border-slate-200 shadow-sm">
+                                   {project.packagings.length > 1 && (
+                                     <div className="flex items-center justify-between mb-3 border-b border-slate-200 pb-3">
+                                       <span className="text-xs font-extrabold uppercase tracking-widest text-blue-800">{pt.packaging || 'Packaging'} {pkgIdx + 1}</span>
+                                       <button type="button" onClick={() => setProject(prev => ({ ...prev, packagings: prev.packagings.filter((_, i) => i !== pkgIdx) }))}
+                                         className="text-red-400 hover:text-red-600 text-xs font-bold bg-red-50 hover:bg-red-100 px-2 py-1 rounded-lg transition-colors flex items-center gap-1">
+                                         <X size={12}/> {pt.removePackaging || 'Remove'}
+                                       </button>
+                                     </div>
+                                   )}
+                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-4">
                                      <div>
                                        <label className={labelClass}>{pt.packType} <span className="text-red-500">*</span></label>
-                                       <select className={`${inputClass} cursor-pointer bg-white`} value={project.packagingType || 'Retail'} onChange={e => handleProjectChange('packagingType', e.target.value)}>
+                                       <select className={`${inputClass} cursor-pointer bg-white`} value={pkg.packagingType || 'Retail'} onChange={e => setProject(prev => ({ ...prev, packagings: prev.packagings.map((p, i) => i === pkgIdx ? { ...p, packagingType: e.target.value } : p) }))}>
                                          {PACKAGING_TYPES.map(t => <option key={t} value={t}>{getI18nLabel(PACKAGING_TYPES_I18N, t, lang)}</option>)}
                                        </select>
                                      </div>
                                      <div>
                                        <label className={labelClass}>{pt.currentMaterial} <span className="text-red-500">*</span></label>
-                                       <input type="text" className={inputClass} value={project.material || ''} onChange={e => handleProjectChange('material', e.target.value)} />
+                                       <input type="text" className={inputClass} value={pkg.material || ''} onChange={e => setProject(prev => ({ ...prev, packagings: prev.packagings.map((p, i) => i === pkgIdx ? { ...p, material: e.target.value } : p) }))} />
                                      </div>
-                                     <div>
-                                       <label className={labelClass}>{pt.netWeight} <span className="text-red-500">*</span></label>
-                                       <div className="relative">
-                                          <input type="number" className={`${inputClass} font-extrabold text-blue-900 pr-12`} value={project.startWeight || ''} onChange={e => handleProjectChange('startWeight', e.target.value)} />
-                                          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{wgtUnit}</span>
+                                   </div>
+                                   <div>
+                                     <label className="block mb-3 text-[10px] font-extrabold tracking-widest text-blue-800 uppercase border-b border-blue-200 pb-2">{pt.dimens}</label>
+                                     <div className={`grid gap-4 ${isPillow ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-2 sm:grid-cols-4'}`}>
+                                       <div>
+                                         <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1.5 block">{pt.len} <span className="text-red-500">*</span></label>
+                                         <div className="relative">
+                                           <input type="number" className={`${inputClass} pl-4 pr-12`} value={pkg.length || ''} onChange={e => setProject(prev => ({ ...prev, packagings: prev.packagings.map((p, i) => i === pkgIdx ? { ...p, length: e.target.value } : p) }))} />
+                                           <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{dimUnit}</span>
+                                         </div>
+                                       </div>
+                                       <div>
+                                         <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1.5 block">{isPillow ? pt.widSeal : pt.wid} <span className="text-red-500">*</span></label>
+                                         <div className="relative">
+                                           <input type="number" className={`${inputClass} pl-4 pr-12`} value={pkg.width || ''} onChange={e => setProject(prev => ({ ...prev, packagings: prev.packagings.map((p, i) => i === pkgIdx ? { ...p, width: e.target.value } : p) }))} />
+                                           <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{dimUnit}</span>
+                                         </div>
+                                       </div>
+                                       {!isPillow && (
+                                         <div>
+                                           <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1.5 block">{pt.hei} <span className="text-red-500">*</span></label>
+                                           <div className="relative">
+                                             <input type="number" className={`${inputClass} pl-4 pr-12`} value={pkg.height || ''} onChange={e => setProject(prev => ({ ...prev, packagings: prev.packagings.map((p, i) => i === pkgIdx ? { ...p, height: e.target.value } : p) }))} />
+                                             <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{dimUnit}</span>
+                                           </div>
+                                         </div>
+                                       )}
+                                       <div>
+                                         <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1.5 block">{pt.netWeight || 'Net Weight'} <span className="text-red-500">*</span></label>
+                                         <div className="relative">
+                                           <input type="number" className={`${inputClass} font-extrabold text-blue-900 pl-4 pr-12`} value={pkg.startWeight || ''} onChange={e => { const v = e.target.value; setProject(prev => ({ ...prev, startWeight: v, packagings: prev.packagings.map((p, i) => i === pkgIdx ? { ...p, startWeight: v } : p) })); }} />
+                                           <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{wgtUnit}</span>
+                                         </div>
                                        </div>
                                      </div>
+                                   </div>
                                  </div>
-
-                                 {/* FULL WIDTH DIMENSIONS */}
-                                 <div className="bg-gradient-to-br from-slate-50 to-slate-100 p-6 rounded-2xl border border-slate-200 shadow-sm mt-2">
-                                    <label className="block mb-4 text-xs font-extrabold tracking-widest text-blue-800 uppercase border-b border-blue-200 pb-2">{pt.dimens}</label>
-                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
-                                      <div>
-                                        <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">{pt.len} <span className="text-red-500">*</span></label>
-                                        <div className="relative">
-                                          <input type="number" className={`${inputClass} pl-4 pr-12`} value={project.length || ''} onChange={e => handleProjectChange('length', e.target.value)} />
-                                          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{dimUnit}</span>
-                                        </div>
-                                      </div>
-                                      <div>
-                                        <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">{isPillow ? pt.widSeal : pt.wid} <span className="text-red-500">*</span></label>
-                                        <div className="relative">
-                                          <input type="number" className={`${inputClass} pl-4 pr-12`} value={project.width || ''} onChange={e => handleProjectChange('width', e.target.value)} />
-                                          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{dimUnit}</span>
-                                        </div>
-                                      </div>
-                                      {!isPillow && (
-                                        <div>
-                                          <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">{pt.hei} <span className="text-red-500">*</span></label>
-                                          <div className="relative">
-                                            <input type="number" className={`${inputClass} pl-4 pr-12`} value={project.height || ''} onChange={e => handleProjectChange('height', e.target.value)} />
-                                            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{dimUnit}</span>
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                 </div>
-                               </div>
-                             );
-                           })()}
+                               );
+                             })}
+                             <button type="button" onClick={() => setProject(prev => ({ ...prev, packagings: [...(prev.packagings || []), { id: (prev.packagings || []).length + 100, packagingType: 'Retail', material: '', length: '', width: '', height: '', startWeight: '' }] }))}
+                               className="w-full py-3 rounded-xl border-2 border-dashed border-green-300 hover:border-green-500 bg-green-50/50 hover:bg-green-50 text-green-700 font-bold text-sm transition flex items-center justify-center gap-2">
+                               <Plus size={16}/> {pt.addPackaging || '+ Add Packaging'}
+                             </button>
+                           </div>
 
                            {/* Respiration Data */}
                            <div className="md:col-span-3 mt-2 bg-gradient-to-br from-slate-50 to-slate-100 p-6 rounded-2xl border border-slate-200 shadow-sm">
