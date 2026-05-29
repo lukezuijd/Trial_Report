@@ -639,10 +639,20 @@
 
         const PrintPreview = ({ clientInfo, project, groups, analysis, supplyChain, onBack, unitSystem = 'metric' }) => {
           const [isPrinting, setIsPrinting] = useState(false);
+          // Only use temperatures from the 'pack' stage up to (not including) the 'unpack' stage.
+          // Pre-packaging steps like harvest and transport are excluded so the report shows
+          // the temperature the product was actually packed and stored at.
+          const _packIdx   = (supplyChain || []).findIndex(s => s.action === 'pack');
+          const _unpackIdx = (supplyChain || []).findIndex((s, i) => i > _packIdx && s.action === 'unpack');
+          const _packedStages = _packIdx >= 0
+            ? (_unpackIdx > _packIdx
+                ? (supplyChain || []).slice(_packIdx, _unpackIdx)
+                : (supplyChain || []).slice(_packIdx))
+            : (supplyChain || []); // fallback: all stages when no explicit 'pack' action is set
           let allTemps = [];
-          (supplyChain || []).forEach(s => {
+          _packedStages.forEach(s => {
               const ts = parseFloat(s.tempStart); if(!isNaN(ts)) allTemps.push(ts);
-              const te = parseFloat(s.tempEnd); if(!isNaN(te)) allTemps.push(te);
+              const te = parseFloat(s.tempEnd);   if(!isNaN(te)) allTemps.push(te);
           });
           const minTemp = allTemps.length > 0 ? Math.min(...allTemps) : null;
           const maxTemp = allTemps.length > 0 ? Math.max(...allTemps) : null;
@@ -650,7 +660,7 @@
           const totalDays = project.totalDuration || (supplyChain || []).reduce((acc,s) => acc + parseFloat(s.daysStart || 0), 0);
 
           // Unit-aware weight label: bulk packaging (Pallet / Cube crate) uses kg or lb; retail uses g or oz.
-          const projIsBulk = project.packagingType === 'Cube crate' || project.packagingType === 'Pallet';
+          const projIsBulk = (project.packagings?.[0]?.packagingType || project.packagingType || 'Retail') === 'Cube crate' || (project.packagings?.[0]?.packagingType || project.packagingType || 'Retail') === 'Pallet';
           const isImperial = unitSystem === 'imperial';
           const weightUnit = isImperial ? (projIsBulk ? 'lb' : 'oz') : (projIsBulk ? 'kg' : 'g');
 
@@ -1237,6 +1247,7 @@
               // Packaging row + dimensions (mirrors Proposal sub-A)
               packType: 'Packaging Type', currentMaterial: 'Current Material',
               dimens: 'Packaging Dimensions (Inner)', len: 'Length', wid: 'Width', widSeal: 'Seal Width', hei: 'Height',
+              addPackaging: '+ Add Packaging', removePackaging: 'Remove', packaging: 'Packaging', netWeight: 'Net Weight',
               // Quality Criteria (Setup-tab toggle grid, mirrors Proposal/Intake)
               qualityCrit: 'Quality Criteria', qualityCritDesc: 'Click a criterion to toggle it.',
               // DEEL 6 — Product Characteristics & Defect Prevention
@@ -1354,6 +1365,7 @@
               actNone: '- Geen -', actPack: 'Inpakken', actUnpack: 'Uitpakken', addStep: 'Extra Stap Toevoegen', removeStep: 'Verwijder Stap',
               packType: 'Type Verpakking', currentMaterial: 'Huidig Materiaal',
               dimens: 'Afmetingen verpakking (Binnenmaat)', len: 'Lengte', wid: 'Breedte', widSeal: 'Seal Breedte', hei: 'Hoogte',
+              addPackaging: '+ Verpakking Toevoegen', removePackaging: 'Verwijderen', packaging: 'Verpakking', netWeight: 'Netto Gewicht',
               qualityCrit: 'Kwaliteitscriteria', qualityCritDesc: 'Klik op een criterium om deze in of uit te schakelen.',
               secDefects: '5. Producteigenschappen & Defectpreventie',
               defectsMatrixSubtitle: 'Defecten & Preventiematrix',
@@ -1466,6 +1478,7 @@
               actNone: '- Ninguna -', actPack: 'Empacar', actUnpack: 'Desempacar', addStep: 'Añadir Paso', removeStep: 'Eliminar Paso',
               packType: 'Tipo de Empaque', currentMaterial: 'Material Actual',
               dimens: 'Dimensiones del empaque (Internas)', len: 'Longitud', wid: 'Ancho', widSeal: 'Ancho del Sello', hei: 'Altura',
+              addPackaging: '+ Añadir Envase', removePackaging: 'Eliminar', packaging: 'Envase', netWeight: 'Peso Neto',
               qualityCrit: 'Criterios de Calidad', qualityCritDesc: 'Haga clic en un criterio para activarlo o desactivarlo.',
               secDefects: '5. Características del Producto y Prevención de Defectos',
               defectsMatrixSubtitle: 'Matriz de Defectos y Prevención',
@@ -1581,7 +1594,7 @@
             productName: '', processingType: 'Whole', type: '', origin: '', company: '', contactName: '', contactEmail: '', contactRole: '', contactPhone: '', street: '', houseNumber: '', addressExtra: '', zipCode: '', city: '', country: '', employee: '', trialTarget: '', currentChallenge: '',
             rrO2: '', rrCO2: '', rrTemp: '', startWeight: '',
             // Packaging — mirrors proposal so the Setup tab has full parity.
-            packagingType: 'Retail', material: '', length: '', width: '', height: '',
+            packagings: [{ id: 1, packagingType: 'Retail', material: '', length: '', width: '', height: '', startWeight: '' }],
             // Product Characteristics (Section 3 in print preview / DEEL 6 editor)
             // — additive, do not affect existing flows when empty.
             acpO2: '', co2Max: '', co2Shock: '', co2ShockHours: '', tempMin: '',
@@ -2005,11 +2018,20 @@
                        });
                    }
 
+                   const migrateProjectPackagings = (proj) => {
+                     if (!proj) return proj;
+                     if (!proj.packagings) {
+                       return { ...proj, packagings: proj.packagingType
+                         ? [{ id: 1, packagingType: proj.packagingType || 'Retail', material: proj.material || '', length: proj.length || '', width: proj.width || '', height: proj.height || '', startWeight: proj.startWeight || '' }]
+                         : [{ id: 1, packagingType: 'Retail', material: '', length: '', width: '', height: '', startWeight: '' }] };
+                     }
+                     return proj;
+                   };
                    if(d.project) setProject(p => ({
                      ...p,
-                     ...d.project, 
-                     packingDate: d.project.packingDate || d.project.date || new Date().toISOString().split('T')[0], 
-                     transportMode: d.project.transportMode || '', 
+                     ...migrateProjectPackagings(d.project),
+                     packingDate: d.project.packingDate || d.project.date || new Date().toISOString().split('T')[0],
+                     transportMode: d.project.transportMode || '',
                      technologies: d.project.technologies || [],
                      logo: d.project.logo || BRAND.logos.default
                    })); 
@@ -2324,12 +2346,12 @@
                 specs: { 
                     ...(groups[0]?.specs||{}), 
                     sampleCount: sCount,
-                    packaging: project.packagingType || 'Retail',
-                    material: project.material || '',
-                    length: project.length || '',
-                    width: project.width || '',
-                    height: project.height || '',
-                    startWeight: project.startWeight || groups[0]?.specs?.startWeight || ''
+                    packaging: (project.packagings?.[0]?.packagingType || project.packagingType || 'Retail'),
+                    material: (project.packagings?.[0]?.material || project.material || ''),
+                    length: (project.packagings?.[0]?.length || project.length || ''),
+                    width: (project.packagings?.[0]?.width || project.width || ''),
+                    height: (project.packagings?.[0]?.height || project.height || ''),
+                    startWeight: (project.packagings?.[0]?.startWeight || project.startWeight || groups[0]?.specs?.startWeight || '')
                 }, 
                 measurements: meas, 
                 predictedImage: null 
@@ -2805,64 +2827,78 @@
                            <div className="md:col-span-1"><label className={labelClass}>{rt.postHarvest}</label><input type="text" className={inputClass} value={project.postHarvestTreatment || ''} onChange={e => handleProjectChange('postHarvestTreatment', e.target.value)} /></div>
 
                            {/* PACKAGING / MATERIAL / WEIGHT row + DIMENSIONS card */}
-                           {(() => {
-                             const isBulk = project.packagingType === 'Cube crate' || project.packagingType === 'Pallet';
-                             const dimUnit = globalConfig.getUnitLabel ? globalConfig.getUnitLabel('length', unitSystem, isBulk) : (isBulk ? 'cm' : 'mm');
-                             const wgtUnit = globalConfig.getUnitLabel ? globalConfig.getUnitLabel('weight', unitSystem, isBulk) : (isBulk ? 'kg' : 'g');
-                             const isPillow = project.packagingType === 'Pillow Bag';
-                             return (
-                               <div className="md:col-span-3 space-y-6 pt-4 mt-2">
-                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
+                           <div className="md:col-span-3 space-y-4 pt-4 mt-2">
+                             {(project.packagings || []).map((pkg, pkgIdx) => {
+                               const pkgIsBulk = pkg.packagingType === 'Cube crate' || pkg.packagingType === 'Pallet';
+                               const dimUnit = globalConfig.getUnitLabel ? globalConfig.getUnitLabel('length', unitSystem, pkgIsBulk) : (pkgIsBulk ? 'cm' : 'mm');
+                               const wgtUnit = globalConfig.getUnitLabel ? globalConfig.getUnitLabel('weight', unitSystem, pkgIsBulk) : (pkgIsBulk ? 'kg' : 'g');
+                               const isPillow = pkg.packagingType === 'Pillow Bag';
+                               return (
+                                 <div key={pkg.id} className="bg-gradient-to-br from-slate-50 to-slate-100 p-5 rounded-2xl border border-slate-200 shadow-sm">
+                                   {project.packagings.length > 1 && (
+                                     <div className="flex items-center justify-between mb-3 border-b border-slate-200 pb-3">
+                                       <span className="text-xs font-extrabold uppercase tracking-widest text-blue-800">{rt.packaging || 'Packaging'} {pkgIdx + 1}</span>
+                                       <button type="button" onClick={() => setProject(prev => ({ ...prev, packagings: prev.packagings.filter((_, i) => i !== pkgIdx) }))}
+                                         className="text-red-400 hover:text-red-600 text-xs font-bold bg-red-50 hover:bg-red-100 px-2 py-1 rounded-lg transition-colors flex items-center gap-1">
+                                         <X size={12}/> {rt.removePackaging || 'Remove'}
+                                       </button>
+                                     </div>
+                                   )}
+                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-4">
                                      <div>
                                        <label className={labelClass}>{rt.packType} <span className="text-red-500">*</span></label>
-                                       <select className={`${inputClass} cursor-pointer bg-white`} value={project.packagingType || 'Retail'} onChange={e => handleProjectChange('packagingType', e.target.value)}>
+                                       <select className={`${inputClass} cursor-pointer bg-white`} value={pkg.packagingType || 'Retail'} onChange={e => setProject(prev => ({ ...prev, packagings: prev.packagings.map((p, i) => i === pkgIdx ? { ...p, packagingType: e.target.value } : p) }))}>
                                          {PACKAGING_TYPES.map(t => <option key={t} value={t}>{getI18nLabel(PACKAGING_TYPES_I18N, t, lang)}</option>)}
                                        </select>
                                      </div>
                                      <div>
-                                       <label className={labelClass}>{rt.currentMaterial} <span className="text-red-500">*</span></label>
-                                       <input type="text" className={inputClass} value={project.material || ''} onChange={e => handleProjectChange('material', e.target.value)} />
+                                       <label className={labelClass}>{rt.currentMaterial || rt.material} <span className="text-red-500">*</span></label>
+                                       <input type="text" className={inputClass} value={pkg.material || ''} onChange={e => setProject(prev => ({ ...prev, packagings: prev.packagings.map((p, i) => i === pkgIdx ? { ...p, material: e.target.value } : p) }))} />
                                      </div>
-                                     <div>
-                                       <label className={labelClass}>{rt.netWeight} <span className="text-red-500">*</span></label>
-                                       <div className="relative">
-                                          <input type="number" className={`${inputClass} font-extrabold text-blue-900 pr-12`} value={project.startWeight || ''} onChange={e => handleProjectChange('startWeight', e.target.value)} />
-                                          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{wgtUnit}</span>
+                                   </div>
+                                   <div>
+                                     <label className="block mb-3 text-[10px] font-extrabold tracking-widest text-blue-800 uppercase border-b border-blue-200 pb-2">{rt.dimens}</label>
+                                     <div className={`grid gap-4 ${isPillow ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-2 sm:grid-cols-4'}`}>
+                                       <div>
+                                         <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1.5 block">{rt.len}</label>
+                                         <div className="relative">
+                                           <input type="number" className={`${inputClass} pl-4 pr-12`} value={pkg.length || ''} onChange={e => setProject(prev => ({ ...prev, packagings: prev.packagings.map((p, i) => i === pkgIdx ? { ...p, length: e.target.value } : p) }))} />
+                                           <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{dimUnit}</span>
+                                         </div>
+                                       </div>
+                                       <div>
+                                         <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1.5 block">{isPillow ? rt.widSeal : rt.wid}</label>
+                                         <div className="relative">
+                                           <input type="number" className={`${inputClass} pl-4 pr-12`} value={pkg.width || ''} onChange={e => setProject(prev => ({ ...prev, packagings: prev.packagings.map((p, i) => i === pkgIdx ? { ...p, width: e.target.value } : p) }))} />
+                                           <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{dimUnit}</span>
+                                         </div>
+                                       </div>
+                                       {!isPillow && (
+                                         <div>
+                                           <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1.5 block">{rt.hei}</label>
+                                           <div className="relative">
+                                             <input type="number" className={`${inputClass} pl-4 pr-12`} value={pkg.height || ''} onChange={e => setProject(prev => ({ ...prev, packagings: prev.packagings.map((p, i) => i === pkgIdx ? { ...p, height: e.target.value } : p) }))} />
+                                             <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{dimUnit}</span>
+                                           </div>
+                                         </div>
+                                       )}
+                                       <div>
+                                         <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1.5 block">{rt.netWeight || rt.startWeight || 'Net Weight'}</label>
+                                         <div className="relative">
+                                           <input type="number" className={`${inputClass} font-extrabold text-blue-900 pl-4 pr-12`} value={pkg.startWeight || ''} onChange={e => { const v = e.target.value; setProject(prev => ({ ...prev, startWeight: v, packagings: prev.packagings.map((p, i) => i === pkgIdx ? { ...p, startWeight: v } : p) })); }} />
+                                           <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{wgtUnit}</span>
+                                         </div>
                                        </div>
                                      </div>
+                                   </div>
                                  </div>
-
-                                 <div className="bg-gradient-to-br from-slate-50 to-slate-100 p-6 rounded-2xl border border-slate-200 shadow-sm mt-2">
-                                    <label className="block mb-4 text-xs font-extrabold tracking-widest text-blue-800 uppercase border-b border-blue-200 pb-2">{rt.dimens}</label>
-                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
-                                      <div>
-                                        <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">{rt.len} <span className="text-red-500">*</span></label>
-                                        <div className="relative">
-                                          <input type="number" className={`${inputClass} pl-4 pr-12`} value={project.length || ''} onChange={e => handleProjectChange('length', e.target.value)} />
-                                          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{dimUnit}</span>
-                                        </div>
-                                      </div>
-                                      <div>
-                                        <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">{isPillow ? rt.widSeal : rt.wid} <span className="text-red-500">*</span></label>
-                                        <div className="relative">
-                                          <input type="number" className={`${inputClass} pl-4 pr-12`} value={project.width || ''} onChange={e => handleProjectChange('width', e.target.value)} />
-                                          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{dimUnit}</span>
-                                        </div>
-                                      </div>
-                                      {!isPillow && (
-                                        <div>
-                                          <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">{rt.hei} <span className="text-red-500">*</span></label>
-                                          <div className="relative">
-                                            <input type="number" className={`${inputClass} pl-4 pr-12`} value={project.height || ''} onChange={e => handleProjectChange('height', e.target.value)} />
-                                            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{dimUnit}</span>
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                 </div>
-                               </div>
-                             );
-                           })()}
+                               );
+                             })}
+                             <button type="button" onClick={() => setProject(prev => ({ ...prev, packagings: [...(prev.packagings || []), { id: (prev.packagings || []).length + 100, packagingType: 'Retail', material: '', length: '', width: '', height: '', startWeight: '' }] }))}
+                               className="w-full py-3 rounded-xl border-2 border-dashed border-green-300 hover:border-green-500 bg-green-50/50 hover:bg-green-50 text-green-700 font-bold text-sm transition flex items-center justify-center gap-2">
+                               <Plus size={16}/> {rt.addPackaging || '+ Add Packaging'}
+                             </button>
+                           </div>
 
                            {/* Respiration Data (kept — feeds the gas analysis section) */}
                            <div className="md:col-span-3 mt-2 bg-gradient-to-br from-slate-50 to-slate-100 p-6 rounded-2xl border border-slate-200 shadow-sm">
