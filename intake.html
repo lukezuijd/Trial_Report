@@ -98,6 +98,7 @@
             fallbackMailBtn: "Open Email Manually",
             closeBtn: "I understand, close", submitBtn: "Finish & Send",
             removeStep: "Remove Step",
+            addPackaging: '+ Add Packaging', removePackaging: 'Remove', packaging: 'Packaging',
             home: "Home",
             warnCompanyName: "Warning: Please enter a company name!",
             selectCriterion: "Select standard criterion...",
@@ -136,6 +137,7 @@
             fallbackMailBtn: "Open E-mail Handmatig",
             closeBtn: "Ik begrijp het, sluiten", submitBtn: "Afronden & Verzenden",
             removeStep: "Verwijder Stap",
+            addPackaging: '+ Verpakking Toevoegen', removePackaging: 'Verwijderen', packaging: 'Verpakking',
             home: "Home",
             warnCompanyName: "Waarschuwing: Voer een bedrijfsnaam in!",
             selectCriterion: "Selecteer standaard criterium...",
@@ -174,6 +176,7 @@
             fallbackMailBtn: "Abrir Correo Manualmente",
             closeBtn: "Entendido, cerrar", submitBtn: "Terminar y Enviar",
             removeStep: "Eliminar Paso",
+            addPackaging: '+ Añadir Envase', removePackaging: 'Eliminar', packaging: 'Envase',
             home: "Inicio",
             warnCompanyName: "¡Advertencia: Ingrese un nombre de empresa!",
             selectCriterion: "Seleccionar criterio estándar...",
@@ -189,6 +192,12 @@
           { stage: 'Retail Store', tempStart: '18', tempEnd: '', daysStart: '4', daysEnd: '', action: 'none' },
           { stage: 'Consumer', tempStart: '20', tempEnd: '', daysStart: '2', daysEnd: '', action: 'unpack' }
         ];
+
+        // The supply-chain transport step is recognised by its stage label
+        // (any language), never by its position — it stays a normal step that
+        // can be moved or removed, and is renamed when a transport mode is chosen.
+        const TRANSPORT_STAGE_LABELS = ['transport', 'transporte', 'transport by road', 'road transport', 'wegtransport', 'transporte terrestre', 'seafreight', 'sea freight', 'zeevracht', 'transporte marítimo', 'airfreight', 'air freight', 'luchtvracht', 'transporte aéreo', 'storage', 'opslag', 'almacenamiento'];
+        const isTransportStage = (stage) => TRANSPORT_STAGE_LABELS.includes((stage || '').trim().toLowerCase());
 
         const getStageIcon = (name) => {
           const n = name?.toLowerCase() || '';
@@ -378,7 +387,8 @@
                    {/* PRODUCTS */}
                    <div className="space-y-12">
                      {products.map((prod, idx) => {
-                       const isLargeBulk = prod.packagingType === 'Cube crate' || prod.packagingType === 'Pallet';
+                       const firstPkg = (prod.packagings && prod.packagings.length > 0) ? prod.packagings[0] : { packagingType: prod.packagingType };
+                       const isLargeBulk = firstPkg.packagingType === 'Cube crate' || firstPkg.packagingType === 'Pallet';
                        const dimUnit = isLargeBulk ? (isMetric ? 'cm' : 'inch') : (isMetric ? 'mm' : 'inch');
                        const weightUnit = isLargeBulk ? (isMetric ? 'kg' : 'lbs') : (isMetric ? 'g' : 'lbs');
 
@@ -400,9 +410,20 @@
                                         <div className="font-bold text-slate-500">Origin :</div> <div>{prod.origin || '-'}</div>
                                         <div className="font-bold text-slate-500">Maturity :</div> <div>{prod.maturityStage || '-'}</div>
                                         <div className="font-bold text-slate-500">Treatment :</div> <div>{prod.postHarvestTreatment || '-'}</div>
-                                        <div className="font-bold text-slate-500 mt-2 pt-2 print:mt-1 print:pt-1 border-t">Packaging :</div> <div className="mt-2 pt-2 print:mt-1 print:pt-1 border-t">{prod.packagingType || '-'} ({prod.material || '-'})</div>
-                                        <div className="font-bold text-slate-500">Dimensions :</div> <div>{prod.length || '-'} x {prod.width || '-'} {prod.packagingType !== 'Pillow Bag' && `x ${prod.height || '-'}`} {dimUnit}</div>
-                                        <div className="font-bold text-slate-500">Net Weight :</div> <div className="font-bold">{prod.weight || '-'} {weightUnit}</div>
+                                        {(prod.packagings || [{ packagingType: prod.packagingType, material: prod.material, length: prod.length, width: prod.width, height: prod.height, weight: prod.weight }]).map((pkg, pkgIdx) => {
+                                          const pkgB = pkg.packagingType === 'Cube crate' || pkg.packagingType === 'Pallet';
+                                          const pkgDU = pkgB ? (isMetric ? 'cm' : 'inch') : (isMetric ? 'mm' : 'inch');
+                                          const pkgWU = pkgB ? (isMetric ? 'kg' : 'lbs') : (isMetric ? 'g' : 'lbs');
+                                          const multi = (prod.packagings || []).length > 1;
+                                          return (
+                                            <React.Fragment key={pkgIdx}>
+                                              <div className="font-bold text-slate-500 mt-2 pt-2 print:mt-1 print:pt-1 border-t">{multi ? 'Packaging ' + (pkgIdx + 1) + ' :' : 'Packaging :'}</div>
+                                              <div className="mt-2 pt-2 print:mt-1 print:pt-1 border-t">{pkg.packagingType || '-'} ({pkg.material || '-'})</div>
+                                              <div className="font-bold text-slate-500">Dimensions :</div>
+                                              <div>{pkg.length || '-'} x {pkg.width || '-'}{pkg.packagingType !== 'Pillow Bag' ? ' x ' + (pkg.height || '-') : ''} {pkgDU} · <span className="font-bold">{pkg.weight || '-'} {pkgWU}</span></div>
+                                            </React.Fragment>
+                                          );
+                                        })}
                                      </div>
                                   </div>
                                </div>
@@ -480,8 +501,8 @@
 
           const initialProduct = {
             id: Date.now(), name: '', type: '', origin: '', processingType: 'Whole',
-            maturityStage: '', postHarvestTreatment: '', weight: '',
-            packagingType: 'Punnets', material: '', length: '', width: '', height: '',
+            maturityStage: '', postHarvestTreatment: '',
+            packagings: [{ id: 1, packagingType: 'Punnets', material: '', length: '', width: '', height: '', weight: '' }],
             qualityCriteria: [], currentChallenge: '', trialTarget: '',
             transportMode: '', supplyChain: JSON.parse(JSON.stringify(DEFAULT_SUPPLY_CHAIN)).map(s => ({...s, stage: (globalConfig.translateLabel ? globalConfig.translateLabel(s.stage, lang) : s.stage)})), photo: null
           };
@@ -512,15 +533,19 @@
           const handleUnitToggle = (newSystem) => {
               if (newSystem === unitSystem) return;
               const toImperial = newSystem === 'imperial';
-              
+
               setProducts(prevProds => prevProds.map(p => {
-                  const isBulk = p.packagingType === 'Cube crate' || p.packagingType === 'Pallet';
-                  
-                  // Convert dimensions
-                  const newLen = convertValue(p.length, 'length', isBulk, toImperial);
-                  const newWid = convertValue(p.width, 'length', isBulk, toImperial);
-                  const newHei = convertValue(p.height, 'length', isBulk, toImperial);
-                  const newWgt = convertValue(p.weight, 'weight', isBulk, toImperial);
+                  // Convert packagings dimensions and weight
+                  const newPackagings = (p.packagings || []).map(pkg => {
+                      const isBulk = pkg.packagingType === 'Cube crate' || pkg.packagingType === 'Pallet';
+                      return {
+                          ...pkg,
+                          length: convertValue(pkg.length, 'length', isBulk, toImperial),
+                          width:  convertValue(pkg.width,  'length', isBulk, toImperial),
+                          height: convertValue(pkg.height, 'length', isBulk, toImperial),
+                          weight: convertValue(pkg.weight, 'weight', isBulk, toImperial),
+                      };
+                  });
 
                   // Convert Supply Chain Temps
                   const newChain = p.supplyChain.map(step => ({
@@ -531,14 +556,11 @@
 
                   return {
                       ...p,
-                      length: newLen,
-                      width: newWid,
-                      height: newHei,
-                      weight: newWgt,
+                      packagings: newPackagings,
                       supplyChain: newChain
                   };
               }));
-              
+
               setUnitSystem(newSystem);
           };
 
@@ -617,12 +639,41 @@
                     return { ...step, action: newAction };
                   });
                 }
+
+                // Keep the supply-chain transport step in sync with the
+                // selected transport mode (Air/Sea/Road/Storage).
+                if (field === 'transportMode' && value) {
+                  const newStage = getI18nLabel(TRANSPORT_MODES_I18N, value, lang);
+                  const ti = updatedProduct.supplyChain.findIndex(s => isTransportStage(s.stage));
+                  if (ti !== -1 && newStage) {
+                    updatedProduct.supplyChain = updatedProduct.supplyChain.map((s, i) => i === ti ? { ...s, stage: newStage } : s);
+                  }
+                }
                 return updatedProduct;
               }
               return p;
             }));
-            
+
             if (errors.length > 0) setErrors([]);
+          };
+
+          const handlePackagingChange = (productId, pkgId, field, value) => {
+            setProducts(prev => prev.map(p => p.id !== productId ? p : {
+              ...p,
+              packagings: p.packagings.map(pkg => pkg.id !== pkgId ? pkg : { ...pkg, [field]: value })
+            }));
+          };
+          const addPackaging = (productId) => {
+            setProducts(prev => prev.map(p => p.id !== productId ? p : {
+              ...p,
+              packagings: [...p.packagings, { id: p.packagings.length + 100, packagingType: 'Punnets', material: '', length: '', width: '', height: '', weight: '' }]
+            }));
+          };
+          const removePackaging = (productId, pkgId) => {
+            setProducts(prev => prev.map(p => p.id !== productId ? p : {
+              ...p,
+              packagings: p.packagings.filter(pkg => pkg.id !== pkgId)
+            }));
           };
 
           const toggleCriteria = (productId, crit) => {
@@ -696,11 +747,12 @@
             products.forEach((p, idx) => {
               const prefix = `${t.reqProd} ${idx + 1} (${p.name || '?'}): `;
               if (!p.name.trim()) newErrors.push(`${prefix}${t.prodName} ${t.reqField}`);
-              if (!p.material.trim()) newErrors.push(`${prefix}${t.material} ${t.reqField}`);
-              if (!p.length.toString().trim()) newErrors.push(`${prefix}${t.len} ${t.reqField}`);
-              if (!p.width.toString().trim()) newErrors.push(`${prefix}${p.packagingType === 'Pillow Bag' ? t.widSeal : t.wid} ${t.reqField}`);
-              if (p.packagingType !== 'Pillow Bag' && !p.height.toString().trim()) newErrors.push(`${prefix}${t.hei} ${t.reqField}`);
-              if (!p.weight.toString().trim()) newErrors.push(`${prefix}${t.weight} ${t.reqField}`);
+              const firstPkg = p.packagings && p.packagings.length > 0 ? p.packagings[0] : {};
+              if (!(firstPkg.material || '').toString().trim()) newErrors.push(`${prefix}${t.material} ${t.reqField}`);
+              if (!(firstPkg.length || '').toString().trim()) newErrors.push(`${prefix}${t.len} ${t.reqField}`);
+              if (!(firstPkg.width || '').toString().trim()) newErrors.push(`${prefix}${firstPkg.packagingType === 'Pillow Bag' ? t.widSeal : t.wid} ${t.reqField}`);
+              if (firstPkg.packagingType !== 'Pillow Bag' && !(firstPkg.height || '').toString().trim()) newErrors.push(`${prefix}${t.hei} ${t.reqField}`);
+              if (!(firstPkg.weight || '').toString().trim()) newErrors.push(`${prefix}${t.weight} ${t.reqField}`);
               if (!p.currentChallenge.trim()) newErrors.push(`${prefix}${t.challenge} ${t.reqField}`);
               if (!p.trialTarget.trim()) newErrors.push(`${prefix}${t.goal} ${t.reqField}`);
               if (!p.transportMode) newErrors.push(`${prefix}${t.transportModeErr} ${t.reqField}`);
@@ -806,7 +858,13 @@
                    // do contain.
                    setClientInfo(prev => ({ ...prev, ...loadedClient }));
                    if(data.products && data.products.length > 0) {
-                       setProducts(data.products);
+                       const migrateProduct = (p) => {
+                         if (!p.packagings) {
+                           return { ...p, packagings: [{ id: 1, packagingType: p.packagingType || 'Punnets', material: p.material || '', length: p.length || '', width: p.width || '', height: p.height || '', weight: p.weight || '' }] };
+                         }
+                         return p;
+                       };
+                       setProducts(data.products.map(migrateProduct));
                    }
                    if(data.unitSystem) setUnitSystem(data.unitSystem);
                 } else { alert(t.validationErr || "Invalid intake file."); }
@@ -831,11 +889,10 @@
 
           const handleSubmit = (e) => {
             if (e && e.preventDefault) e.preventDefault();
-            
-            if (!validateForm()) {
-               window.scrollTo({ top: 0, behavior: 'smooth' });
-               return;
-            }
+
+            // Internal tool: missing mandatory fields are highlighted but never block
+            // export/preview. Hard validation only exists in intake_client.html on send.
+            validateForm();
 
             handleExportJSON();
             
@@ -944,7 +1001,7 @@
                         {(t.save || '').split(' ').map((w, i) => <span key={i} className={i === 0 ? '' : 'opacity-60 font-medium'}>{w}</span>)}
                       </span>
                     </button>
-                    <button onClick={() => { if(!clientInfo.companyName) alert(t.warnCompanyName || 'Warning: Please enter a company name!'); else if(validateForm()) setIsPreview(true); else window.scrollTo({ top: 0, behavior: 'smooth' }); }} className="bg-blue-600 text-white p-2 lg:pr-3 rounded-xl font-bold flex items-center gap-2 hover:bg-blue-700 transition-all shadow-md hover:shadow-blue-500/30" title={t.preview}>
+                    <button onClick={() => setIsPreview(true)} className="bg-blue-600 text-white p-2 lg:pr-3 rounded-xl font-bold flex items-center gap-2 hover:bg-blue-700 transition-all shadow-md hover:shadow-blue-500/30" title={t.preview}>
                       <FileText size={18} className="shrink-0"/>
                       <span className="hidden lg:flex flex-col items-start leading-[1.05] text-[10px] uppercase tracking-tight">
                         {(t.preview || '').split(' ').map((w, i) => <span key={i} className={i === 0 ? '' : 'opacity-80 font-medium'}>{w}</span>)}
@@ -1101,10 +1158,6 @@
                 {/* PRODUCTS LIST */}
                 <div className="space-y-10">
                   {products.map((prod, idx) => {
-                    const isLargeBulk = prod.packagingType === 'Cube crate' || prod.packagingType === 'Pallet';
-                    const dimUnit = isLargeBulk ? (unitSystem === 'metric' ? 'cm' : 'inch') : (unitSystem === 'metric' ? 'mm' : 'inch');
-                    const weightUnit = isLargeBulk ? (unitSystem === 'metric' ? 'kg' : 'lbs') : (unitSystem === 'metric' ? 'g' : 'lbs');
-
                     return (
                       <section key={prod.id} className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200 overflow-hidden relative transition-all hover:shadow-lg">
                         
@@ -1220,55 +1273,80 @@
                                 <input type="text" className={inputClass} value={prod.postHarvestTreatment} onChange={e => handleProductChange(prod.id, 'postHarvestTreatment', e.target.value)} />
                               </div>
 
-                              {/* ALIGNED PACKAGING, MATERIAL AND WEIGHT ROW */}
-                              <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-3 gap-8">
-                                 <div>
-                                   <label className={labelClass}>{t.packType} <span className="text-red-500">*</span></label>
-                                   <select className={`${inputClass} cursor-pointer bg-white`} value={prod.packagingType} onChange={e => handleProductChange(prod.id, 'packagingType', e.target.value)}>
-                                     {PACKAGING_TYPES.map(type => <option key={type} value={type}>{getI18nLabel(PACKAGING_TYPES_I18N, type, lang)}</option>)}
-                                   </select>
-                                 </div>
-                                 <div>
-                                   <label className={labelClass}>{t.material} <span className="text-red-500">*</span></label>
-                                   <input type="text" className={inputClass} value={prod.material} onChange={e => handleProductChange(prod.id, 'material', e.target.value)} />
-                                 </div>
-                                 <div>
-                                   <label className={labelClass}>{t.weight} <span className="text-red-500">*</span></label>
-                                   <div className="relative">
-                                      <input type="number" className={`${inputClass} pr-12`} value={prod.weight} onChange={e => handleProductChange(prod.id, 'weight', e.target.value)} />
-                                      <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{weightUnit}</span>
-                                   </div>
-                                 </div>
-                              </div>
-
-                              {/* FULL WIDTH DIMENSIONS */}
-                              <div className="md:col-span-3 bg-gradient-to-br from-slate-50 to-slate-100 p-6 rounded-2xl border border-slate-200 shadow-sm mt-2">
-                                 <label className="block mb-4 text-xs font-extrabold tracking-widest text-blue-800 uppercase border-b border-blue-200 pb-2">{t.dimens}</label>
-                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-6">
-                                   <div>
-                                     <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">{t.len} <span className="text-red-500">*</span></label>
-                                     <div className="relative">
-                                       <input type="number" className={`${inputClass} pl-4 pr-12`} value={prod.length} onChange={e => handleProductChange(prod.id, 'length', e.target.value)} />
-                                       <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{dimUnit}</span>
-                                     </div>
-                                   </div>
-                                   <div>
-                                     <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">{prod.packagingType === 'Pillow Bag' ? t.widSeal : t.wid} <span className="text-red-500">*</span></label>
-                                     <div className="relative">
-                                       <input type="number" className={`${inputClass} pl-4 pr-12`} value={prod.width} onChange={e => handleProductChange(prod.id, 'width', e.target.value)} />
-                                       <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{dimUnit}</span>
-                                     </div>
-                                   </div>
-                                   {prod.packagingType !== 'Pillow Bag' && (
-                                     <div className="col-span-2 sm:col-span-1">
-                                       <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">{t.hei} <span className="text-red-500">*</span></label>
-                                       <div className="relative">
-                                          <input type="number" className={`${inputClass} pl-4 pr-12`} value={prod.height} onChange={e => handleProductChange(prod.id, 'height', e.target.value)} />
-                                          <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{dimUnit}</span>
-                                       </div>
-                                     </div>
-                                   )}
-                                 </div>
+                              {/* MULTIPLE PACKAGINGS */}
+                              <div className="md:col-span-3 space-y-4">
+                                {(prod.packagings || []).map((pkg, pkgIdx) => {
+                                  const pkgIsBulk = pkg.packagingType === 'Cube crate' || pkg.packagingType === 'Pallet';
+                                  const pkgDimUnit = pkgIsBulk ? (isMetric ? 'cm' : 'inch') : (isMetric ? 'mm' : 'inch');
+                                  const pkgWgtUnit = pkgIsBulk ? (isMetric ? 'kg' : 'lbs') : (isMetric ? 'g' : 'lbs');
+                                  const pkgIsPillow = pkg.packagingType === 'Pillow Bag';
+                                  return (
+                                    <div key={pkg.id} className="bg-gradient-to-br from-slate-50 to-slate-100 p-5 rounded-2xl border border-slate-200 shadow-sm">
+                                      {prod.packagings.length > 1 && (
+                                        <div className="flex items-center justify-between mb-3 border-b border-slate-200 pb-3">
+                                          <span className="text-xs font-extrabold uppercase tracking-widest text-blue-800">
+                                            {t.packaging || 'Packaging'} {pkgIdx + 1}
+                                          </span>
+                                          <button type="button" onClick={() => removePackaging(prod.id, pkg.id)}
+                                            className="text-red-400 hover:text-red-600 text-xs font-bold flex items-center gap-1 bg-red-50 hover:bg-red-100 px-2 py-1 rounded-lg transition-colors">
+                                            <X size={12}/> {t.removePackaging || 'Remove'}
+                                          </button>
+                                        </div>
+                                      )}
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-4">
+                                        <div>
+                                          <label className={labelClass}>{t.packType} <span className="text-red-500">*</span></label>
+                                          <select className={`${inputClass} cursor-pointer bg-white`} value={pkg.packagingType} onChange={e => handlePackagingChange(prod.id, pkg.id, 'packagingType', e.target.value)}>
+                                            {PACKAGING_TYPES.map(type => <option key={type} value={type}>{getI18nLabel(PACKAGING_TYPES_I18N, type, lang)}</option>)}
+                                          </select>
+                                        </div>
+                                        <div>
+                                          <label className={labelClass}>{t.material} <span className="text-red-500">*</span></label>
+                                          <input type="text" className={inputClass} value={pkg.material} onChange={e => handlePackagingChange(prod.id, pkg.id, 'material', e.target.value)} />
+                                        </div>
+                                      </div>
+                                      <div>
+                                        <label className="block mb-3 text-[10px] font-extrabold tracking-widest text-blue-800 uppercase border-b border-blue-200 pb-2">{t.dimens}</label>
+                                        <div className={`grid gap-4 ${pkgIsPillow ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-2 sm:grid-cols-4'}`}>
+                                          <div>
+                                            <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1.5 block">{t.len} <span className="text-red-500">*</span></label>
+                                            <div className="relative">
+                                              <input type="number" className={`${inputClass} pl-4 pr-12`} value={pkg.length} onChange={e => handlePackagingChange(prod.id, pkg.id, 'length', e.target.value)} />
+                                              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{pkgDimUnit}</span>
+                                            </div>
+                                          </div>
+                                          <div>
+                                            <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1.5 block">{pkgIsPillow ? t.widSeal : t.wid} <span className="text-red-500">*</span></label>
+                                            <div className="relative">
+                                              <input type="number" className={`${inputClass} pl-4 pr-12`} value={pkg.width} onChange={e => handlePackagingChange(prod.id, pkg.id, 'width', e.target.value)} />
+                                              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{pkgDimUnit}</span>
+                                            </div>
+                                          </div>
+                                          {!pkgIsPillow && (
+                                            <div>
+                                              <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1.5 block">{t.hei} <span className="text-red-500">*</span></label>
+                                              <div className="relative">
+                                                <input type="number" className={`${inputClass} pl-4 pr-12`} value={pkg.height} onChange={e => handlePackagingChange(prod.id, pkg.id, 'height', e.target.value)} />
+                                                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{pkgDimUnit}</span>
+                                              </div>
+                                            </div>
+                                          )}
+                                          <div>
+                                            <label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1.5 block">{t.weight || 'Net Weight'} <span className="text-red-500">*</span></label>
+                                            <div className="relative">
+                                              <input type="number" className={`${inputClass} pl-4 pr-12`} value={pkg.weight} onChange={e => handlePackagingChange(prod.id, pkg.id, 'weight', e.target.value)} />
+                                              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold text-sm">{pkgWgtUnit}</span>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                                <button type="button" onClick={() => addPackaging(prod.id)}
+                                  className="w-full py-3 rounded-xl border-2 border-dashed border-green-300 hover:border-green-500 bg-green-50/50 hover:bg-green-50 text-green-700 font-bold text-sm transition flex items-center justify-center gap-2">
+                                  <Plus size={16}/> {t.addPackaging || '+ Add Packaging'}
+                                </button>
                               </div>
                               
                               <div className="md:col-span-3 mt-4">
