@@ -120,6 +120,12 @@
           { stage: 'Consumer (Open Pack)', tempStart: '20', tempEnd: '', daysStart: '2', daysEnd: '', action: 'unpack' }
         ];
 
+        // The supply-chain transport step is recognised by its stage label
+        // (any language), never by its position — so it can be moved, renamed
+        // via the dropdown, or removed like any other step.
+        const TRANSPORT_STAGE_LABELS = ['transport', 'transporte', 'transport by road', 'road transport', 'wegtransport', 'transporte terrestre', 'seafreight', 'sea freight', 'zeevracht', 'transporte marítimo', 'airfreight', 'air freight', 'luchtvracht', 'transporte aéreo', 'storage', 'opslag', 'almacenamiento'];
+        const isTransportStage = (stage) => TRANSPORT_STAGE_LABELS.includes((stage || '').trim().toLowerCase());
+
         // --- HELPER CLASSES ---
         const inputClass = (globalConfig.UI_CLASSES && globalConfig.UI_CLASSES.input) || "w-full bg-slate-50 border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block p-3 shadow-sm transition-all hover:bg-slate-100 focus:bg-white";
         const narrowInputClass = "w-full bg-slate-50 border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block py-2.5 px-1 text-center shadow-sm transition-all hover:bg-slate-100 focus:bg-white [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield] min-w-0";
@@ -784,16 +790,25 @@
                       <p className="mb-6 print:mb-2 leading-relaxed print:leading-tight">{pv.trialSetupIntro}</p>
 
                       <div className="overflow-hidden rounded-xl border border-slate-200 shadow-sm break-inside-avoid">
-                          <table className="report-table w-full text-sm print:text-xs">
+                          <table className="report-table w-full text-sm print:text-xs table-fixed">
+                            <colgroup>
+                                <col style={{width:'16%'}} />
+                                <col style={{width:'13%'}} />
+                                <col style={{width:'13%'}} />
+                                <col style={{width:'17%'}} />
+                                <col style={{width:'11%'}} />
+                                <col style={{width:'12%'}} />
+                                <col style={{width:'18%'}} />
+                            </colgroup>
                             <thead>
                               <tr>
-                                <th className="w-1/4">{pv.thVariant}</th>
-                                <th className="text-center">{pv.thPackagingType}</th>
-                                <th className="text-center">{pv.thMaterial}</th>
-                                <th className="text-center">{pv.thDimensions}</th>
-                                <th className="text-center">{pv.thNetWeight}</th>
-                                <th className="text-center">{pv.thTransmission}</th>
-                                <th className="text-center">{pv.thEvalDays}</th>
+                                <th className="break-words">{pv.thVariant}</th>
+                                <th className="text-center break-words">{pv.thPackagingType}</th>
+                                <th className="text-center break-words">{pv.thMaterial}</th>
+                                <th className="text-center break-words">{pv.thDimensions}</th>
+                                <th className="text-center break-words">{pv.thNetWeight}</th>
+                                <th className="text-center break-words">{pv.thTransmission}</th>
+                                <th className="text-center break-words">{pv.thEvalDays}</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-200">
@@ -803,15 +818,15 @@
                                 const weightUnit = isLargeBulk ? 'kg' : 'g';
                                 return (
                                   <tr key={g.id} className="bg-white">
-                                    <td className="font-bold py-4 print:py-2" style={{ borderLeft: `4px solid ${CHART_COLORS[i % CHART_COLORS.length].stroke}` }}>
+                                    <td className="font-bold py-4 print:py-2 break-words" style={{ borderLeft: `4px solid ${CHART_COLORS[i % CHART_COLORS.length].stroke}` }}>
                                       {g.name}
                                     </td>
-                                    <td className="text-center py-4 print:py-2">{g.specs?.packaging || '-'}</td>
-                                    <td className="text-center py-4 print:py-2">{g.specs?.material || '-'}</td>
-                                    <td className="text-center py-4 print:py-2">{g.specs?.length || '-'}x{g.specs?.width || '-'}x{g.specs?.height || '-'} {dimUnit}</td>
-                                    <td className="text-center py-4 print:py-2">{project.startWeight || '-'} {weightUnit}</td>
-                                    <td className="text-center py-4 print:py-2 font-bold">{g.specs?.holes || '-'}</td>
-                                    <td className="text-center py-4 print:py-2 font-medium text-slate-500">{g.measurements.filter(m => parseFloat(m.day) > 0).map(m => `P+${m.day}`).join(', ')}</td>
+                                    <td className="text-center py-4 print:py-2 break-words">{g.specs?.packaging || '-'}</td>
+                                    <td className="text-center py-4 print:py-2 break-words">{g.specs?.material || '-'}</td>
+                                    <td className="text-center py-4 print:py-2 break-words">{g.specs?.length || '-'}x{g.specs?.width || '-'}x{g.specs?.height || '-'} {dimUnit}</td>
+                                    <td className="text-center py-4 print:py-2 break-words">{project.startWeight || '-'} {weightUnit}</td>
+                                    <td className="text-center py-4 print:py-2 font-bold break-words">{g.specs?.holes || '-'}</td>
+                                    <td className="text-center py-4 print:py-2 font-medium text-slate-500 break-words">{g.measurements.filter(m => parseFloat(m.day) > 0).map(m => `P+${m.day}`).join(', ')}</td>
                                   </tr>
                                 );
                               })}
@@ -870,9 +885,9 @@
                                {g.measurements.sort((a,b) => parseFloat(a.day) - parseFloat(b.day)).map((m, idx) => (
                                  <tr key={idx} className="hover:bg-slate-50 transition-colors">
                                    <td className="p-3 print:p-2 text-center font-extrabold text-slate-700 bg-slate-50/50">P+{m.day}</td>
-                                   <td className="p-3 print:p-2 text-slate-600 font-medium">{(m.measure||[]).length > 0 ? (m.measure||[]).map(s => `S${s}`).join(', ') : '-'}</td>
-                                   <td className="p-3 print:p-2 text-orange-600 font-bold">{(m.open||[]).length > 0 ? (m.open||[]).map(s => `S${s}`).join(', ') : '-'}</td>
-                                   <td className="p-3 print:p-2 text-green-700 font-bold">{(m.evaluate||[]).length > 0 ? (m.evaluate||[]).map(s => `S${s}`).join(', ') : '-'}</td>
+                                   <td className="p-3 print:p-2 text-slate-600 font-medium break-words">{(m.measure||[]).length > 0 ? (m.measure||[]).map(s => `S${s}`).join(', ') : '-'}</td>
+                                   <td className="p-3 print:p-2 text-orange-600 font-bold break-words">{(m.open||[]).length > 0 ? (m.open||[]).map(s => `S${s}`).join(', ') : '-'}</td>
+                                   <td className="p-3 print:p-2 text-green-700 font-bold break-words">{(m.evaluate||[]).length > 0 ? (m.evaluate||[]).map(s => `S${s}`).join(', ') : '-'}</td>
                                  </tr>
                                ))}
                              </tbody>
@@ -1869,7 +1884,22 @@
           const toggleCriteria = (c) => setProject(p => ({ ...p, criteria: p.criteria?.includes(c) ? p.criteria.filter(x => x !== c) : [...(p.criteria||[]), c] }));
           const addNewCriteria = () => { if(newCriteria && !(project.criteria||[]).includes(newCriteria)) { toggleCriteria(newCriteria); setNewCriteria(''); }};
           const handleTransportModeToggle = (mode) => {
-            setProject(p => ({ ...p, transportMode: p.transportMode === mode ? '' : mode }));
+            const isDeselect = project.transportMode === mode;
+            setProject(p => ({ ...p, transportMode: isDeselect ? '' : mode }));
+            // Keep the supply-chain transport step in sync with the selected mode.
+            if (!isDeselect) {
+              const modeToStage = { 'Road Transport': pt.transportRoad, 'Sea Freight': pt.transportSea, 'Air Freight': pt.transportAir, 'Storage': pt.transportStorage };
+              const newStage = modeToStage[mode];
+              if (newStage) {
+                setSupplyChain(prev => {
+                  const i = prev.findIndex(s => isTransportStage(s.stage));
+                  if (i === -1) return prev;
+                  const next = [...prev];
+                  next[i] = { ...next[i], stage: newStage };
+                  return next;
+                });
+              }
+            }
           };
           const toggleTechnology = (tech) => {
             setProject(p => ({ 
@@ -2801,8 +2831,9 @@
                                  </div>
                                  <div className="w-full">
                                     <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">{pt.phase} <span className="text-red-500">*</span></label>
-                                    {idx === 2 ? (
+                                    {isTransportStage(step.stage) ? (
                                        <select className={`${inputClass} py-2.5 font-bold w-full`} value={step.stage || ''} onChange={e => updateChainStep(idx, 'stage', e.target.value)}>
+                                         {![pt.transportRoad, pt.transportSea, pt.transportAir, pt.transportStorage].includes(step.stage) && <option>{step.stage}</option>}
                                          <option>{pt.transportRoad}</option><option>{pt.transportSea}</option><option>{pt.transportAir}</option><option>{pt.transportStorage}</option>
                                        </select>
                                      ) : (
