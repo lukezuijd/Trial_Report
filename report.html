@@ -103,6 +103,12 @@
           { stage: 'Consumer (Open Pack)', tempStart: '20', tempEnd: '', daysStart: '2', daysEnd: '', action: 'unpack' }
         ];
 
+        // The supply-chain transport step is recognised by its stage label
+        // (any language), never by its position — so it can be moved, renamed
+        // via the dropdown, or removed like any other step.
+        const TRANSPORT_STAGE_LABELS = ['transport', 'transporte', 'transport by road', 'road transport', 'wegtransport', 'transporte terrestre', 'seafreight', 'sea freight', 'zeevracht', 'transporte marítimo', 'airfreight', 'air freight', 'luchtvracht', 'transporte aéreo', 'storage', 'opslag', 'almacenamiento'];
+        const isTransportStage = (stage) => TRANSPORT_STAGE_LABELS.includes((stage || '').trim().toLowerCase());
+
         const SCORES = globalConfig.SCORES || [
           [10, 'excellent – exceptionally appealing quality, exceptional good'],
           [9, 'very good – natural quality of the product, full strong characteristic quality attributes'],
@@ -895,13 +901,19 @@
                        <h4 className="font-bold text-xl mb-4 text-slate-800">Trial samples:</h4>
                        
                        <div className="overflow-hidden rounded-xl border border-slate-200 shadow-sm mb-6">
-                           <table className="w-full text-sm">
+                           <table className="w-full text-sm table-fixed">
+                             <colgroup>
+                                 <col style={{width:'28%'}} />
+                                 <col style={{width:'24%'}} />
+                                 <col style={{width:'24%'}} />
+                                 <col style={{width:'24%'}} />
+                             </colgroup>
                              <thead className="bg-slate-50 border-b border-slate-200">
                                <tr className="text-left text-slate-600 uppercase tracking-wider text-[10px] font-bold">
-                                 <th className="p-3 w-1/4">Variant</th>
-                                 <th className="p-3 text-center">Packaging Type</th>
-                                 <th className="p-3 text-center">Material</th>
-                                 <th className="p-3 text-center">Dimensions (mm)</th>
+                                 <th className="p-3 break-words">Variant</th>
+                                 <th className="p-3 text-center break-words">Packaging Type</th>
+                                 <th className="p-3 text-center break-words">Material</th>
+                                 <th className="p-3 text-center break-words">Dimensions (mm)</th>
                                </tr>
                              </thead>
                              <tbody className="divide-y divide-slate-100 bg-white">
@@ -910,10 +922,10 @@
                                  const dimUnit = isLargeBulk ? 'cm' : 'mm';
                                  return (
                                    <tr key={g.id}>
-                                     <td className="font-bold p-3" style={{ borderLeft: `4px solid ${CHART_COLORS[i % CHART_COLORS.length].stroke}` }}>{g.name}</td>
-                                     <td className="text-center p-3">{g.specs?.packaging || '-'}</td>
-                                     <td className="text-center p-3">{g.specs?.material || '-'}</td>
-                                     <td className="text-center p-3">{g.specs?.length || '-'}x{g.specs?.width || '-'}x{g.specs?.height || '-'} {dimUnit}</td>
+                                     <td className="font-bold p-3 break-words" style={{ borderLeft: `4px solid ${CHART_COLORS[i % CHART_COLORS.length].stroke}` }}>{g.name}</td>
+                                     <td className="text-center p-3 break-words">{g.specs?.packaging || '-'}</td>
+                                     <td className="text-center p-3 break-words">{g.specs?.material || '-'}</td>
+                                     <td className="text-center p-3 break-words">{g.specs?.length || '-'}x{g.specs?.width || '-'}x{g.specs?.height || '-'} {dimUnit}</td>
                                    </tr>
                                  );
                                })}
@@ -1027,14 +1039,21 @@
                          On Day {groups[0]?.measurements?.[groups[0].measurements.length-1]?.day || ''}, the visual quality was assessed.
                       </p>
                       <div className="overflow-hidden rounded-xl border border-slate-200 shadow-sm">
-                        <table className="w-full text-base bg-white">
+                        <table className="w-full text-base bg-white table-fixed">
+                          <colgroup>
+                              <col style={{width:'20%'}} />
+                              <col style={{width:'13%'}} />
+                              <col style={{width:'13%'}} />
+                              <col style={{width:'14%'}} />
+                              <col style={{width:'40%'}} />
+                          </colgroup>
                           <thead className="bg-slate-100 border-b border-slate-200">
                             <tr className="text-left text-slate-600 uppercase tracking-wider text-[10px] font-bold">
-                              <th className="p-4">Variant</th>
-                              <th className="p-4 text-center">Final Day</th>
-                              <th className="p-4 text-center">Visual Score</th>
-                              <th className="p-4 text-center">Weight Loss</th>
-                              <th className="p-4">Key Observation</th>
+                              <th className="p-4 break-words">Variant</th>
+                              <th className="p-4 text-center break-words">Final Day</th>
+                              <th className="p-4 text-center break-words">Visual Score</th>
+                              <th className="p-4 text-center break-words">Weight Loss</th>
+                              <th className="p-4 break-words">Key Observation</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100">
@@ -1045,13 +1064,13 @@
                               const loss = getWeightLoss(last.samples, day0.samples);
                               return (
                                 <tr key={i} className="hover:bg-slate-50 transition-colors">
-                                  <td className="font-bold p-4" style={{ borderLeft: `4px solid ${CHART_COLORS[i % CHART_COLORS.length].stroke}` }}>{g.name || ''}</td>
-                                  <td className="text-center p-4 text-slate-500 font-medium">Day {last?.day || ''}</td>
+                                  <td className="font-bold p-4 break-words" style={{ borderLeft: `4px solid ${CHART_COLORS[i % CHART_COLORS.length].stroke}` }}>{g.name || ''}</td>
+                                  <td className="text-center p-4 text-slate-500 font-medium break-words">Day {last?.day || ''}</td>
                                   <td className="text-center p-4">
                                      <span className="font-extrabold text-lg" style={{color: BRAND.colors.green}}>{last?.evaluateQuality ? last?.quality : '-'}</span>
                                   </td>
-                                  <td className="text-center p-4 font-bold text-slate-600">{loss}%</td>
-                                  <td className="p-4 text-sm text-slate-700 italic">{last?.notes || '-'}</td>
+                                  <td className="text-center p-4 font-bold text-slate-600 break-words">{loss}%</td>
+                                  <td className="p-4 text-sm text-slate-700 italic break-words">{last?.notes || '-'}</td>
                                 </tr>
                               )
                             })}
@@ -1093,17 +1112,17 @@
                              <div key={dayVal} className="mb-8 break-inside-avoid bg-slate-50 p-6 rounded-3xl border border-slate-200 shadow-sm">
                                <h4 className="font-extrabold text-lg mb-4 text-slate-800 border-b border-slate-200 pb-2">Evaluation: Day {dayVal} <span className="font-normal text-slate-500 text-sm ml-2">{dayContext}</span></h4>
                                <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-                                 <table className="w-full text-sm">
+                                 <table className="w-full text-sm table-fixed">
                                    <thead className="bg-slate-100 border-b border-slate-200">
                                      <tr className="text-left text-slate-600 uppercase tracking-wider text-[10px] font-bold">
-                                       <th className="p-4">Criterion</th>
-                                       {evaluatedGroups.map(g => <th key={g.id} className="p-4 text-center">{g.name || 'Variant'}</th>)}
+                                       <th className="p-4 w-1/4 break-words">Criterion</th>
+                                       {evaluatedGroups.map(g => <th key={g.id} className="p-4 text-center break-words">{g.name || 'Variant'}</th>)}
                                      </tr>
                                    </thead>
                                    <tbody className="divide-y divide-slate-100">
                                      {project.criteria.map((crit, i) => (
                                        <tr key={i} className="hover:bg-slate-50 transition-colors">
-                                         <td className="p-4 font-bold text-slate-700">{crit}</td>
+                                         <td className="p-4 font-bold text-slate-700 break-words">{crit}</td>
                                          {evaluatedGroups.map(g => {
                                             const meas = (g.measurements || []).find(m => parseFloat(m.day) === dayVal);
                                             const param = (meas?.evaluateQuality || meas?.qualityParams?.length > 0) ? meas.qualityParams?.find(p => p.name === crit) : null;
@@ -2079,7 +2098,24 @@
           const toggleCriteria = (c) => setProject(p => ({ ...p, criteria: p.criteria.includes(c) ? p.criteria.filter(x => x !== c) : [...p.criteria, c] }));
           const addNewCriteria = () => { if(newCriteria && !project.criteria.includes(newCriteria)) { toggleCriteria(newCriteria); setNewCriteria(''); }};
           
-          const handleTransportModeToggle = (mode) => { setProject(p => ({ ...p, transportMode: p.transportMode === mode ? '' : mode })); };
+          const handleTransportModeToggle = (mode) => {
+            const isDeselect = project.transportMode === mode;
+            setProject(p => ({ ...p, transportMode: isDeselect ? '' : mode }));
+            // Keep the supply-chain transport step in sync with the selected mode.
+            if (!isDeselect) {
+              const modeToStage = { 'Road Transport': rt.transportRoad, 'Sea Freight': rt.transportSea, 'Air Freight': rt.transportAir, 'Storage': rt.transportStorage };
+              const newStage = modeToStage[mode];
+              if (newStage) {
+                setSupplyChain(prev => {
+                  const i = prev.findIndex(s => isTransportStage(s.stage));
+                  if (i === -1) return prev;
+                  const next = [...prev];
+                  next[i] = { ...next[i], stage: newStage };
+                  return next;
+                });
+              }
+            }
+          };
           const toggleTechnology = (tech) => { setProject(p => ({ ...p, technologies: p.technologies?.includes(tech) ? p.technologies.filter(t => t !== tech) : [...(p.technologies || []), tech] })); };
 
           // === DEFECTS & PREVENTION MATRIX ===
@@ -2991,8 +3027,9 @@
                                  </div>
                                  <div className="w-full">
                                     <label className="lg:hidden block mb-1 text-xs font-bold text-slate-500 uppercase tracking-widest">{rt.phase} <span className="text-red-500">*</span></label>
-                                    {idx === 2 ? (
+                                    {isTransportStage(step.stage) ? (
                                        <select className={`${inputClass} py-2.5 font-bold w-full`} value={step.stage || ''} onChange={e => updateChainStep(idx, 'stage', e.target.value)}>
+                                         {![rt.transportRoad, rt.transportSea, rt.transportAir, rt.transportStorage].includes(step.stage) && <option>{step.stage}</option>}
                                          <option>{rt.transportRoad}</option><option>{rt.transportSea}</option><option>{rt.transportAir}</option><option>{rt.transportStorage}</option>
                                        </select>
                                      ) : (
