@@ -1277,8 +1277,9 @@
                               <div className="md:col-span-3 space-y-4">
                                 {(prod.packagings || []).map((pkg, pkgIdx) => {
                                   const pkgIsBulk = pkg.packagingType === 'Cube crate' || pkg.packagingType === 'Pallet';
-                                  const pkgDimUnit = pkgIsBulk ? (isMetric ? 'cm' : 'inch') : (isMetric ? 'mm' : 'inch');
-                                  const pkgWgtUnit = pkgIsBulk ? (isMetric ? 'kg' : 'lbs') : (isMetric ? 'g' : 'lbs');
+                                  const pkgIsMetric = unitSystem === 'metric';
+                                  const pkgDimUnit = pkgIsBulk ? (pkgIsMetric ? 'cm' : 'inch') : (pkgIsMetric ? 'mm' : 'inch');
+                                  const pkgWgtUnit = pkgIsBulk ? (pkgIsMetric ? 'kg' : 'lbs') : (pkgIsMetric ? 'g' : 'lbs');
                                   const pkgIsPillow = pkg.packagingType === 'Pillow Bag';
                                   return (
                                     <div key={pkg.id} className="bg-gradient-to-br from-slate-50 to-slate-100 p-5 rounded-2xl border border-slate-200 shadow-sm">
