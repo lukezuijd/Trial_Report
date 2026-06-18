@@ -19,7 +19,10 @@
     <script src="https://cdn.tailwindcss.com"></script>
 
     <!-- Babel compiler for in-browser React (JSX) -->
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Pinned to Babel 7. v8 (released 2026-05) changed React preset's default
+         runtime to "automatic", which emits `import "react/jsx-runtime"` — a
+         bare specifier the browser cannot resolve, breaking ESM imports. -->
+    <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
 
     <!-- LOAD CENTRAL STYLING & CONFIGURATION -->
     <link rel="stylesheet" href="style.css">
