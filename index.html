@@ -9,7 +9,10 @@
     <meta name="theme-color" content="#007C27">
     
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Pinned to Babel 7. v8 (released 2026-05) changed React preset's default
+         runtime to "automatic", which emits `import "react/jsx-runtime"` — a
+         bare specifier the browser cannot resolve, breaking ESM imports. -->
+    <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
     
     <link rel="stylesheet" href="style.css">
     <script src="config.js"></script>
@@ -26,9 +29,10 @@
     <script type="text/babel" data-type="module">
         import React, { useState } from 'https://esm.sh/react@18.2.0';
         import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
-        import { 
-            ClipboardList, FileText, BarChart3, ArrowRight, 
-            Settings, ShieldCheck, Zap, AlertTriangle
+        import {
+            ClipboardList, FileText, BarChart3, ArrowRight,
+            Settings, ShieldCheck, Zap, AlertTriangle,
+            TrendingUp, LayoutDashboard
         } from 'https://esm.sh/lucide-react@0.292.0';
 
         const isConfigMissing = !window.PERFOTEC_CONFIG;
@@ -57,7 +61,11 @@
                 privacy: "Privacy", privacyDesc: "Your data is processed locally in the browser and not stored on an external server.",
                 localStorage: "Local Storage", localStorageDesc: "Make sure the files config.js and style.css are in the same folder as the web pages.",
                 configWarningTitle: "Warning: config.js could not be loaded.",
-                configWarningDesc: "Make sure the file config.js is in the exact same folder as index.html. Default settings are being used temporarily."
+                configWarningDesc: "Make sure the file config.js is in the exact same folder as index.html. Default settings are being used temporarily.",
+                extraTitle: "Additional Tools",
+                extraSubtitle: "Supporting tools for the commercial and technical team.",
+                bcTitle: "Business Case", bcDesc: "Qualify a trial opportunity before committing resources. Score revenue potential, strategic fit, feasibility, and conversion probability.",
+                dashTitle: "Product Dashboard – PerfoTec", dashDesc: "Browse all PerfoTec product data in one interactive view — packaging parameters, gas targets, shelf life benchmarks and trial outcomes."
             },
             nl: {
                 welcome: "Welkom bij de", workflow: "Workflow",
@@ -70,7 +78,11 @@
                 privacy: "Privacy", privacyDesc: "Uw data wordt lokaal in de browser verwerkt en niet opgeslagen op een externe server.",
                 localStorage: "Lokale Opslag", localStorageDesc: "Zorg dat de bestanden config.js en style.css in dezelfde map staan als de webpagina's.",
                 configWarningTitle: "Let op: config.js kon niet worden ingeladen.",
-                configWarningDesc: "Zorg ervoor dat het bestand config.js in exact dezelfde map staat als index.html. Er worden nu tijdelijk standaardinstellingen gebruikt."
+                configWarningDesc: "Zorg ervoor dat het bestand config.js in exact dezelfde map staat als index.html. Er worden nu tijdelijk standaardinstellingen gebruikt.",
+                extraTitle: "Aanvullende Tools",
+                extraSubtitle: "Ondersteunende tools voor het commerciële en technische team.",
+                bcTitle: "Business Case", bcDesc: "Kwalificeer een trial-kans voordat je middelen inzet. Beoordeel omzetpotentieel, strategische fit, haalbaarheid en conversiekans.",
+                dashTitle: "Product Dashboard – PerfoTec", dashDesc: "Bekijk alle PerfoTec productdata in één interactief overzicht — verpakkingsparameters, gastargets, houdbaarheidsreferenties en trial-uitkomsten."
             },
             es: {
                 welcome: "Bienvenido al", workflow: "Workflow",
@@ -83,7 +95,11 @@
                 privacy: "Privacidad", privacyDesc: "Sus datos se procesan localmente en el navegador y no se almacenan en un servidor externo.",
                 localStorage: "Almacenamiento Local", localStorageDesc: "Asegúrese de que los archivos config.js y style.css estén en la misma carpeta que las páginas web.",
                 configWarningTitle: "Advertencia: no se pudo cargar config.js.",
-                configWarningDesc: "Asegúrese de que el archivo config.js esté en la misma carpeta que index.html. Se están utilizando configuraciones predeterminadas temporalmente."
+                configWarningDesc: "Asegúrese de que el archivo config.js esté en la misma carpeta que index.html. Se están utilizando configuraciones predeterminadas temporalmente.",
+                extraTitle: "Herramientas Adicionales",
+                extraSubtitle: "Herramientas de apoyo para el equipo comercial y técnico.",
+                bcTitle: "Caso de Negocio", bcDesc: "Califique una oportunidad de prueba antes de comprometer recursos. Evalúe el potencial de ingresos, la viabilidad y el ajuste estratégico.",
+                dashTitle: "Panel de Productos – PerfoTec", dashDesc: "Explore todos los datos de productos PerfoTec en una vista interactiva — parámetros de empaque, objetivos de gas, referencias de vida útil y resultados."
             }
         };
         const LANGS = config.LANGUAGES || [{ code: 'en', label: 'EN' }, { code: 'nl', label: 'NL' }, { code: 'es', label: 'ES' }];
@@ -177,6 +193,17 @@
                                 <ToolCard step="3" title={t.card3Title} description={t.card3Desc} icon={BarChart3} href="report.html" color={config.BRAND.colors.neutral.black} openLabel={t.openTool} />
                             </div>
                         </nav>
+
+                        <section className="mt-20" aria-label="Additional tools">
+                            <div className="text-center mb-10">
+                                <h3 className="text-3xl font-bold mb-2 brand-heading">{t.extraTitle}</h3>
+                                <p className="text-lg max-w-2xl mx-auto opacity-70">{t.extraSubtitle}</p>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-10 max-w-3xl mx-auto">
+                                <ToolCard step="BC" title={t.bcTitle} description={t.bcDesc} icon={TrendingUp} href="business_case.html" color={config.BRAND.colors.primary.green} openLabel={t.openTool} />
+                                <ToolCard step="PD" title={t.dashTitle} description={t.dashDesc} icon={LayoutDashboard} href="../Product%20Dashboard%20-%20PerfoTec/Product%20Dashboard%20-%20PerfoTec.htm" color={config.BRAND.colors.primary.blue} openLabel={t.openTool} />
+                            </div>
+                        </section>
 
                         <section className="mt-20 grid grid-cols-1 md:grid-cols-3 gap-8 border-t border-[var(--brand-gray)] pt-12 text-sm opacity-80" aria-label="Info">
                             <div className="flex gap-3 items-start">
