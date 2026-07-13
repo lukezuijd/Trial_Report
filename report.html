@@ -796,26 +796,36 @@
           );
         };
 
-        const VariantGasChart = ({ group, packedDays }) => {
+        const VariantGasChart = ({ group, packedDays, sharedMaxDay }) => {
           if (!group || !group.measurements) return null;
           const width = 350; const height = 200; const padding = 30;
-          
+
           const pDays = parseFloat(packedDays);
           const filteredMeasurements = isNaN(pDays) || pDays === 0 ? (group.measurements || []) : (group.measurements || []).filter(m => parseFloat(m.day) <= pDays);
           const data = [...filteredMeasurements].sort((a,b) => parseFloat(a.day) - parseFloat(b.day));
-          
+
           if(data.length === 0) return <div className="flex-1 border border-slate-200 rounded-2xl bg-slate-50 p-6 font-sans w-full h-full flex flex-col items-center justify-center text-slate-400 text-sm italic shadow-sm">No packed gas data</div>;
 
-          const maxDay = Math.max(...data.map(d => parseFloat(d.day) || 0), 5);
-          const maxY = 25; 
+          // A shared x-domain (max day across ALL variants) keeps every gas
+          // chart on an identical time scale, so charts can be compared
+          // side by side. Falls back to this variant's own range.
+          const maxDay = sharedMaxDay || Math.max(...data.map(d => parseFloat(d.day) || 0), 5);
+          const maxY = 25;
           const getX = (day) => padding + (parseFloat(day) / maxDay) * (width - 2 * padding);
           const getY = (val) => height - padding - (parseFloat(val) / maxY) * (height - 2 * padding);
           const pointsO2 = data.map(d => `${getX(d.day)},${getY(getAverage(d.samples, 'o2'))}`).join(' ');
           const pointsCO2 = data.map(d => `${getX(d.day)},${getY(getAverage(d.samples, 'co2'))}`).join(' ');
 
+          // X-axis labels at evenly spaced "nice" intervals (max ~7 ticks)
+          // instead of one label per data point — dense measurement schedules
+          // (P+0, P+1, P+2, ...) would otherwise overlap and become unreadable.
+          const tickStep = [1, 2, 5, 7, 10, 14, 21, 30, 60, 90].find(s => maxDay / s <= 7) || Math.ceil(maxDay / 7);
+          const xTicks = [];
+          for (let t = 0; t <= maxDay; t += tickStep) xTicks.push(t);
+
           return (
             <div className="flex-1 border border-slate-200 rounded-2xl bg-white p-5 shadow-sm font-sans w-full h-full flex flex-col justify-between">
-              <h5 className="text-center font-extrabold text-sm mb-4 text-slate-800 border-b border-slate-100 pb-2">Actual Results: {group.name || 'Variant'}</h5>
+              <h5 className="text-center font-extrabold text-sm mb-4 text-slate-800 border-b border-slate-100 pb-2">Actual Atmosphere Development: {group.name || 'Variant'}</h5>
               <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
                 {[0, 5, 10, 15, 20, 25].map(val => (
                   <g key={val}>
@@ -823,7 +833,12 @@
                     <text x={padding - 5} y={getY(val) + 3} textAnchor="end" fontSize="9" fill="#94a3b8" fontWeight="600">{val}%</text>
                   </g>
                 ))}
-                {data.map(d => <text key={d.day} x={getX(d.day)} y={height - 10} textAnchor="middle" fontSize="10" fill="#64748b" fontWeight="bold">{formatDay(d.day)}</text>)}
+                {xTicks.map(t => (
+                  <g key={`tick-${t}`}>
+                    <line x1={getX(t)} y1={height - padding} x2={getX(t)} y2={height - padding + 4} stroke="#cbd5e1" strokeWidth="1.5" />
+                    <text x={getX(t)} y={height - 10} textAnchor="middle" fontSize="10" fill="#64748b" fontWeight="bold">{formatDay(t)}</text>
+                  </g>
+                ))}
                 <polyline points={pointsO2} fill="none" stroke={BRAND.colors.blue} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
                 <polyline points={pointsCO2} fill="none" stroke={BRAND.colors.green} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
                 {data.map((d, i) => (
@@ -837,6 +852,7 @@
                 <span className="flex items-center gap-1.5 font-extrabold" style={{color: BRAND.colors.blue}}><div className="w-3 h-3 rounded-full" style={{backgroundColor: BRAND.colors.blue}}></div> O₂</span>
                 <span className="flex items-center gap-1.5 font-extrabold" style={{color: BRAND.colors.green}}><div className="w-3 h-3 rounded-full" style={{backgroundColor: BRAND.colors.green}}></div> CO₂</span>
               </div>
+              <p className="text-[10px] text-slate-500 mt-3 leading-relaxed text-center italic">Average measured O₂ (blue) and CO₂ (green) concentrations inside the packaging over time. A stable atmosphere within the product's optimal window shows the perforation is matched to the product's respiration rate. Time axis: days after packing (P+X), identical scale for all variants.</p>
             </div>
           );
         };
@@ -862,7 +878,7 @@
 
           return (
             <div className="w-full border border-slate-200 rounded-3xl bg-white p-8 font-sans shadow-sm">
-              <h4 className="text-center font-extrabold mb-6 uppercase text-sm tracking-wider text-slate-800 border-b border-slate-100 pb-4">Weight Loss Comparison (%)</h4>
+              <h4 className="text-center font-extrabold mb-6 uppercase text-sm tracking-wider text-slate-800 border-b border-slate-100 pb-4">Weight Loss per Variant (%)</h4>
               <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto mt-2">
                 {[0, Math.max(yAxisMax/2, 0.1), Math.max(yAxisMax, 0.2)].map(val => (
                    <g key={val}>
@@ -902,6 +918,72 @@
                   </div>
                 ))}
               </div>
+              <p className="text-[10px] text-slate-500 mt-4 leading-relaxed text-center italic">Average weight loss per variant at each evaluation day, relative to the initial weight of the measured samples. Lower weight loss means less dehydration and more saleable weight at the end of the chain. Time axis: days after packing (P+X), consistent with the atmosphere charts.</p>
+            </div>
+          );
+        };
+
+        // Line chart comparing one quality criterion (default: General Quality)
+        // across all variants over time. Uses the same variant colours and the
+        // same day-based time axis as the other report charts. The dashed line
+        // at score 7 marks the acceptance limit from the score scale.
+        const QualityLineChart = ({ groups, criterion = 'General Quality' }) => {
+          const width = 600; const height = 260; const padding = 40;
+          const series = groups.map((g, idx) => ({
+            name: g.name || 'Variant', idx,
+            points: (g.measurements || [])
+              .filter(m => m.evaluateQuality)
+              .map(m => {
+                const p = (m.qualityParams || []).find(q => q.name === criterion);
+                return (p && p.score !== '' && !isNaN(parseFloat(p.score))) ? { day: parseFloat(m.day), score: parseFloat(p.score) } : null;
+              })
+              .filter(Boolean)
+              .sort((a, b) => a.day - b.day)
+          })).filter(s => s.points.length > 0);
+          if (series.length === 0) return null;
+
+          const maxDay = Math.max(...series.flatMap(s => s.points.map(p => p.day)), 5);
+          const getX = (day) => padding + (day / maxDay) * (width - 2 * padding);
+          const getY = (score) => height - padding - (score / 10) * (height - 2 * padding);
+          const tickStep = [1, 2, 5, 7, 10, 14, 21, 30, 60, 90].find(s => maxDay / s <= 7) || Math.ceil(maxDay / 7);
+          const xTicks = [];
+          for (let t = 0; t <= maxDay; t += tickStep) xTicks.push(t);
+
+          return (
+            <div className="w-full border border-slate-200 rounded-3xl bg-white p-8 font-sans shadow-sm">
+              <h4 className="text-center font-extrabold mb-6 uppercase text-sm tracking-wider text-slate-800 border-b border-slate-100 pb-4">{criterion} Development per Variant</h4>
+              <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto mt-2">
+                {[0, 2, 4, 6, 8, 10].map(val => (
+                  <g key={val}>
+                    <line x1={padding} y1={getY(val)} x2={width - padding} y2={getY(val)} stroke="#f1f5f9" strokeWidth="2" strokeDasharray="4" />
+                    <text x={padding - 10} y={getY(val) + 4} textAnchor="end" fontSize="11" fill="#94a3b8" fontWeight="600">{val}</text>
+                  </g>
+                ))}
+                {/* Acceptance limit: scores >= 7 are within specification */}
+                <line x1={padding} y1={getY(7)} x2={width - padding} y2={getY(7)} stroke="#f97316" strokeWidth="1.5" strokeDasharray="6 4" />
+                <text x={width - padding} y={getY(7) - 5} textAnchor="end" fontSize="9" fill="#f97316" fontWeight="700">Acceptance limit (7)</text>
+                {xTicks.map(t => (
+                  <g key={`tick-${t}`}>
+                    <line x1={getX(t)} y1={height - padding} x2={getX(t)} y2={height - padding + 4} stroke="#cbd5e1" strokeWidth="1.5" />
+                    <text x={getX(t)} y={height - 14} textAnchor="middle" fontSize="10" fill="#64748b" fontWeight="bold">{formatDay(t)}</text>
+                  </g>
+                ))}
+                {series.map(s => (
+                  <g key={s.idx}>
+                    <polyline points={s.points.map(p => `${getX(p.day)},${getY(p.score)}`).join(' ')} fill="none" stroke={CHART_COLORS[s.idx % CHART_COLORS.length].stroke} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                    {s.points.map((p, i) => <circle key={i} cx={getX(p.day)} cy={getY(p.score)} r="4" fill="#ffffff" stroke={CHART_COLORS[s.idx % CHART_COLORS.length].stroke} strokeWidth="2" />)}
+                  </g>
+                ))}
+              </svg>
+              <div className="flex flex-wrap justify-center gap-6 mt-6">
+                {series.map(s => (
+                  <div key={s.idx} className="flex items-center gap-2 text-sm font-extrabold text-slate-700">
+                    <div className="w-4 h-4 rounded-full shadow-sm" style={{ backgroundColor: CHART_COLORS[s.idx % CHART_COLORS.length].stroke }}></div>
+                    {s.name}
+                  </div>
+                ))}
+              </div>
+              <p className="text-[10px] text-slate-500 mt-4 leading-relaxed text-center italic">{criterion} score (1-10) per variant at each evaluation moment. Scores of 7 and higher (above the dashed line) are within specification. Time axis: days after packing (P+X), consistent with the other charts.</p>
             </div>
           );
         };
@@ -1413,6 +1495,18 @@
                      </div>
 
                      {project.trialTarget && <><div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Trial Target :</div> <div className="font-medium">{project.trialTarget}</div></>}
+
+                     {/* Trial location: one site ("Tested at ...") or a transport
+                         route ("Transport from ... to ..."). */}
+                     {(project.testLocation || project.testLocationTo) && <>
+                       <div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Trial Location :</div>
+                       <div className="font-medium">
+                         {project.testLocation && project.testLocationTo
+                           ? <>Transport from <strong>{project.testLocation}</strong> to <strong>{project.testLocationTo}</strong></>
+                           : <>Tested at <strong>{project.testLocation || project.testLocationTo}</strong></>}
+                       </div>
+                     </>}
+
                      <div className="font-bold text-slate-500 uppercase tracking-wide text-xs flex items-center">Transport Mode :</div> <div className="font-medium">{project.transportMode || '-'}</div>
                     </div>
                     {/* Supply Chain outside the CSS grid — avoids Chrome's break-inside bug on grid children */}
@@ -1540,9 +1634,27 @@
                      )}
 
                      <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 space-y-3">
-                         {[project.rrO2, project.rrCO2, project.rrTemp].some(v => v && !isNaN(parseFloat(v))) && (
-                           <p>The Fast Respiration Meter System was used to measure the product respiration rate (RR O₂: <strong>{project.rrO2 || '-'}</strong>, RR CO₂: <strong>{project.rrCO2 || '-'}</strong>) at <strong>{project.rrTemp || '-'}°C</strong>. This allowed PerfoTec to calculate the optimal micro perforation pattern.</p>
-                         )}
+                         {/* Respiration data: only numeric values are shown (placeholders
+                             like "N/A" never reach the report). When FRM is selected as
+                             technology the data is mandatory — a missing value renders a
+                             visible error. Without FRM, the report states it plainly. */}
+                         {(() => {
+                           const isNum = (v) => v !== '' && v !== null && v !== undefined && !isNaN(parseFloat(v));
+                           const hasRR = isNum(project.rrO2) || isNum(project.rrCO2);
+                           const frmSelected = (project.technologies || []).some(t => /FRM|Respiration/i.test(t || ''));
+                           if (hasRR) {
+                             const rrParts = [];
+                             if (isNum(project.rrO2)) rrParts.push(<React.Fragment key="o2">RR O₂: <strong>{project.rrO2}</strong></React.Fragment>);
+                             if (isNum(project.rrCO2)) rrParts.push(<React.Fragment key="co2">RR CO₂: <strong>{project.rrCO2}</strong></React.Fragment>);
+                             return (
+                               <p>The Fast Respiration Meter System was used to measure the product respiration rate ({rrParts.map((p, i) => <React.Fragment key={i}>{i > 0 && ', '}{p}</React.Fragment>)}){isNum(project.rrTemp) && <> at <strong>{project.rrTemp}°C</strong></>}. This allowed PerfoTec to calculate the optimal micro perforation pattern.</p>
+                             );
+                           }
+                           if (frmSelected) {
+                             return <p className="font-bold text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-center gap-2"><AlertTriangle size={16} className="shrink-0"/> Respiration data is missing — "Respiration Measurement (FRM)" is selected as PerfoTec Technology. Fill in the Respiration Data under "A. Product &amp; Packaging" in the Setup tab.</p>;
+                           }
+                           return <p>The Fast Respiration Meter (FRM) was not used in this trial.</p>;
+                         })()}
                          
                          {/* Tested weight always mirrors the Net Weight field (A. Product & Packaging).
                              No silent fallback to per-variant defaults — a missing value renders a
@@ -1615,6 +1727,12 @@
                   {showGas && (() => {
                     const mapGroups = mapGroupsList;
                     if (mapGroups.length === 0) return null;
+                    // One shared time domain (in days) for every gas chart, so
+                    // all variants render on an identical, comparable x-axis.
+                    const pDaysNum = parseFloat(project.totalDuration);
+                    const gasMaxDay = Math.max(...mapGroups.flatMap(g => (g.measurements || [])
+                      .map(m => parseFloat(m.day) || 0)
+                      .filter(d => isNaN(pDaysNum) || pDaysNum === 0 || d <= pDaysNum)), 5);
                     return (
                       <div className="mb-10">
                           <h3 id="sec-4-1" className="font-bold text-xl mb-4 brand-heading text-slate-700" style={{ pageBreakAfter: 'avoid' }}>4.{sec4Nums.gas} Gas Levels</h3>
@@ -1632,7 +1750,7 @@
                               showAnyHubPrediction ? (
                                 <div key={idx} className="flex flex-row gap-6 break-inside-avoid items-stretch">
                                    <div className="w-1/2 flex flex-col border border-slate-200 rounded-2xl bg-slate-50 p-5 shadow-sm">
-                                      <h5 className="text-center font-extrabold text-sm mb-4 text-slate-800 border-b border-slate-200 pb-2">{g.name || 'Variant'}</h5>
+                                      <h5 className="text-center font-extrabold text-sm mb-4 text-slate-800 border-b border-slate-200 pb-2">Predicted Atmosphere Development: {g.name || 'Variant'}</h5>
                                       <div className="flex-1 flex items-center justify-center p-2 bg-white rounded-xl border border-slate-100">
                                          {g.predictedImage ? (
                                            <img src={g.predictedImage} className="w-full h-auto max-h-[220px] object-contain" />
@@ -1640,15 +1758,16 @@
                                            <span className="text-slate-300 italic text-xs font-medium">No Prediction Uploaded</span>
                                          )}
                                       </div>
+                                      <p className="text-[10px] text-slate-500 mt-3 leading-relaxed text-center italic">Gas development modelled by the PerfoTec HUB for this packaging configuration — the atmosphere the trial is expected to reproduce.</p>
                                    </div>
                                    <div className="w-1/2 flex flex-col">
-                                      <VariantGasChart group={g} packedDays={project.totalDuration} />
+                                      <VariantGasChart group={g} packedDays={project.totalDuration} sharedMaxDay={gasMaxDay} />
                                    </div>
                                 </div>
                               ) : (
                                 <div key={idx} className="break-inside-avoid">
                                    <h5 className="font-extrabold text-sm mb-3 text-slate-800">{g.name || 'Variant'}</h5>
-                                   <VariantGasChart group={g} packedDays={project.totalDuration} />
+                                   <VariantGasChart group={g} packedDays={project.totalDuration} sharedMaxDay={gasMaxDay} />
                                 </div>
                               )
                             ))}
@@ -1663,35 +1782,54 @@
                             const inPackedWindow = (m) => isNaN(pDays) || pDays === 0 || parseFloat(m.day) <= pDays;
                             const gasDays = Array.from(new Set(mapGroups.flatMap(g => (g.measurements || []).filter(m => inPackedWindow(m) && hasGas(m)).map(m => parseFloat(m.day))))).filter(d => !isNaN(d)).sort((a, b) => a - b);
                             if (gasDays.length === 0) return null;
+                            const gasCell = (g, d) => {
+                              const m = (g.measurements || []).find(mm => parseFloat(mm.day) === d);
+                              const has = m && hasGas(m);
+                              return has
+                                ? <><span className="font-bold" style={{color: BRAND.colors.blue}}>{getAverage(m.samples, 'o2')}</span><span className="text-slate-400"> / </span><span className="font-bold" style={{color: BRAND.colors.green}}>{getAverage(m.samples, 'co2')}</span></>
+                                : <span className="text-slate-300">-</span>;
+                            };
+                            // Many evaluation days would push columns outside the page
+                            // frame — flip the table (days as rows) so it always fits.
+                            const transposed = gasDays.length > 6;
                             return (
                               <div className="break-inside-avoid mb-4">
                                 <div className="overflow-hidden rounded-xl border border-slate-200 shadow-sm">
-                                  <table className="w-full text-xs bg-white">
-                                    <thead className="bg-slate-100 border-b border-slate-200">
-                                      <tr className="text-left text-slate-600 uppercase tracking-wider text-[9px] font-bold">
-                                        <th className="p-2.5">Variant</th>
-                                        {gasDays.map(d => <th key={d} className="p-2.5 text-center">{formatDay(d)}</th>)}
-                                      </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                      {mapGroups.map((g, i) => (
-                                        <tr key={g.id}>
-                                          <td className="p-2.5 font-bold break-words" style={{ borderLeft: `4px solid ${CHART_COLORS[groups.indexOf(g) % CHART_COLORS.length].stroke}` }}>{g.name || 'Variant'}</td>
-                                          {gasDays.map(d => {
-                                            const m = (g.measurements || []).find(mm => parseFloat(mm.day) === d);
-                                            const has = m && hasGas(m);
-                                            return (
-                                              <td key={d} className="p-2.5 text-center whitespace-nowrap">
-                                                {has
-                                                  ? <><span className="font-bold" style={{color: BRAND.colors.blue}}>{getAverage(m.samples, 'o2')}</span><span className="text-slate-400"> / </span><span className="font-bold" style={{color: BRAND.colors.green}}>{getAverage(m.samples, 'co2')}</span></>
-                                                  : <span className="text-slate-300">-</span>}
-                                              </td>
-                                            );
-                                          })}
+                                  {transposed ? (
+                                    <table className="w-full text-xs bg-white table-fixed">
+                                      <thead className="bg-slate-100 border-b border-slate-200">
+                                        <tr className="text-left text-slate-600 uppercase tracking-wider text-[9px] font-bold">
+                                          <th className="p-2.5 w-16">Day</th>
+                                          {mapGroups.map(g => <th key={g.id} className="p-2.5 text-center break-words" style={{ borderTop: `3px solid ${CHART_COLORS[groups.indexOf(g) % CHART_COLORS.length].stroke}` }}>{g.name || 'Variant'}</th>)}
                                         </tr>
-                                      ))}
-                                    </tbody>
-                                  </table>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-100">
+                                        {gasDays.map(d => (
+                                          <tr key={d}>
+                                            <td className="p-2.5 font-bold text-slate-600">{formatDay(d)}</td>
+                                            {mapGroups.map(g => <td key={g.id} className="p-2.5 text-center whitespace-nowrap">{gasCell(g, d)}</td>)}
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  ) : (
+                                    <table className="w-full text-xs bg-white">
+                                      <thead className="bg-slate-100 border-b border-slate-200">
+                                        <tr className="text-left text-slate-600 uppercase tracking-wider text-[9px] font-bold">
+                                          <th className="p-2.5">Variant</th>
+                                          {gasDays.map(d => <th key={d} className="p-2.5 text-center">{formatDay(d)}</th>)}
+                                        </tr>
+                                      </thead>
+                                      <tbody className="divide-y divide-slate-100">
+                                        {mapGroups.map((g, i) => (
+                                          <tr key={g.id}>
+                                            <td className="p-2.5 font-bold break-words" style={{ borderLeft: `4px solid ${CHART_COLORS[groups.indexOf(g) % CHART_COLORS.length].stroke}` }}>{g.name || 'Variant'}</td>
+                                            {gasDays.map(d => <td key={d} className="p-2.5 text-center whitespace-nowrap">{gasCell(g, d)}</td>)}
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  )}
                                 </div>
                                 <p className="text-[10px] text-slate-500 mt-1.5 italic">Average measured values per evaluation day: <span className="font-bold not-italic" style={{color: BRAND.colors.blue}}>O₂ %</span> / <span className="font-bold not-italic" style={{color: BRAND.colors.green}}>CO₂ %</span>.</p>
                               </div>
@@ -1769,6 +1907,13 @@
 
                   <div className="break-inside-avoid mb-10">
                       <h3 className="font-bold text-xl mb-6 mt-12 brand-heading text-slate-700">4.{sec4Nums.detailed} Detailed Quality Parameters</h3>
+
+                      {/* Cross-variant comparison of General Quality over time —
+                          renders only when General Quality scores are present. */}
+                      <div className="break-inside-avoid mb-6">
+                        <QualityLineChart groups={groups} />
+                      </div>
+
                       {(() => {
                          const allEvalDays = Array.from(new Set(
                            groups.flatMap(g => 
@@ -1780,59 +1925,61 @@
                            return <p className="text-base italic text-slate-500 bg-slate-50 p-4 rounded-xl border border-slate-200">No specific criteria were evaluated during this test.</p>;
                          }
 
-                         return allEvalDays.map(dayVal => {
-                           const pDays = parseInt(project.totalDuration) || 0;
-                           let dayContext = "";
-                           if (pDays > 0) {
-                             if (dayVal < pDays) dayContext = " (Before opening)";
-                             else if (dayVal === pDays) dayContext = " (Moment of opening)";
-                             else dayContext = ` (${dayVal - pDays} days after opening)`;
-                           }
-                           
-                           const evaluatedGroups = groups.filter(g => {
-                              const meas = (g.measurements || []).find(m => parseFloat(m.day) === dayVal);
-                              return meas && meas.evaluateQuality;
-                           });
+                         // One compact table per variant: criteria as rows, that
+                         // variant's evaluation days as columns. Scales to any
+                         // number of variants (tables stack; small ones sit in a
+                         // 2-column grid). The General Quality comparison across
+                         // variants is covered by the line chart above.
+                         const variantInfos = groups.map((g, idx) => ({
+                           g, idx,
+                           days: (g.measurements || []).filter(m => m.evaluateQuality).map(m => parseFloat(m.day)).filter(d => !isNaN(d)).sort((a, b) => a - b)
+                         })).filter(v => v.days.length > 0);
 
-                           if (evaluatedGroups.length === 0) return null;
+                         if (variantInfos.length === 0) {
+                           return <p className="text-base italic text-slate-500 bg-slate-50 p-4 rounded-xl border border-slate-200">No specific criteria were evaluated during this test.</p>;
+                         }
 
-                           return (
-                             <div key={dayVal} className="mb-8 break-inside-avoid bg-slate-50 p-6 rounded-3xl border border-slate-200 shadow-sm">
-                               <h4 className="font-extrabold text-lg mb-4 text-slate-800 border-b border-slate-200 pb-2">Evaluation: Day {dayVal} <span className="font-normal text-slate-500 text-sm ml-2">{dayContext}</span></h4>
-                               <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-                                 <table className="w-full text-sm table-fixed">
-                                   <thead className="bg-slate-100 border-b border-slate-200">
-                                     <tr className="text-left text-slate-600 uppercase tracking-wider text-[10px] font-bold">
-                                       <th className="p-4 w-1/4 break-words">Criterion</th>
-                                       {evaluatedGroups.map(g => <th key={g.id} className="p-4 text-center break-words">{g.name || 'Variant'}</th>)}
+                         const scoreCell = (g, day, crit) => {
+                           const meas = (g.measurements || []).find(m => parseFloat(m.day) === day);
+                           const param = meas?.qualityParams?.find(p => p.name === crit);
+                           return param && param.score ? (
+                             <div>
+                               <span className="font-extrabold text-base leading-none" style={{color: BRAND.colors.green}}>{param.score}</span>
+                               {param.notes && <div className="text-[9px] italic text-slate-500 leading-tight mt-0.5">{param.notes}</div>}
+                             </div>
+                           ) : <span className="text-slate-300">-</span>;
+                         };
+
+                         // Small tables (few evaluation days) pair up in two
+                         // columns to save vertical space; wide ones go full width.
+                         const compactGrid = variantInfos.every(v => v.days.length <= 4);
+                         return (
+                           <div className={compactGrid ? 'grid grid-cols-1 md:grid-cols-2 gap-5 items-start' : 'space-y-5'}>
+                             {variantInfos.map(({ g, idx, days }) => (
+                               <div key={g.id} className="break-inside-avoid overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                                 <div className="px-3 py-2.5 bg-slate-100 border-b border-slate-200 font-extrabold text-sm text-slate-800" style={{ borderLeft: `4px solid ${CHART_COLORS[idx % CHART_COLORS.length].stroke}` }}>{g.name || 'Variant'}</div>
+                                 <table className="w-full text-sm">
+                                   <thead>
+                                     <tr className="bg-slate-50 border-b border-slate-200 text-[9px] uppercase tracking-wider font-bold text-slate-600">
+                                       <th className="px-3 py-2 text-left w-[40%]">Criterion</th>
+                                       {days.map(d => <th key={d} className="px-2 py-2 text-center border-l border-slate-100 whitespace-nowrap">Day {d}</th>)}
                                      </tr>
                                    </thead>
                                    <tbody className="divide-y divide-slate-100">
                                      {project.criteria.map((crit, i) => (
-                                       <tr key={i} className="hover:bg-slate-50 transition-colors">
-                                         <td className="p-4 font-bold text-slate-700 break-words">{crit}</td>
-                                         {evaluatedGroups.map(g => {
-                                            const meas = (g.measurements || []).find(m => parseFloat(m.day) === dayVal);
-                                            const param = (meas?.evaluateQuality || meas?.qualityParams?.length > 0) ? meas.qualityParams?.find(p => p.name === crit) : null;
-                                            return (
-                                              <td key={g.id} className="p-4 text-center align-top border-l border-slate-100">
-                                                {param && param.score ? (
-                                                  <div className="flex flex-col items-center">
-                                                    <span className="font-extrabold text-2xl leading-none mb-1" style={{color: BRAND.colors.green}}>{param.score}</span>
-                                                    {param.notes && <span className="text-xs italic text-slate-500 leading-tight bg-slate-50 px-2 py-1 rounded mt-1">{param.notes}</span>}
-                                                  </div>
-                                                ) : <span className="text-slate-300">-</span>}
-                                              </td>
-                                            )
-                                         })}
+                                       <tr key={i}>
+                                         <td className="px-3 py-2 font-bold text-slate-700 break-words border-r border-slate-100 text-xs">{crit}</td>
+                                         {days.map(d => (
+                                           <td key={d} className="px-2 py-2 text-center align-middle border-l border-slate-100">{scoreCell(g, d, crit)}</td>
+                                         ))}
                                        </tr>
                                      ))}
                                    </tbody>
                                  </table>
                                </div>
-                             </div>
-                           );
-                         });
+                             ))}
+                           </div>
+                         );
                       })()}
                   </div>
 
@@ -2062,7 +2209,18 @@
               // Verification round (Round 2)
               addVerificationRound: 'Add Verification Round (R2)',
               verificationBadge: 'Verification Round (R2)',
-              verificationLockedNote: 'Packaging configuration is locked to Round 1 — a verification round must use an identical setup. A deviating configuration counts as a new trial and requires a new report.'
+              verificationLockedNote: 'Packaging configuration is locked to Round 1 — a verification round must use an identical setup. A deviating configuration counts as a new trial and requires a new report.',
+              // Respiration data (FRM)
+              warningFillRespiration: 'Warning: "Respiration Measurement (FRM)" is selected — fill in the Respiration Data (RR O₂ / RR CO₂)!',
+              respirationRequiredHint: 'Required: "Respiration Measurement (FRM)" is selected as PerfoTec Technology.',
+              // Trial location
+              testLocation: 'Trial Location / From',
+              testLocationPlaceholder: 'e.g. Woerden, NL — or departure location',
+              testLocationTo: 'To (transport trials only)',
+              testLocationToPlaceholder: 'e.g. Rotterdam, NL — leave empty for a single site',
+              // Packed-packaging photo (P+0)
+              warningPackedPhoto: 'Warning: Add a P+0 photo of the fully packed packaging (as stored/transported) for:',
+              packedPhotoHint: 'Each variant needs at least one P+0 photo of the fully packed packaging, exactly as the product is stored or transported.'
             },
             nl: {
               tabSetup: 'Project & Klant', tabGroups: 'Variant Resultaten', tabAnalysis: 'Analyse & Concl.',
@@ -2196,7 +2354,18 @@
               // Verification round (Round 2)
               addVerificationRound: 'Verificatieronde Toevoegen (R2)',
               verificationBadge: 'Verificatieronde (R2)',
-              verificationLockedNote: 'De verpakkingsconfiguratie is vergrendeld op Ronde 1 — een verificatieronde moet een identieke opzet hebben. Een afwijkende configuratie geldt als nieuwe test en vraagt een nieuw rapport.'
+              verificationLockedNote: 'De verpakkingsconfiguratie is vergrendeld op Ronde 1 — een verificatieronde moet een identieke opzet hebben. Een afwijkende configuratie geldt als nieuwe test en vraagt een nieuw rapport.',
+              // Respiration data (FRM)
+              warningFillRespiration: 'Waarschuwing: "Respiratie Meting (FRM)" is geselecteerd — vul de Respiratie Data in (RR O₂ / RR CO₂)!',
+              respirationRequiredHint: 'Verplicht: "Respiratie Meting (FRM)" is geselecteerd als PerfoTec Technologie.',
+              // Trial location
+              testLocation: 'Testlocatie / Van',
+              testLocationPlaceholder: 'bijv. Woerden, NL — of vertreklocatie',
+              testLocationTo: 'Naar (alleen bij transporttest)',
+              testLocationToPlaceholder: 'bijv. Rotterdam, NL — leeg laten bij één locatie',
+              // Packed-packaging photo (P+0)
+              warningPackedPhoto: 'Waarschuwing: Voeg een P+0 foto toe van de volledig ingepakte verpakking (zoals opgeslagen/getransporteerd) voor:',
+              packedPhotoHint: 'Elke variant heeft minimaal één P+0 foto nodig van de volledig ingepakte verpakking, precies zoals het product wordt opgeslagen of getransporteerd.'
             },
             es: {
               tabSetup: 'Proyecto y Cliente', tabGroups: 'Resultados de Variantes', tabAnalysis: 'Análisis y Concl.',
@@ -2330,7 +2499,18 @@
               // Verification round (Round 2)
               addVerificationRound: 'Añadir Ronda de Verificación (R2)',
               verificationBadge: 'Ronda de Verificación (R2)',
-              verificationLockedNote: 'La configuración del empaque está bloqueada según la Ronda 1 — una ronda de verificación debe usar una configuración idéntica. Una configuración diferente cuenta como una nueva prueba y requiere un nuevo informe.'
+              verificationLockedNote: 'La configuración del empaque está bloqueada según la Ronda 1 — una ronda de verificación debe usar una configuración idéntica. Una configuración diferente cuenta como una nueva prueba y requiere un nuevo informe.',
+              // Respiration data (FRM)
+              warningFillRespiration: '¡Advertencia: "Medición de Respiración (FRM)" está seleccionada — complete los Datos de Respiración (RR O₂ / RR CO₂)!',
+              respirationRequiredHint: 'Obligatorio: "Medición de Respiración (FRM)" está seleccionada como Tecnología PerfoTec.',
+              // Trial location
+              testLocation: 'Ubicación de la Prueba / Desde',
+              testLocationPlaceholder: 'ej. Woerden, NL — o lugar de salida',
+              testLocationTo: 'Hasta (solo pruebas de transporte)',
+              testLocationToPlaceholder: 'ej. Rotterdam, NL — dejar vacío para un solo sitio',
+              // Packed-packaging photo (P+0)
+              warningPackedPhoto: 'Advertencia: Añada una foto P+0 del empaque completamente embalado (tal como se almacena/transporta) para:',
+              packedPhotoHint: 'Cada variante necesita al menos una foto P+0 del empaque completamente embalado, exactamente como el producto se almacena o transporta.'
             }
           };
           const rt = RT[lang] || RT['en'];
@@ -2372,6 +2552,8 @@
             totalDuration: '', retailOpenDays: '', transportMode: '',
             // Optional free-text sections rendered in "3. Trial set up".
             processDescription: '', ripeningProtocol: '',
+            // Trial location (single site) or transport route (from -> to).
+            testLocation: '', testLocationTo: '',
             criteria: [], technologies: [], technologyNote: '',
             date: new Date().toISOString().split('T')[0], packingDate: new Date().toISOString().split('T')[0],
             logo: BRAND.logos.default, clientLogo: null, startImage: null, coverImage: null,
@@ -3381,7 +3563,23 @@
                         {(rt.saveAs || '').split(' ').map((w, i) => <span key={i} className={i === 0 ? '' : 'opacity-60 font-medium'}>{w}</span>)}
                       </span>
                     </button>
-                    <button onClick={() => { const warnings = []; if(!clientInfo.companyName) warnings.push(rt.warningFillCompany); if(!(project.packagings?.[0]?.startWeight || project.startWeight)) warnings.push(rt.warningFillNetWeight); if(warnings.length) alert(warnings.join('\n')); setIsPreview(true); }} className="bg-blue-600 text-white p-2 lg:pr-3 rounded-xl font-bold flex items-center gap-2 hover:bg-blue-700 transition-all shadow-md hover:shadow-blue-500/30" title={rt.previewReport}>
+                    <button onClick={() => {
+                      const warnings = [];
+                      if(!clientInfo.companyName) warnings.push(rt.warningFillCompany);
+                      if(!(project.packagings?.[0]?.startWeight || project.startWeight)) warnings.push(rt.warningFillNetWeight);
+                      // FRM selected as technology -> respiration data is mandatory.
+                      const isNum = (v) => v !== '' && v !== null && v !== undefined && !isNaN(parseFloat(v));
+                      const frmSelected = (project.technologies || []).some(t => /FRM|Respiration/i.test(t || ''));
+                      if (frmSelected && !isNum(project.rrO2) && !isNum(project.rrCO2)) warnings.push(rt.warningFillRespiration);
+                      // Every variant needs a P+0 photo of the fully packed packaging.
+                      const missingPackedPhoto = groups.filter(g => {
+                        const d0 = (g.measurements || []).find(m => parseFloat(m.day) === 0);
+                        return !(d0 && (d0.images || []).length > 0);
+                      }).map(g => g.name || rt.variantFallback);
+                      if (missingPackedPhoto.length) warnings.push(`${rt.warningPackedPhoto} ${missingPackedPhoto.join(', ')}`);
+                      if(warnings.length) alert(warnings.join('\n'));
+                      setIsPreview(true);
+                    }} className="bg-blue-600 text-white p-2 lg:pr-3 rounded-xl font-bold flex items-center gap-2 hover:bg-blue-700 transition-all shadow-md hover:shadow-blue-500/30" title={rt.previewReport}>
                       <FileText size={18} className="shrink-0"/>
                       <span className="hidden lg:flex flex-col items-start leading-[1.05] text-[10px] uppercase tracking-tight">
                         {(rt.previewReport || '').split(' ').map((w, i) => <span key={i} className={i === 0 ? '' : 'opacity-80 font-medium'}>{w}</span>)}
@@ -3437,6 +3635,8 @@
                            <div><label className={labelClass}>{rt.packingDate} <span className="text-red-500">*</span></label><input type="date" className={`${inputClass} bg-amber-50 focus:bg-white`} value={project.packingDate || ''} onChange={e => handleProjectChange('packingDate', e.target.value)} /></div>
                            <div><label className={labelClass}>{rt.totalDays} <span className="text-red-500">*</span></label><input type="number" className={`${inputClass} bg-amber-50 focus:bg-white`} value={project.totalDuration || ''} onChange={handleDurationChange} placeholder="e.g. 10" /></div>
                            <div><label className={labelClass}>{rt.retailSim}</label><input type="number" className={`${inputClass} bg-blue-50 focus:bg-white`} value={project.retailOpenDays || ''} onChange={handleOpenDaysChange} placeholder="e.g. 7" /></div>
+                           <div><label className={labelClass}>{rt.testLocation}</label><input type="text" className={inputClass} value={project.testLocation || ''} onChange={e => handleProjectChange('testLocation', e.target.value)} placeholder={rt.testLocationPlaceholder} /></div>
+                           <div><label className={labelClass}>{rt.testLocationTo}</label><input type="text" className={inputClass} value={project.testLocationTo || ''} onChange={e => handleProjectChange('testLocationTo', e.target.value)} placeholder={rt.testLocationToPlaceholder} /></div>
                          </div>
                          {/* Image uploads stacked vertically — match the Deel 2
                              client-logo size (w-full max-w-[240px] aspect-square). */}
@@ -3755,14 +3955,20 @@
                            </div>
 
                            {/* Respiration Data (kept — feeds the gas analysis section) */}
+                           {(() => {
+                             const frmSelected = (project.technologies || []).some(t => /FRM|Respiration/i.test(t || ''));
+                             return (
                            <div className="md:col-span-3 mt-2 bg-gradient-to-br from-slate-50 to-slate-100 p-6 rounded-2xl border border-slate-200 shadow-sm">
-                              <label className="block mb-4 text-xs font-extrabold tracking-widest text-blue-800 uppercase border-b border-blue-200 pb-2">{rt.respirationData}</label>
+                              <label className="block mb-4 text-xs font-extrabold tracking-widest text-blue-800 uppercase border-b border-blue-200 pb-2">{rt.respirationData} {frmSelected && <span className="text-red-500">*</span>}</label>
+                              {frmSelected && <p className="text-xs font-bold text-blue-800 -mt-1 mb-4">{rt.respirationRequiredHint}</p>}
                               <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                                <div><label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">RR O₂</label><input type="text" className={inputClass} value={project.rrO2 || ''} onChange={e => handleProjectChange('rrO2', e.target.value)} /></div>
-                                <div><label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">RR CO₂</label><input type="text" className={inputClass} value={project.rrCO2 || ''} onChange={e => handleProjectChange('rrCO2', e.target.value)} /></div>
+                                <div><label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">RR O₂ {frmSelected && <span className="text-red-500">*</span>}</label><input type="text" className={`${inputClass} ${frmSelected ? 'bg-amber-50 focus:bg-white' : ''}`} value={project.rrO2 || ''} onChange={e => handleProjectChange('rrO2', e.target.value)} /></div>
+                                <div><label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">RR CO₂ {frmSelected && <span className="text-red-500">*</span>}</label><input type="text" className={`${inputClass} ${frmSelected ? 'bg-amber-50 focus:bg-white' : ''}`} value={project.rrCO2 || ''} onChange={e => handleProjectChange('rrCO2', e.target.value)} /></div>
                                 <div><label className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2 block">{rt.measuredAt}</label><input type="text" className={inputClass} value={project.rrTemp || ''} onChange={e => handleProjectChange('rrTemp', e.target.value)} /></div>
                               </div>
                            </div>
+                             );
+                           })()}
 
                            {/* Quality Criteria — click-to-toggle (matches Intake/Proposal) */}
                            <div className="md:col-span-3 mt-4">
@@ -4184,10 +4390,11 @@
                                </div>
                                
                                <div className="bg-slate-50 p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-                                 <div className="flex justify-between items-center mb-6">
+                                 <div className="flex justify-between items-center mb-2">
                                     <h4 className="font-extrabold text-xl text-slate-800">{rt.measurementsTitle}</h4>
                                     <button onClick={() => addMeasurementDay(activeGroupId)} className="text-sm text-white px-5 py-2 rounded-lg font-bold shadow-md hover:opacity-90 transition-opacity" style={{background: BRAND.colors.green}}>{rt.addDay}</button>
                                  </div>
+                                 <p className="text-xs text-slate-500 mb-6 flex items-center gap-1.5"><Camera size={14} className="text-red-400 shrink-0"/> {rt.packedPhotoHint}</p>
                                  {/* Atmosphere-strategy-aware measurement table:
                                   *   - MAP variants get O₂ / CO₂ columns
                                   *   - MHP / Open variants hide gas columns so the
@@ -4233,7 +4440,7 @@
                                              </td>
                                              <td className="p-4 flex justify-end gap-2">
                                                  <button onClick={() => openSampleModal(activeGroupId, idx)} className="text-slate-500 hover:text-green-600 bg-white border border-slate-200 shadow-sm p-2 rounded-lg hover:bg-green-50 transition-colors"><Edit3 size={16}/></button>
-                                                 <button onClick={() => openDetailsModal(activeGroupId, idx)} className={`text-slate-500 hover:text-blue-600 bg-white border border-slate-200 shadow-sm p-2 rounded-lg hover:bg-blue-50 transition-colors ${hasPhotos ? 'text-blue-600 border-blue-300 bg-blue-50 ring-2 ring-blue-500/20' : ''}`}><Camera size={16}/></button>
+                                                 <button onClick={() => openDetailsModal(activeGroupId, idx)} title={parseFloat(m.day) === 0 && !hasPhotos ? rt.packedPhotoHint : undefined} className={`text-slate-500 hover:text-blue-600 bg-white border border-slate-200 shadow-sm p-2 rounded-lg hover:bg-blue-50 transition-colors ${hasPhotos ? 'text-blue-600 border-blue-300 bg-blue-50 ring-2 ring-blue-500/20' : parseFloat(m.day) === 0 ? 'text-red-500 border-red-300 bg-red-50 ring-2 ring-red-500/20' : ''}`}><Camera size={16}/></button>
                                                  <button onClick={() => removeMeasurementDay(activeGroupId, idx)} disabled={parseFloat(m.day)===0} className={`p-2 rounded-lg border shadow-sm transition-colors ${parseFloat(m.day)===0 ? 'bg-slate-100 text-slate-300 border-slate-200 cursor-not-allowed' : 'bg-white text-red-500 hover:bg-red-50 border-slate-200'}`}><Trash2 size={16}/></button>
                                              </td>
                                            </tr>
