@@ -144,11 +144,19 @@
           return (sum / validSamples.length).toFixed(1);
         };
 
+        // Weight loss per sample. Samples unpacked at different evaluation
+        // moments are usually different physical units, so each sample can
+        // carry its own `initialWeight` (weight of that unit at packing).
+        // When present it takes precedence; otherwise fall back to the
+        // index-matched day-0 sample weight (legacy behaviour).
         const getWeightLoss = (samples, day0Samples) => {
-            if (!samples || samples.length === 0 || !day0Samples || day0Samples.length === 0) return 0;
+            if (!samples || samples.length === 0) return 0;
             let totalLoss = 0, count = 0;
             samples.forEach((s, idx) => {
-                const startW = day0Samples[idx] ? parseFloat(day0Samples[idx].weight) : 0;
+                const ownStart = parseFloat(s.initialWeight);
+                const startW = (!isNaN(ownStart) && ownStart > 0)
+                  ? ownStart
+                  : (day0Samples && day0Samples[idx] ? parseFloat(day0Samples[idx].weight) : 0);
                 const currentW = parseFloat(s.weight);
                 if (startW > 0 && !isNaN(currentW)) { totalLoss += ((startW - currentW) / startW) * 100; count++; }
             });
@@ -204,6 +212,496 @@
              return `${day}/${month}/${year}`; 
           }
           return '-';
+        };
+
+        // Resolve the temperature-logger images as an array. Supports the new
+        // multi-image field (temperatureImages[]) and stays backward compatible
+        // with older reports that stored a single temperatureImage.
+        const getTempImages = (analysis) => {
+          if (Array.isArray(analysis?.temperatureImages)) return analysis.temperatureImages.filter(Boolean);
+          if (analysis?.temperatureImage) return [analysis.temperatureImage];
+          return [];
+        };
+
+        // ---- Native Word (.docx) export -----------------------------------
+        // Converts the rendered report DOM into real Word content: editable
+        // paragraphs, headings and tables, with photos/charts embedded as
+        // pictures. Layout containers (CSS grid / flex rows) become borderless
+        // tables so side-by-side content stays side-by-side in Word, and the
+        // report's .page-break sections map to real Word page breaks — content
+        // flows naturally within each section, matching the PDF's pagination.
+        const domToDocx = async (root, docx, opts = {}) => {
+          const { onProgress, supplyChain, scores } = opts;
+          const { Paragraph, TextRun, ImageRun, Table, TableRow, TableCell, WidthType, AlignmentType, BorderStyle, VerticalAlign, TableOfContents, HeadingLevel, TableLayoutType } = docx;
+          // Printable A4 area at 96dpi with 12mm margins (~186 x 273 mm).
+          const MAX_W = 690, MAX_H = 940;
+          const CONTENT_DXA = 10546; // usable page width in twips (A4 minus 12mm margins)
+          const ctx = { pendingBreak: false, tableDepth: 0, imgCount: 0, inCell: false, keepNext: false };
+
+          const colorHex = (css) => {
+            const m = (css || '').match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+            if (!m || (m[4] !== undefined && parseFloat(m[4]) === 0)) return null;
+            return [m[1], m[2], m[3]].map(n => (+n).toString(16).padStart(2, '0')).join('').toUpperCase();
+          };
+          const skip = (el) => {
+            const cs = getComputedStyle(el);
+            return cs.display === 'none' || cs.visibility === 'hidden' || el.classList.contains('no-print');
+          };
+          const alignOf = (el) => {
+            const cs = getComputedStyle(el);
+            if (cs.textAlign === 'center' || (cs.display === 'flex' && cs.justifyContent === 'center')) return AlignmentType.CENTER;
+            if (cs.textAlign === 'right') return AlignmentType.RIGHT;
+            return AlignmentType.LEFT;
+          };
+          const mkPara = (o) => {
+            const p = new Paragraph({
+              ...o,
+              pageBreakBefore: (ctx.pendingBreak || o.pageBreakBefore) || undefined,
+              keepNext: (ctx.keepNext || o.keepNext) || undefined,
+            });
+            ctx.pendingBreak = false;
+            return p;
+          };
+          // Flush a pending page break before content that cannot carry the
+          // flag itself (tables) — otherwise the break would land INSIDE it.
+          const flushBreak = (out) => {
+            if (ctx.pendingBreak) { out.push(new Paragraph({ pageBreakBefore: true, spacing: { after: 0 } })); ctx.pendingBreak = false; }
+          };
+
+          const baseStyle = (el) => {
+            const cs = getComputedStyle(el);
+            return {
+              bold: parseInt(cs.fontWeight, 10) >= 600,
+              italics: cs.fontStyle === 'italic',
+              underline: (cs.textDecorationLine || '').includes('underline'),
+              color: colorHex(cs.color) || '000000',
+              size: Math.max(2, Math.round(parseFloat(cs.fontSize) * 1.5)), // px -> half-points
+            };
+          };
+          const mkRun = (text, st) => new TextRun({
+            text,
+            bold: st.bold || undefined,
+            italics: st.italics || undefined,
+            underline: st.underline ? {} : undefined,
+            color: st.color,
+            size: st.size,
+          });
+          const runsOf = (el) => {
+            const st = baseStyle(el);
+            const runs = [];
+            for (const n of el.childNodes) {
+              if (n.nodeType === 3) {
+                const text = n.textContent.replace(/\s+/g, ' ');
+                if (text.trim()) runs.push(mkRun(text, st));
+              } else if (n.nodeType === 1) {
+                if (n.tagName === 'BR') { runs.push(new TextRun({ text: '', break: 1 })); continue; }
+                if (n.tagName === 'IMG' || n.tagName.toLowerCase() === 'svg' || skip(n)) continue;
+                runs.push(...runsOf(n));
+              }
+            }
+            return runs;
+          };
+
+          const imgCache = new Map();
+          const loadImg = (src) => {
+            if (imgCache.has(src)) return imgCache.get(src);
+            const p = (async () => {
+              try {
+                const res = await fetch(src, src.startsWith('data:') ? undefined : { mode: 'cors' });
+                const blob = await res.blob();
+                const type = (blob.type || '').toLowerCase();
+                const url = URL.createObjectURL(blob);
+                try {
+                  const im = new Image();
+                  await new Promise((ok, err) => { im.onload = ok; im.onerror = err; im.src = url; });
+                  const w = im.naturalWidth, h = im.naturalHeight;
+                  let buf;
+                  if (type !== 'image/png' && type !== 'image/jpeg') {
+                    // Word only reliably embeds PNG/JPEG — transcode anything else.
+                    const c = document.createElement('canvas'); c.width = w; c.height = h;
+                    c.getContext('2d').drawImage(im, 0, 0);
+                    buf = Uint8Array.from(atob(c.toDataURL('image/png').split(',')[1]), (ch) => ch.charCodeAt(0));
+                  } else {
+                    buf = new Uint8Array(await blob.arrayBuffer());
+                  }
+                  return { buf, w, h };
+                } finally { URL.revokeObjectURL(url); }
+              } catch (e) { return null; }
+            })();
+            imgCache.set(src, p);
+            return p;
+          };
+
+          const imgPara = async (imgEl) => {
+            const rect = imgEl.getBoundingClientRect();
+            if (rect.width < 24 || rect.height < 24) return null; // UI icon, not content
+            const data = await loadImg(imgEl.currentSrc || imgEl.src);
+            if (!data || !data.w || !data.h) return null;
+            ctx.imgCount++;
+            if (onProgress && ctx.imgCount % 5 === 0) onProgress('Embedding photo ' + ctx.imgCount + '...');
+            // Fit natural aspect into the on-screen box, then into the page.
+            let scale = Math.min(rect.width / data.w, rect.height / data.h);
+            let w = data.w * scale, h = data.h * scale;
+            const cap = Math.min(MAX_W / w, MAX_H / h, 1);
+            w = Math.round(w * cap); h = Math.round(h * cap);
+            return mkPara({
+              children: [new ImageRun({ data: data.buf, transformation: { width: w, height: h } })],
+              alignment: alignOf(imgEl.parentElement || imgEl),
+              spacing: { after: 80 },
+            });
+          };
+
+          const svgPara = async (svgEl) => {
+            const rect = svgEl.getBoundingClientRect();
+            if (rect.width < 60 || rect.height < 40) return null; // inline icon
+            try {
+              // Inline the computed text styles: serialized SVG loses page CSS.
+              const clone = svgEl.cloneNode(true);
+              const src = svgEl.querySelectorAll('text, tspan');
+              const dst = clone.querySelectorAll('text, tspan');
+              src.forEach((t, i) => {
+                const cs = getComputedStyle(t);
+                dst[i].setAttribute('font-size', cs.fontSize);
+                dst[i].setAttribute('font-family', 'Arial, sans-serif');
+                dst[i].setAttribute('font-weight', cs.fontWeight);
+                if (!dst[i].getAttribute('fill')) dst[i].setAttribute('fill', cs.fill);
+              });
+              clone.setAttribute('width', rect.width);
+              clone.setAttribute('height', rect.height);
+              clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+              const xml = new XMLSerializer().serializeToString(clone);
+              const im = new Image();
+              await new Promise((ok, err) => { im.onload = ok; im.onerror = err; im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(xml); });
+              const SC = 2; // 2x raster for print sharpness
+              const c = document.createElement('canvas');
+              c.width = Math.round(rect.width * SC); c.height = Math.round(rect.height * SC);
+              const g = c.getContext('2d');
+              g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, c.height);
+              g.drawImage(im, 0, 0, c.width, c.height);
+              const buf = Uint8Array.from(atob(c.toDataURL('image/png').split(',')[1]), (ch) => ch.charCodeAt(0));
+              let w = rect.width, h = rect.height;
+              const cap = Math.min(MAX_W / w, MAX_H / h, 1);
+              w = Math.round(w * cap); h = Math.round(h * cap);
+              return mkPara({
+                children: [new ImageRun({ data: buf, transformation: { width: w, height: h } })],
+                alignment: AlignmentType.CENTER,
+                spacing: { after: 80 },
+              });
+            } catch (e) { return null; }
+          };
+
+          const borders = (visible) => {
+            const s = visible
+              ? { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' }
+              : { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
+            return { top: s, bottom: s, left: s, right: s };
+          };
+
+          const cellOf = async (el, { span = 1, pct, visible, keepNext = false }) => {
+            const kids = [];
+            const prevCell = ctx.inCell, prevKeep = ctx.keepNext;
+            ctx.inCell = true; ctx.keepNext = keepNext;
+            await walkInto(el, kids);
+            ctx.inCell = prevCell; ctx.keepNext = prevKeep;
+            if (!kids.length) kids.push(new Paragraph({ children: [] }));
+            const bg = colorHex(getComputedStyle(el).backgroundColor);
+            return new TableCell({
+              children: kids,
+              columnSpan: span > 1 ? span : undefined,
+              width: pct ? { size: pct, type: WidthType.PERCENTAGE } : undefined,
+              shading: bg && bg !== 'FFFFFF' ? { fill: bg } : undefined,
+              borders: borders(visible),
+              verticalAlign: VerticalAlign.CENTER,
+              margins: { top: 40, bottom: 40, left: 80, right: 80 },
+            });
+          };
+
+          const realTable = async (tableEl) => {
+            const rowEls = Array.from(tableEl.rows || []);
+            if (!rowEls.length) return null;
+            const tRect = tableEl.getBoundingClientRect();
+            // Fixed column widths (taken from the rendered layout) stop Word
+            // from re-flowing columns and wrapping cell text over many lines.
+            const colWidths = Array.from(rowEls[0].cells || []).map((td) =>
+              Math.max(300, Math.round((td.getBoundingClientRect().width / (tRect.width || 1)) * CONTENT_DXA))
+            );
+            const rows = [];
+            for (let ri = 0; ri < rowEls.length; ri++) {
+              const tr = rowEls[ri];
+              const cells = [];
+              // keep-with-next on every row except the last keeps the table in
+              // one piece: if it doesn't fit, it starts whole on the next page.
+              const keepNext = ri < rowEls.length - 1;
+              for (const td of Array.from(tr.cells || [])) {
+                const pct = tRect.width > 0
+                  ? Math.max(2, Math.round((td.getBoundingClientRect().width / tRect.width) * 100))
+                  : undefined;
+                cells.push(await cellOf(td, { span: td.colSpan || 1, pct, visible: true, keepNext }));
+              }
+              if (cells.length) rows.push(new TableRow({ children: cells, cantSplit: true }));
+            }
+            if (!rows.length) return null;
+            return new Table({ rows, width: { size: 100, type: WidthType.PERCENTAGE }, layout: TableLayoutType.FIXED, columnWidths: colWidths });
+          };
+
+          const layoutTable = async (rowsSpec, cols) => {
+            const rows = [];
+            for (const rowEls of rowsSpec) {
+              const cells = [];
+              for (const { el, span } of rowEls) {
+                cells.push(await cellOf(el, { span, pct: Math.round((span / cols) * 100), visible: false }));
+              }
+              rows.push(new TableRow({ children: cells, cantSplit: true }));
+            }
+            return new Table({ rows, width: { size: 100, type: WidthType.PERCENTAGE } });
+          };
+
+          const gridSpanOf = (el, cols) => {
+            const gc = getComputedStyle(el).gridColumnStart || '';
+            const m = gc.match(/span\s+(\d+)/);
+            return m ? Math.min(cols, parseInt(m[1], 10)) : 1;
+          };
+
+          // --- data-docx special blocks --------------------------------------
+
+          // Native, clickable Word TOC with page numbers. Word builds it from
+          // the Heading 1/2 outline when it refreshes fields on open.
+          const buildToc = (out) => {
+            out.push(mkPara({
+              children: [mkRun('CONTENTS', { bold: true, color: '007C27', size: 56 })],
+              spacing: { after: 300 },
+            }));
+            out.push(new TableOfContents('Contents', { hyperlink: true, headingStyleRange: '1-2' }));
+          };
+
+          const fmtRange = (a, b, unit) => {
+            const as = (a === 0 ? '0' : (a || '')).toString().trim();
+            const bs = (b === 0 ? '0' : (b || '')).toString().trim();
+            if (!as && !bs) return '-';
+            if (!bs || as === bs) return `${as}${unit}`;
+            return `${as} - ${bs}${unit}`;
+          };
+          const txtCell = (text, { bold, color = '334155', fill, size = 18, align = AlignmentType.CENTER, pct } = {}) => new TableCell({
+            children: [new Paragraph({ alignment: align, spacing: { after: 0 }, children: [mkRun(text, { bold, color, size })] })],
+            shading: fill ? { fill } : undefined,
+            width: pct ? { size: pct, type: WidthType.PERCENTAGE } : undefined,
+            borders: borders(true),
+            verticalAlign: VerticalAlign.CENTER,
+            margins: { top: 50, bottom: 50, left: 80, right: 80 },
+          });
+
+          // Clean bordered table for the supply chain — the tiny on-screen
+          // flow boxes don't translate to Word.
+          const buildSupplyChain = (out) => {
+            const widths = [6, 28, 17, 15, 17, 17]; // percent per column
+            const header = ['#', 'Stage', 'Temperature', 'Duration', 'Total Elapsed', 'Action'];
+            const rows = [new TableRow({
+              children: header.map((h, i) => txtCell(h, { bold: true, color: 'FFFFFF', fill: '007C27', size: 16, pct: widths[i], align: i === 1 ? AlignmentType.LEFT : AlignmentType.CENTER })),
+              cantSplit: true, tableHeader: true,
+            })];
+            let cMin = 0, cMax = 0;
+            supplyChain.forEach((s, i) => {
+              const dMin = parseFloat(s.daysStart) || 0;
+              const dMax = s.daysEnd ? (parseFloat(s.daysEnd) || dMin) : dMin;
+              cMin += dMin; cMax += dMax;
+              const fill = i % 2 ? 'F1F5F9' : undefined;
+              const action = s.action === 'pack' ? 'PACKED' : s.action === 'unpack' ? 'OPENED' : '';
+              rows.push(new TableRow({
+                cantSplit: true,
+                children: [
+                  txtCell(String(i + 1), { bold: true, color: '64748B', fill, pct: widths[0] }),
+                  txtCell(s.stage || '-', { bold: true, fill, pct: widths[1], align: AlignmentType.LEFT }),
+                  txtCell(fmtRange(s.tempStart, s.tempEnd, '°C'), { fill, pct: widths[2] }),
+                  txtCell(fmtRange(s.daysStart, s.daysEnd, ' d'), { fill, pct: widths[3] }),
+                  txtCell(cMin === cMax ? `${cMin} d` : `${cMin} - ${cMax} d`, { color: '054E9A', fill, pct: widths[4] }),
+                  txtCell(action, { bold: true, color: s.action === 'pack' ? '007C27' : 'DC2626', fill, pct: widths[5] }),
+                ],
+              }));
+            });
+            out.push(new Table({
+              rows,
+              width: { size: 100, type: WidthType.PERCENTAGE },
+              layout: TableLayoutType.FIXED,
+              columnWidths: widths.map((w) => Math.round((w / 100) * CONTENT_DXA)),
+            }));
+            out.push(new Paragraph({ children: [], spacing: { after: 80 } }));
+          };
+
+          // Score scale: "10  excellent – ..." in two tidy columns, number first.
+          const buildScoreScale = (out) => {
+            const rows = [];
+            for (let i = 0; i < scores.length; i += 2) {
+              const cells = scores.slice(i, i + 2).map(([num, desc]) => {
+                const col = num >= 7 ? '16A34A' : num >= 5 ? 'EA580C' : 'DC2626';
+                return new TableCell({
+                  children: [new Paragraph({
+                    spacing: { after: 20 },
+                    children: [mkRun(String(num), { bold: true, color: col, size: 20 }), mkRun('   ' + desc, { color: '334155', size: 16 })],
+                  })],
+                  width: { size: 50, type: WidthType.PERCENTAGE },
+                  borders: borders(false),
+                  margins: { top: 30, bottom: 30, left: 60, right: 60 },
+                });
+              });
+              while (cells.length < 2) cells.push(new TableCell({ children: [new Paragraph({ children: [] })], borders: borders(false) }));
+              rows.push(new TableRow({ children: cells, cantSplit: true }));
+            }
+            out.push(new Table({ rows, width: { size: 100, type: WidthType.PERCENTAGE } }));
+            out.push(new Paragraph({ children: [], spacing: { after: 80 } }));
+          };
+
+          // Photo grids become bordered tables: photo on top, caption below.
+          const buildPhotoGrid = async (el, out) => {
+            const cs = getComputedStyle(el);
+            const cols = Math.max(1, (cs.gridTemplateColumns || '').split(' ').filter(Boolean).length);
+            const cards = Array.from(el.children).filter((c) => !skip(c));
+            if (!cards.length) return;
+            const rows = [];
+            for (let i = 0; i < cards.length; i += cols) {
+              const slice = cards.slice(i, i + cols);
+              const cells = [];
+              for (const card of slice) {
+                const kids = [];
+                const img = card.querySelector('img');
+                if (img) { const p = await imgPara(img); if (p) kids.push(p); }
+                const lines = (card.innerText || '').split('\n').map((s) => s.trim()).filter(Boolean);
+                let badge = null;
+                if (lines.length > 1 && lines[0].length <= 8) badge = lines.shift();
+                lines.forEach((line, li) => kids.push(new Paragraph({
+                  alignment: AlignmentType.CENTER,
+                  spacing: { before: li === 0 ? 60 : 0, after: 0 },
+                  children: [
+                    mkRun(line, li === 0 ? { bold: true, color: '1E293B', size: 16 } : { color: '475569', size: 15 }),
+                    ...((li === 0 && badge) ? [mkRun('  (' + badge + ')', { color: '64748B', size: 14 })] : []),
+                  ],
+                })));
+                if (!kids.length) kids.push(new Paragraph({ children: [] }));
+                cells.push(new TableCell({
+                  children: kids,
+                  width: { size: Math.floor(100 / cols), type: WidthType.PERCENTAGE },
+                  borders: borders(true),
+                  verticalAlign: VerticalAlign.CENTER,
+                  margins: { top: 60, bottom: 60, left: 60, right: 60 },
+                }));
+              }
+              while (cells.length < cols) cells.push(new TableCell({ children: [new Paragraph({ children: [] })], borders: borders(true), width: { size: Math.floor(100 / cols), type: WidthType.PERCENTAGE } }));
+              rows.push(new TableRow({ children: cells, cantSplit: true }));
+            }
+            out.push(new Table({
+              rows,
+              width: { size: 100, type: WidthType.PERCENTAGE },
+              layout: TableLayoutType.FIXED,
+              columnWidths: Array.from({ length: cols }, () => Math.round(CONTENT_DXA / cols)),
+            }));
+            out.push(new Paragraph({ children: [], spacing: { after: 120 } }));
+          };
+
+          const walkEl = async (el, out) => {
+            if (skip(el)) return;
+            if (el.classList.contains('page-break')) ctx.pendingBreak = true;
+
+            // Special-cased blocks, marked with data-docx in the report JSX.
+            const special = el.getAttribute && el.getAttribute('data-docx');
+            if (special === 'toc') { flushBreak(out); buildToc(out); return; }
+            if (special === 'supply-chain' && Array.isArray(supplyChain) && supplyChain.length) { flushBreak(out); buildSupplyChain(out); return; }
+            if (special === 'score-scale' && Array.isArray(scores) && scores.length) { flushBreak(out); buildScoreScale(out); return; }
+            if (special === 'photo-grid') { flushBreak(out); await buildPhotoGrid(el, out); return; }
+
+            const tag = el.tagName;
+            const cs = getComputedStyle(el);
+
+            if (/^H[1-6]$/.test(tag)) {
+              // Numbered section headings get real Word heading styles: they
+              // form the outline the native (clickable) TOC is generated from.
+              const t = (el.textContent || '').trim();
+              let heading;
+              if (tag === 'H2' && /^\d+\.\s/.test(t)) heading = HeadingLevel.HEADING_1;
+              else if (tag === 'H3' && /^\d+\.\d+/.test(t)) heading = HeadingLevel.HEADING_2;
+              const runs = runsOf(el);
+              if (runs.length) out.push(mkPara({ children: runs, heading, keepNext: true, alignment: alignOf(el), spacing: { before: 200, after: 160 } }));
+              return;
+            }
+            if (tag === 'TABLE') {
+              flushBreak(out);
+              const t = await realTable(el);
+              if (t) { out.push(t); out.push(new Paragraph({ children: [], spacing: { after: 80 } })); }
+              return;
+            }
+            if (tag === 'IMG') { const p = await imgPara(el); if (p) out.push(p); return; }
+            if (tag.toLowerCase() === 'svg') { const p = await svgPara(el); if (p) out.push(p); return; }
+            if (tag === 'UL' || tag === 'OL') {
+              for (const li of Array.from(el.children)) {
+                if (li.tagName !== 'LI' || skip(li)) continue;
+                const runs = runsOf(li);
+                if (runs.length) out.push(mkPara({ children: runs, bullet: { level: 0 }, spacing: { after: 60 } }));
+              }
+              return;
+            }
+
+            // Leaf block (inline content only) -> one paragraph.
+            if (!el.querySelector('div, p, table, ul, ol, img, svg, h1, h2, h3, h4, h5, h6, li')) {
+              const runs = runsOf(el);
+              if (runs.length) out.push(mkPara({ children: runs, alignment: alignOf(el), spacing: { after: ctx.inCell ? 20 : 100 } }));
+              return;
+            }
+
+            const children = Array.from(el.children).filter((c) => !skip(c));
+
+            // CSS grid -> borderless layout table (respecting col-span).
+            if (cs.display === 'grid' && ctx.tableDepth < 2) {
+              const cols = (cs.gridTemplateColumns || '').split(' ').filter(Boolean).length;
+              if (cols >= 2 && children.length >= 2) {
+                flushBreak(out);
+                ctx.tableDepth++;
+                const rowsSpec = [];
+                let row = [], used = 0;
+                for (const c of children) {
+                  const span = gridSpanOf(c, cols);
+                  if (used + span > cols && row.length) { rowsSpec.push(row); row = []; used = 0; }
+                  row.push({ el: c, span }); used += span;
+                  if (used >= cols) { rowsSpec.push(row); row = []; used = 0; }
+                }
+                if (row.length) rowsSpec.push(row);
+                const t = await layoutTable(rowsSpec, cols);
+                ctx.tableDepth--;
+                out.push(t);
+                out.push(new Paragraph({ children: [], spacing: { after: 80 } }));
+                return;
+              }
+            }
+
+            // Horizontal flex holding visual blocks -> one borderless row
+            // (keeps e.g. the two cover logos side by side).
+            if (cs.display === 'flex' && (cs.flexDirection === 'row' || cs.flexDirection === 'row-reverse') && ctx.tableDepth < 2) {
+              const complex = children.length >= 2 && children.some((c) => c.tagName === 'IMG' || c.querySelector('img, svg, table'));
+              if (complex) {
+                flushBreak(out);
+                ctx.tableDepth++;
+                const t = await layoutTable([children.map((c) => ({ el: c, span: 1 }))], children.length);
+                ctx.tableDepth--;
+                out.push(t);
+                out.push(new Paragraph({ children: [], spacing: { after: 80 } }));
+                return;
+              }
+            }
+
+            await walkInto(el, out);
+          };
+
+          const walkInto = async (el, out) => {
+            for (const n of el.childNodes) {
+              if (n.nodeType === 3) {
+                const t = n.textContent.replace(/\s+/g, ' ');
+                if (t.trim()) out.push(mkPara({ children: [mkRun(t, baseStyle(el))], spacing: { after: ctx.inCell ? 20 : 60 } }));
+              } else if (n.nodeType === 1) {
+                await walkEl(n, out);
+              }
+            }
+          };
+
+          const out = [];
+          await walkInto(root, out);
+          return out;
         };
 
         // --- COMPONENTS ---
@@ -408,7 +906,7 @@
           );
         };
 
-        const SampleModal = ({ isOpen, onClose, data, onSave, startWeight, projectCriteria, isEvaluationDay, isDayEditable, projectTotalDuration, isMAP = true, rt }) => {
+        const SampleModal = ({ isOpen, onClose, data, onSave, startWeight, day0Samples, projectCriteria, isEvaluationDay, isDayEditable, projectTotalDuration, isMAP = true, rt }) => {
           if (!isOpen) return null;
           const [samples, setSamples] = useState(data.samples || []);
           const [day, setDay] = useState(data.day === 0 ? 0 : (data.day || ''));
@@ -422,7 +920,7 @@
             }
           }, [evaluateQuality, projectCriteria, qualityParams]);
 
-          const addSample = () => setSamples([...samples, { id: Date.now(), o2: '', co2: '', weight: '' }]);
+          const addSample = () => setSamples([...samples, { id: Date.now(), o2: '', co2: '', weight: '', initialWeight: '' }]);
           const updateSample = (index, field, value) => {
             const newSamples = [...samples]; newSamples[index][field] = value; setSamples(newSamples);
           };
@@ -437,7 +935,9 @@
           const handleSave = () => { onSave({ ...data, day: parseFloat(day)||0, notes, samples, qualityParams, evaluateQuality }); onClose(); };
           
           const avgWeight = getAverage(samples, 'weight');
-          const weightLoss = startWeight && avgWeight > 0 ? (((startWeight - avgWeight) / startWeight) * 100).toFixed(2) : 0;
+          // Per-sample loss: uses each sample's own initial weight when filled,
+          // falling back to the index-matched day-0 sample (see getWeightLoss).
+          const weightLoss = parseFloat(day) > 0 ? getWeightLoss(samples, day0Samples) : 0;
           
           const isOpened = projectTotalDuration && parseFloat(day) > parseFloat(projectTotalDuration);
 
@@ -475,6 +975,7 @@
                             <th className="p-3 text-center">#</th>
                             {isMAP && <th className="p-3" style={{color: BRAND.colors.blue}}>O₂ (%)</th>}
                             {isMAP && <th className="p-3" style={{color: BRAND.colors.green}}>CO₂ (%)</th>}
+                            {parseFloat(day) > 0 && <th className="p-3 text-amber-700">{rt?.thInitialWeight || 'Initial Wt.'}</th>}
                             <th className="p-3">Weight {parseFloat(day)===0 && '(Start)'}</th>
                             <th className="p-3"></th>
                           </tr>
@@ -492,6 +993,9 @@
                                 <td className="p-3">
                                    {isOpened ? <div className="text-center font-bold text-slate-300 w-full">-</div> : <input type="number" className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-green-500 text-center font-bold text-green-900" value={s.co2 === 0 ? 0 : (s.co2 || '')} onChange={e => updateSample(i, 'co2', e.target.value)} />}
                                 </td>
+                              )}
+                              {parseFloat(day) > 0 && (
+                                <td className="p-3"><input type="number" className="w-full p-2 border border-amber-300 bg-amber-50/50 rounded-lg outline-none focus:ring-2 focus:ring-amber-500 text-center font-bold text-amber-900" value={s.initialWeight === 0 ? 0 : (s.initialWeight || '')} onChange={e => updateSample(i, 'initialWeight', e.target.value)} placeholder={day0Samples?.[i]?.weight ? String(day0Samples[i].weight) : 'g'} /></td>
                               )}
                               <td className="p-3"><input type="number" className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-slate-500 text-center font-bold" value={s.weight === 0 ? 0 : (s.weight || '')} onChange={e => updateSample(i, 'weight', e.target.value)} placeholder="g" /></td>
                               <td className="p-3 text-center"><button onClick={() => removeSample(i)} className="text-red-400 hover:text-red-600 bg-red-50 p-2 rounded-lg hover:bg-red-100 transition-colors"><Trash2 size={16}/></button></td>
@@ -646,8 +1150,16 @@
           );
         };
 
-        const PrintPreview = ({ clientInfo, project, groups, analysis, supplyChain, onBack, unitSystem = 'metric' }) => {
+        const PrintPreview = ({ clientInfo, project, groups, analysis, supplyChain, onBack, unitSystem = 'metric', lang = 'en' }) => {
+          // Recognised stage labels are re-translated to the report language at
+          // render time, so a chain entered in another language (e.g. Spanish)
+          // never leaks untranslated into the report. Free text passes through.
+          const displayChain = (supplyChain || []).map(s => globalConfig.retranslateStage
+            ? { ...s, stage: globalConfig.retranslateStage(s.stage, lang) }
+            : s);
           const [isPrinting, setIsPrinting] = useState(false);
+          const [isWordExporting, setIsWordExporting] = useState(false);
+          const [wordProgress, setWordProgress] = useState('');
           // Only use temperatures from the 'pack' stage up to (not including) the 'unpack' stage.
           // Pre-packaging steps like harvest and transport are excluded so the report shows
           // the temperature the product was actually packed and stored at.
@@ -705,7 +1217,7 @@
             let n = 0;
             return {
               gas:      showGas                   ? ++n : null,
-              temp:     !!analysis.temperatureImage ? ++n : null,
+              temp:     getTempImages(analysis).length > 0 ? ++n : null,
               weight:   showWeight                ? ++n : null,
               visual:   ++n,
               detailed: ++n,
@@ -716,27 +1228,80 @@
           const reportTitleClass = "text-3xl font-extrabold uppercase mb-6 brand-heading";
           const reportTitleStyle = { color: BRAND.colors.green, borderBottom: `3px solid ${BRAND.colors.gray}`, paddingBottom: '0.75rem', marginTop: '2rem' };
 
-          const handleWordExport = () => {
-              const content = document.getElementById('print-content').innerHTML;
-              const preHtml = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export HTML To Doc</title><style>body { font-family: 'Arial', sans-serif; } .page-break { page-break-before: always; } table { width: 100%; border-collapse: collapse; margin-bottom: 20px; } th, td { border: 1px solid #ccc; padding: 8px; text-align: left; } th { background-color: #007C27; color: white; } img { max-width: 100%; height: auto; }</style></head><body>`;
-              const postHtml = "</body></html>";
-              const html = preHtml + content + postHtml;
-              const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
-              const url = URL.createObjectURL(blob);
-              const downloadLink = document.createElement("a");
-              document.body.appendChild(downloadLink);
-              downloadLink.href = URL.createObjectURL(blob);
-              downloadLink.download = (project.reportTitle || 'Report') + '.doc';
-              downloadLink.click();
-              document.body.removeChild(downloadLink);
+          // Builds a genuine .docx (via the `docx` library) from the rendered
+          // report DOM: fully editable text, native Word tables and headings.
+          // Only photos and charts are embedded as pictures. Page breaks occur
+          // exactly at the report's .page-break sections; everything else
+          // flows naturally, so pagination tracks the PDF.
+          const handleWordExport = async () => {
+              const root = document.getElementById('print-content');
+              if (!root || isWordExporting) return;
+              setIsWordExporting(true);
+              setWordProgress('Loading Word engine...');
+              try {
+                  await document.fonts.ready;
+                  // jsDelivr serves the package's own prebuilt browser bundle;
+                  // esm.sh's re-bundle of docx has a broken Packer that hangs.
+                  const docx = await import('https://cdn.jsdelivr.net/npm/docx@8.5.0/+esm');
+                  setWordProgress('Converting report...');
+                  const children = await domToDocx(root, docx, { onProgress: setWordProgress, supplyChain, scores: SCORES });
+                  setWordProgress('Assembling document...');
+                  const doc = new docx.Document({
+                      styles: {
+                          default: {
+                              document: { run: { font: 'Montserrat' } },
+                              // Brand heading styles: without these Word's own
+                              // Heading 1/2 (blue Calibri Light) would restyle
+                              // the section titles used for the TOC outline.
+                              heading1: { run: { font: 'Montserrat', color: '007C27', bold: true } },
+                              heading2: { run: { font: 'Montserrat', color: '334155', bold: true } },
+                          },
+                      },
+                      // Refresh fields on open so the TOC gets page numbers
+                      // and clickable links straight away.
+                      features: { updateFields: true },
+                      sections: [{
+                          properties: {
+                              page: {
+                                  size: { width: 11906, height: 16838 },     // A4 portrait (twips)
+                                  margin: { top: 680, right: 680, bottom: 680, left: 680 }, // 12mm
+                              },
+                          },
+                          footers: {
+                              default: new docx.Footer({
+                                  children: [new docx.Paragraph({
+                                      alignment: docx.AlignmentType.CENTER,
+                                      children: [new docx.TextRun({ children: [docx.PageNumber.CURRENT], size: 16, color: '94A3B8', font: 'Montserrat' })],
+                                  })],
+                              }),
+                          },
+                          children,
+                      }],
+                  });
+                  const blob = await docx.Packer.toBlob(doc);
+                  const a = document.createElement('a');
+                  document.body.appendChild(a);
+                  a.href = URL.createObjectURL(blob);
+                  a.download = (project.reportTitle || 'Report') + '.docx';
+                  a.click();
+                  document.body.removeChild(a);
+              } catch (e) {
+                  alert('Word export failed: ' + ((e && e.message) ? e.message : e));
+              } finally {
+                  setIsWordExporting(false);
+                  setWordProgress('');
+              }
           };
 
           return (
             <div className="min-h-screen bg-slate-600 p-0 sm:p-8 overflow-y-auto font-sans print:p-0 print:bg-white no-print-bg">
               <div className="fixed bottom-8 right-8 flex gap-4 no-print z-50">
                 <button onClick={onBack} className="bg-slate-800 text-white px-6 py-3 rounded-full shadow-lg font-bold transition hover:bg-slate-900 flex items-center gap-2"><Edit3 size={18}/> Edit</button>
-                <button onClick={handleWordExport} className="bg-blue-600 text-white px-6 py-3 rounded-full shadow-lg font-bold flex items-center gap-2 hover:bg-blue-700 transition">
-                  <FileArchive size={20} /> Download Word
+                <button onClick={handleWordExport} disabled={isWordExporting} className="bg-blue-600 text-white px-6 py-3 rounded-full shadow-lg font-bold flex items-center gap-2 hover:bg-blue-700 transition disabled:opacity-70 disabled:cursor-wait">
+                  {isWordExporting
+                    ? <><svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg> {wordProgress || 'Working...'}</>
+                    : <><FileArchive size={20} /> Download Word</>
+                  }
                 </button>
                 <button
                   disabled={isPrinting}
@@ -792,7 +1357,7 @@
                 </div>
 
                 {/* TABLE OF CONTENTS */}
-                <div className="page-break flex flex-col pt-12">
+                <div className="page-break flex flex-col pt-12" data-docx="toc">
                     <h2 className="text-4xl font-extrabold uppercase mb-8 brand-heading" style={{ color: BRAND.colors.green, borderBottom: `3px solid ${BRAND.colors.gray}`, paddingBottom: '1rem' }}>Contents</h2>
                     <ul className="text-xl space-y-4 font-medium text-slate-700">
                         <li className="flex justify-between border-b border-slate-200 pb-2"><span>1. Setting</span></li>
@@ -800,7 +1365,7 @@
                         <li className="flex justify-between border-b border-slate-200 pb-2"><span>3. Trial set up</span></li>
                         <li className="flex justify-between border-b border-slate-200 pb-2"><span>4. Trial results</span></li>
                         {sec4Nums.gas   !== null && <li className="flex justify-between border-b border-slate-200 pb-2"><span className="pl-6">4.{sec4Nums.gas} Gas Levels</span></li>}
-                        {analysis.temperatureImage && <li className="flex justify-between border-b border-slate-200 pb-2"><span className="pl-6">4.{sec4Nums.temp} {analysis.temperatureLabel || 'Temperature Logger Profile'}</span></li>}
+                        {getTempImages(analysis).length > 0 && <li className="flex justify-between border-b border-slate-200 pb-2"><span className="pl-6">4.{sec4Nums.temp} {analysis.temperatureLabel || 'Temperature Logger Profile'}</span></li>}
                         {sec4Nums.weight !== null && <li className="flex justify-between border-b border-slate-200 pb-2"><span className="pl-6">4.{sec4Nums.weight} Weight Loss Comparison</span></li>}
                         <li className="flex justify-between border-b border-slate-200 pb-2"><span className="pl-6">4.{sec4Nums.visual} Visual quality</span></li>
                         <li className="flex justify-between border-b border-slate-200 pb-2"><span className="pl-6">4.{sec4Nums.detailed} Detailed Quality Parameters</span></li>
@@ -854,8 +1419,8 @@
                     <div className="w-full px-6 pb-6 break-inside-avoid">
                        <div className="border-t border-slate-200 pt-4">
                          <div className="font-bold text-slate-500 uppercase tracking-wide text-xs mb-2">Product Supply Chain :</div>
-                         <div className="w-full mt-1">
-                           <SupplyChainFlow chain={supplyChain} />
+                         <div className="w-full mt-1" data-docx="supply-chain">
+                           <SupplyChainFlow chain={displayChain} />
                          </div>
                        </div>
                     </div>
@@ -868,7 +1433,27 @@
                   <div className="text-base leading-relaxed text-justify text-slate-800 mb-8">
                      <h4 className="font-bold mb-3 text-xl" style={{color: BRAND.colors.black}}>Main Conclusion:</h4>
                      <div className="mb-8 whitespace-pre-wrap pdf-rich-text bg-slate-50 p-6 rounded-2xl border border-slate-200" dangerouslySetInnerHTML={{ __html: analysis.conclusion || 'No conclusion entered.' }}></div>
-                     
+
+                     {/* Trial Target verdict — links the conclusion back to the target
+                         defined in the trial setup. */}
+                     {(analysis.targetAchieved || analysis.targetEvaluation) && (() => {
+                        const status = {
+                          achieved:    { label: 'Achieved',           bg: '#f0fdf4', border: '#bbf7d0', color: '#15803d' },
+                          partial:     { label: 'Partially Achieved', bg: '#fff7ed', border: '#fed7aa', color: '#c2410c' },
+                          notAchieved: { label: 'Not Achieved',       bg: '#fef2f2', border: '#fecaca', color: '#b91c1c' }
+                        }[analysis.targetAchieved] || null;
+                        return (
+                          <div className="mb-8 break-inside-avoid p-6 rounded-2xl border" style={{ backgroundColor: status?.bg || '#f8fafc', borderColor: status?.border || '#e2e8f0' }}>
+                            <div className="flex items-center justify-between gap-4 mb-3 flex-wrap">
+                              <h4 className="font-bold text-xl" style={{color: BRAND.colors.black}}>Trial Target:</h4>
+                              {status && <span className="text-xs font-extrabold uppercase tracking-wider px-3 py-1.5 rounded-lg border" style={{ color: status.color, borderColor: status.border, backgroundColor: '#ffffff' }}>{status.label}</span>}
+                            </div>
+                            {project.trialTarget && <p className="italic text-slate-600 mb-3">{project.trialTarget}</p>}
+                            {analysis.targetEvaluation && <div className="whitespace-pre-wrap text-slate-800">{analysis.targetEvaluation}</div>}
+                          </div>
+                        );
+                     })()}
+
                      {groups.map(g => analysis.variantConclusions && analysis.variantConclusions[g.id] ? (
                        <div key={`vc-${g.id}`} className="mb-6 break-inside-avoid">
                          <h4 className="font-bold text-lg mb-2" style={{color: BRAND.colors.green}}>Conclusion {g.name}:</h4>
@@ -891,6 +1476,13 @@
                               );
                             })}
                           </ul>
+                       </div>
+                     )}
+
+                     {analysis.generalObservations && (
+                       <div className="mt-8 border-t border-slate-200 pt-6 break-inside-avoid">
+                          <h4 className="font-bold text-xl mb-4" style={{color: BRAND.colors.black}}>General Observations:</h4>
+                          <div className="whitespace-pre-wrap text-slate-700 bg-slate-50 p-6 rounded-2xl border border-slate-200">{analysis.generalObservations}</div>
                        </div>
                      )}
                   </div>
@@ -925,7 +1517,7 @@
                                  const dimUnit = isLargeBulk ? 'cm' : 'mm';
                                  return (
                                    <tr key={g.id}>
-                                     <td className="font-bold p-3 break-words" style={{ borderLeft: `4px solid ${CHART_COLORS[i % CHART_COLORS.length].stroke}` }}>{g.name}</td>
+                                     <td className="font-bold p-3 break-words" style={{ borderLeft: `4px solid ${CHART_COLORS[i % CHART_COLORS.length].stroke}` }}>{g.name}{(g.round === 2 || g.verificationOf) && <span className="ml-2 text-[9px] font-extrabold uppercase bg-blue-50 text-blue-700 border border-blue-200 rounded px-1.5 py-0.5 whitespace-nowrap">Verification R2</span>}</td>
                                      <td className="text-center p-3 break-words">{g.specs?.packaging || '-'}</td>
                                      <td className="text-center p-3 break-words">{g.specs?.material || '-'}</td>
                                      <td className="text-center p-3 break-words">{g.specs?.length || '-'}x{g.specs?.width || '-'}x{g.specs?.height || '-'} {dimUnit}</td>
@@ -935,6 +1527,9 @@
                              </tbody>
                            </table>
                        </div>
+                       {groups.some(g => g.round === 2 || g.verificationOf) && (
+                         <p className="text-xs text-slate-500 italic -mt-3 mb-6">Variants marked "Verification R2" are a second test round performed with a packaging configuration identical to their Round 1 counterpart, to verify the Round 1 results.</p>
+                       )}
                      </div>
 
                      {project.currentChallenge && (
@@ -949,18 +1544,60 @@
                            <p>The Fast Respiration Meter System was used to measure the product respiration rate (RR O₂: <strong>{project.rrO2 || '-'}</strong>, RR CO₂: <strong>{project.rrCO2 || '-'}</strong>) at <strong>{project.rrTemp || '-'}°C</strong>. This allowed PerfoTec to calculate the optimal micro perforation pattern.</p>
                          )}
                          
-                         {groups[0]?.specs?.startWeight && <p>The product weight tested was approx. <strong>{groups[0].specs.startWeight} {weightUnit}</strong> per unit.</p>}
+                         {/* Tested weight always mirrors the Net Weight field (A. Product & Packaging).
+                             No silent fallback to per-variant defaults — a missing value renders a
+                             visible error so it cannot slip into a client-facing PDF unnoticed. */}
+                         {(() => { const testedWeight = project.packagings?.[0]?.startWeight || project.startWeight; return testedWeight
+                           ? <p>The product weight tested was approx. <strong>{testedWeight} {weightUnit}</strong> per unit.</p>
+                           : <p className="font-bold text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-3 flex items-center gap-2"><AlertTriangle size={16} className="shrink-0"/> Net Weight is missing — fill in the Net Weight field under "A. Product &amp; Packaging" in the Setup tab.</p>; })()}
                          {(project.maturityStage && project.maturityStage !== 'N/A' && project.maturityStage !== '-') && <p>Maturity stage at packing: <strong>{project.maturityStage}</strong>.</p>}
                          {(project.postHarvestTreatment && project.postHarvestTreatment !== 'N/A' && project.postHarvestTreatment !== '-') && <p>Post-harvest treatment: <strong>{project.postHarvestTreatment}</strong>.</p>}
                          
                          <p>Stored at <strong>{tempString}</strong> for <strong>{totalDays} days</strong> total.</p>
                          <p>The product was packed on <strong>{formatDateToDDMMYYYY(project.packingDate || project.date)}</strong>.</p>
-                         <p>Unpacking moments were planned for <strong>{calcUnpackingDate(project)}</strong> (Day {project.totalDuration || 0}). Per packing moment, samples per treatment were unpacked.</p>
+                         {/* Sample totals are derived from the actual measurement data
+                             (all evaluation days after day 0 combined) so the sentence
+                             stays correct when variants differ in unpacked samples. */}
+                         {(() => {
+                           const totalFor = (g) => (g.measurements || [])
+                             .filter(m => parseFloat(m.day) > 0)
+                             .reduce((acc, m) => acc + (Array.isArray(m.samples) ? m.samples.length : 0), 0);
+                           const totals = groups.map(g => ({ name: g.name || 'Variant', total: totalFor(g) })).filter(t => t.total > 0);
+                           const uniform = totals.length > 0 && totals.every(t => t.total === totals[0].total);
+                           return (
+                             <>
+                               <p>Unpacking moments were planned for <strong>{calcUnpackingDate(project)}</strong> (Day {project.totalDuration || 0}).</p>
+                               {totals.length > 0 && (uniform
+                                 ? <p>In total, <strong>{totals[0].total}</strong> samples per treatment were unpacked during the trial.</p>
+                                 : <div>
+                                     <p>Total number of samples unpacked per treatment:</p>
+                                     <ul className="list-disc pl-6 mt-1">
+                                       {totals.map((t, i) => <li key={i}><strong>{t.name}</strong>: {t.total} samples</li>)}
+                                     </ul>
+                                   </div>
+                               )}
+                             </>
+                           );
+                         })()}
                          {project.retailOpenDays && parseInt(project.retailOpenDays) > 0 && (
                            <p>After opening, the product was kept in retail simulation for an additional <strong>{project.retailOpenDays}</strong> days and evaluated again on <strong>{calcRetailDate(project)}</strong>.</p>
                          )}
                      </div>
                      
+                     {project.processDescription && (
+                       <div className="break-inside-avoid bg-blue-50/50 p-6 rounded-2xl border border-blue-100">
+                         <h4 className="font-bold text-lg mb-2 text-blue-900">Process Description:</h4>
+                         <div className="whitespace-pre-wrap text-slate-700">{project.processDescription}</div>
+                       </div>
+                     )}
+
+                     {project.ripeningProtocol && (
+                       <div className="break-inside-avoid bg-amber-50 p-6 rounded-2xl border border-amber-100">
+                         <h4 className="font-bold text-lg mb-2 text-amber-800">Ripening:</h4>
+                         <div className="whitespace-pre-wrap text-slate-700">{project.ripeningProtocol}</div>
+                       </div>
+                     )}
+
                      <div className="break-inside-avoid mt-8 pt-6 border-t border-slate-200">
                        <h4 className="font-bold text-xl mb-4 text-slate-800">Methodology & Evaluation</h4>
                        <p className="mb-4">Product quality was evaluated at the start and at the unpacking moment. The following attributes are evaluated according to the score scale listed below. Scores of 7 and higher are considered to be within specification and of acceptable quality.</p>
@@ -1016,15 +1653,63 @@
                               )
                             ))}
                           </div>
+
+                          {/* Compact numeric summary of the charts above — exact averages
+                              per variant per evaluation day, useful when chart lines sit
+                              close together. */}
+                          {(() => {
+                            const pDays = parseFloat(project.totalDuration);
+                            const hasGas = (m) => (m.samples || []).some(s => s.o2 !== '' && s.o2 !== undefined && s.o2 !== null);
+                            const inPackedWindow = (m) => isNaN(pDays) || pDays === 0 || parseFloat(m.day) <= pDays;
+                            const gasDays = Array.from(new Set(mapGroups.flatMap(g => (g.measurements || []).filter(m => inPackedWindow(m) && hasGas(m)).map(m => parseFloat(m.day))))).filter(d => !isNaN(d)).sort((a, b) => a - b);
+                            if (gasDays.length === 0) return null;
+                            return (
+                              <div className="break-inside-avoid mb-4">
+                                <div className="overflow-hidden rounded-xl border border-slate-200 shadow-sm">
+                                  <table className="w-full text-xs bg-white">
+                                    <thead className="bg-slate-100 border-b border-slate-200">
+                                      <tr className="text-left text-slate-600 uppercase tracking-wider text-[9px] font-bold">
+                                        <th className="p-2.5">Variant</th>
+                                        {gasDays.map(d => <th key={d} className="p-2.5 text-center">{formatDay(d)}</th>)}
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                      {mapGroups.map((g, i) => (
+                                        <tr key={g.id}>
+                                          <td className="p-2.5 font-bold break-words" style={{ borderLeft: `4px solid ${CHART_COLORS[groups.indexOf(g) % CHART_COLORS.length].stroke}` }}>{g.name || 'Variant'}</td>
+                                          {gasDays.map(d => {
+                                            const m = (g.measurements || []).find(mm => parseFloat(mm.day) === d);
+                                            const has = m && hasGas(m);
+                                            return (
+                                              <td key={d} className="p-2.5 text-center whitespace-nowrap">
+                                                {has
+                                                  ? <><span className="font-bold" style={{color: BRAND.colors.blue}}>{getAverage(m.samples, 'o2')}</span><span className="text-slate-400"> / </span><span className="font-bold" style={{color: BRAND.colors.green}}>{getAverage(m.samples, 'co2')}</span></>
+                                                  : <span className="text-slate-300">-</span>}
+                                              </td>
+                                            );
+                                          })}
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                                <p className="text-[10px] text-slate-500 mt-1.5 italic">Average measured values per evaluation day: <span className="font-bold not-italic" style={{color: BRAND.colors.blue}}>O₂ %</span> / <span className="font-bold not-italic" style={{color: BRAND.colors.green}}>CO₂ %</span>.</p>
+                              </div>
+                            );
+                          })()}
                       </div>
                     );
                   })()}
 
-                  {analysis.temperatureImage && (
-                     <div className="break-inside-avoid mb-10">
+                  {getTempImages(analysis).length > 0 && (
+                     <div className="mb-10">
                        <h3 className="font-bold text-xl mb-4 mt-8 brand-heading text-slate-700">4.{sec4Nums.temp} {analysis.temperatureLabel || 'Temperature Logger Profile'}</h3>
-                       <div className="w-full border border-slate-200 rounded-3xl p-6 bg-white flex justify-center items-center shadow-sm">
-                           <img src={analysis.temperatureImage} className="w-full h-auto max-h-[400px] object-contain" />
+                       <div className="space-y-6">
+                           {getTempImages(analysis).map((img, i) => (
+                             <div key={i} className="break-inside-avoid w-full border border-slate-200 rounded-3xl p-6 bg-white flex justify-center items-center shadow-sm">
+                                 <img src={img} className="w-full h-auto max-h-[400px] object-contain" />
+                             </div>
+                           ))}
                        </div>
                      </div>
                   )}
@@ -1153,7 +1838,7 @@
 
                   <div className="break-inside-avoid mb-10 mt-12">
                      <h3 className="font-bold text-xl mb-3 brand-heading text-slate-700">4.{sec4Nums.score} Score scale</h3>
-                     <div className="grid grid-cols-2 gap-x-8 gap-y-px text-[11px] text-slate-700 bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm">
+                     <div className="grid grid-cols-2 gap-x-8 gap-y-px text-[11px] text-slate-700 bg-white px-4 py-2 rounded-xl border border-slate-200 shadow-sm" data-docx="score-scale">
                         {SCORES.map(s => {
                            const bg = s[0] >= 7 ? '#16a34a' : s[0] >= 5 ? '#f97316' : '#dc2626';
                            return (
@@ -1198,7 +1883,7 @@
                                              <h4 className="font-extrabold text-xl print:text-base text-slate-700 mb-6 print:mb-2 flex items-center gap-2 border-b border-slate-200 pb-2 print:pb-1">
                                                 <Package size={20} className="text-blue-500" /> {gName}
                                              </h4>
-                                             <div className="grid grid-cols-2 md:grid-cols-3 gap-8 print:gap-3">
+                                             <div className="grid grid-cols-2 md:grid-cols-3 gap-8 print:gap-3" data-docx="photo-grid">
                                                  {variantPhotos.map((photo, idx) => (
                                                     <div key={idx} className="flex flex-col break-inside-avoid bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
                                                        <div className="h-64 print:h-40 flex items-center justify-center relative bg-slate-100 border-b border-slate-200">
@@ -1356,7 +2041,28 @@
               catLooseProduce: 'Loose Produce', catBoxCrate: 'Box/Crate',
               catWeightMeas: 'Weight measurement', catGasMeas: 'Gas measurement', catOther: 'Other',
               // Misc
-              variantFallback: 'Variant', deletedVariant: 'Deleted Variant'
+              variantFallback: 'Variant', deletedVariant: 'Deleted Variant',
+              // Net Weight validation
+              warningFillNetWeight: 'Warning: Fill in the Net Weight (A. Product & Packaging)!',
+              // Per-sample initial weight (SampleModal)
+              thInitialWeight: 'Initial Wt. (g)',
+              // Process description & ripening (Trial Setup)
+              processDesc: 'Process Description (Optional)',
+              processDescPlaceholder: 'e.g. Samples were pre-cooled before packing, liner bags sealed with a zip tie, 2 rounds were run on different days...',
+              ripening: 'Ripening (Optional)',
+              ripeningPlaceholder: 'e.g. Avocados were ripened at ambient temperature (22-25°C) for 4-7 days. No ethylene used.',
+              // Trial target evaluation (Analysis)
+              targetEval: 'Trial Target Evaluation',
+              targetAchievedOpt: 'Achieved', targetPartialOpt: 'Partially Achieved', targetNotAchievedOpt: 'Not Achieved',
+              targetEvalPlaceholder: 'Explain why the trial target was or was not achieved...',
+              noTrialTarget: 'No trial target defined yet — fill in "Trial Target / Goal" in the Setup tab.',
+              // General observations (Analysis)
+              generalObs: 'General Observations (Optional)',
+              generalObsPlaceholder: 'Trial-level notes independent from a specific sample, e.g. 2 pallets were lost due to mishandling...',
+              // Verification round (Round 2)
+              addVerificationRound: 'Add Verification Round (R2)',
+              verificationBadge: 'Verification Round (R2)',
+              verificationLockedNote: 'Packaging configuration is locked to Round 1 — a verification round must use an identical setup. A deviating configuration counts as a new trial and requires a new report.'
             },
             nl: {
               tabSetup: 'Project & Klant', tabGroups: 'Variant Resultaten', tabAnalysis: 'Analyse & Concl.',
@@ -1469,7 +2175,28 @@
               catLooseProduce: 'Los Product', catBoxCrate: 'Doos/Krat',
               catWeightMeas: 'Gewichtsmeting', catGasMeas: 'Gasmeting', catOther: 'Overig',
               // Misc
-              variantFallback: 'Variant', deletedVariant: 'Verwijderde Variant'
+              variantFallback: 'Variant', deletedVariant: 'Verwijderde Variant',
+              // Net Weight validation
+              warningFillNetWeight: 'Waarschuwing: Vul het Netto Gewicht in (A. Product & Verpakking)!',
+              // Per-sample initial weight (SampleModal)
+              thInitialWeight: 'Startgew. (g)',
+              // Process description & ripening (Trial Setup)
+              processDesc: 'Procesbeschrijving (Optioneel)',
+              processDescPlaceholder: 'bijv. Monsters zijn voorgekoeld vóór verpakken, liner bags gesloten met een zip tie, 2 rondes uitgevoerd op verschillende dagen...',
+              ripening: 'Narijping (Optioneel)',
+              ripeningPlaceholder: 'bijv. Avocado’s zijn narijpt bij omgevingstemperatuur (22-25°C) gedurende 4-7 dagen. Geen ethyleen gebruikt.',
+              // Trial target evaluation (Analysis)
+              targetEval: 'Testdoel Evaluatie',
+              targetAchievedOpt: 'Behaald', targetPartialOpt: 'Deels Behaald', targetNotAchievedOpt: 'Niet Behaald',
+              targetEvalPlaceholder: 'Licht toe waarom het testdoel wel of niet is behaald...',
+              noTrialTarget: 'Nog geen testdoel gedefinieerd — vul "Testdoel" in op het Setup-tabblad.',
+              // General observations (Analysis)
+              generalObs: 'Algemene Observaties (Optioneel)',
+              generalObsPlaceholder: 'Notities op testniveau, los van een specifiek monster, bijv. 2 pallets verloren door verkeerde behandeling...',
+              // Verification round (Round 2)
+              addVerificationRound: 'Verificatieronde Toevoegen (R2)',
+              verificationBadge: 'Verificatieronde (R2)',
+              verificationLockedNote: 'De verpakkingsconfiguratie is vergrendeld op Ronde 1 — een verificatieronde moet een identieke opzet hebben. Een afwijkende configuratie geldt als nieuwe test en vraagt een nieuw rapport.'
             },
             es: {
               tabSetup: 'Proyecto y Cliente', tabGroups: 'Resultados de Variantes', tabAnalysis: 'Análisis y Concl.',
@@ -1582,7 +2309,28 @@
               catLooseProduce: 'Producto Suelto', catBoxCrate: 'Caja',
               catWeightMeas: 'Medición de Peso', catGasMeas: 'Medición de Gas', catOther: 'Otro',
               // Misc
-              variantFallback: 'Variante', deletedVariant: 'Variante Eliminada'
+              variantFallback: 'Variante', deletedVariant: 'Variante Eliminada',
+              // Net Weight validation
+              warningFillNetWeight: '¡Advertencia: Complete el Peso Neto (A. Producto y Empaque)!',
+              // Per-sample initial weight (SampleModal)
+              thInitialWeight: 'Peso Inicial (g)',
+              // Process description & ripening (Trial Setup)
+              processDesc: 'Descripción del Proceso (Opcional)',
+              processDescPlaceholder: 'ej. Las muestras fueron pre-enfriadas antes de empacar, las bolsas se sellaron con precinto, se realizaron 2 rondas en días distintos...',
+              ripening: 'Maduración (Opcional)',
+              ripeningPlaceholder: 'ej. Los aguacates se maduraron a temperatura ambiente (22-25°C) durante 4-7 días. Sin uso de etileno.',
+              // Trial target evaluation (Analysis)
+              targetEval: 'Evaluación del Objetivo de Prueba',
+              targetAchievedOpt: 'Logrado', targetPartialOpt: 'Parcialmente Logrado', targetNotAchievedOpt: 'No Logrado',
+              targetEvalPlaceholder: 'Explique por qué el objetivo de la prueba se logró o no...',
+              noTrialTarget: 'Aún no se ha definido un objetivo — complete "Objetivo de Prueba" en la pestaña de Configuración.',
+              // General observations (Analysis)
+              generalObs: 'Observaciones Generales (Opcional)',
+              generalObsPlaceholder: 'Notas a nivel de prueba, independientes de una muestra específica, ej. se perdieron 2 pallets por mala manipulación...',
+              // Verification round (Round 2)
+              addVerificationRound: 'Añadir Ronda de Verificación (R2)',
+              verificationBadge: 'Ronda de Verificación (R2)',
+              verificationLockedNote: 'La configuración del empaque está bloqueada según la Ronda 1 — una ronda de verificación debe usar una configuración idéntica. Una configuración diferente cuenta como una nueva prueba y requiere un nuevo informe.'
             }
           };
           const rt = RT[lang] || RT['en'];
@@ -1622,6 +2370,8 @@
             acpO2: '', co2Max: '', co2Shock: '', co2ShockHours: '', tempMin: '',
             o2Target: '', co2Target: '', ethyleneProfile: '',
             totalDuration: '', retailOpenDays: '', transportMode: '',
+            // Optional free-text sections rendered in "3. Trial set up".
+            processDescription: '', ripeningProtocol: '',
             criteria: [], technologies: [], technologyNote: '',
             date: new Date().toISOString().split('T')[0], packingDate: new Date().toISOString().split('T')[0],
             logo: BRAND.logos.default, clientLogo: null, startImage: null, coverImage: null,
@@ -1632,16 +2382,27 @@
 
           const [supplyChain, setSupplyChain] = useState(JSON.parse(JSON.stringify(DEFAULT_SUPPLY_CHAIN)).map(s => ({...s, stage: (globalConfig.translateLabel ? globalConfig.translateLabel(s.stage, lang) : s.stage)})));
 
+          // Re-translate recognised supply-chain stage labels whenever the UI
+          // language changes. retranslateStage() maps any canonical stage label
+          // (in any language) to the target language and leaves genuine
+          // free-text stages untouched — so a chain entered in Spanish shows
+          // up in English/Dutch after switching, and vice versa.
+          useEffect(() => {
+            if (globalConfig.retranslateStage) {
+              setSupplyChain(prev => prev.map(s => ({ ...s, stage: globalConfig.retranslateStage(s.stage, lang) })));
+            }
+          }, [lang]);
+
           const [groups, setGroups] = useState([
             {
               id: 1, name: 'Control',
-              specs: { packaging: 'Punnets', material: 'BOPP', length: '', width: '', height: '', holes: '2', holeSize: '6000', startWeight: '500', sampleCount: 3 },
-              measurements: [{ day: 0, samples: [{id:1,o2:'20.9',co2:'0.03',weight:'500'}, {id:2,o2:'20.9',co2:'0.03',weight:'500'}, {id:3,o2:'20.9',co2:'0.03',weight:'500'}], quality: 10, notes: 'Start quality excellent', images: [], qualityParams: [], evaluateQuality: true }],
+              specs: { packaging: 'Punnets', material: 'BOPP', length: '', width: '', height: '', holes: '2', holeSize: '6000', startWeight: '', sampleCount: 3 },
+              measurements: [{ day: 0, samples: [{id:1,o2:'20.9',co2:'0.03',weight:''}, {id:2,o2:'20.9',co2:'0.03',weight:''}, {id:3,o2:'20.9',co2:'0.03',weight:''}], quality: 10, notes: 'Start quality excellent', images: [], qualityParams: [], evaluateQuality: true }],
               predictedImage: null 
             }
           ]);
 
-          const [analysis, setAnalysis] = useState({ graphNotes: '', conclusion: '', variantConclusions: {}, recommendation: 'retest', nextSteps: [], temperatureImage: null, temperatureLabel: '', showGasSection: null, showHubPredictions: null, showWeightLoss: null });
+          const [analysis, setAnalysis] = useState({ graphNotes: '', conclusion: '', variantConclusions: {}, recommendation: 'retest', nextSteps: [], temperatureImages: [], temperatureLabel: '', showGasSection: null, showHubPredictions: null, showWeightLoss: null, generalObservations: '', targetAchieved: null, targetEvaluation: '' });
           const [newStep, setNewStep] = useState('');
           const [newStepVariant, setNewStepVariant] = useState('general');
           const [newCriteria, setNewCriteria] = useState('');
@@ -1783,7 +2544,7 @@
               const newM = [...g.measurements];
               const sCount = g.specs.sampleCount || 3;
               const createMeas = (day, notes) => ({
-                 day, samples: Array.from({length: sCount}, (_, i) => ({ id: Date.now()+i, o2: '', co2: '', weight: '' })), quality: 9, notes: notes, images: [], qualityParams: [], evaluateQuality: true
+                 day, samples: Array.from({length: sCount}, (_, i) => ({ id: Date.now()+i, o2: '', co2: '', weight: '', initialWeight: '' })), quality: 9, notes: notes, images: [], qualityParams: [], evaluateQuality: true
               });
               
               if (p > 0 && !newM.find(m => parseFloat(m.day) === p)) {
@@ -1818,7 +2579,7 @@
               if (g.id !== groupId) return g;
               const newM = g.measurements.map(m => {
                 let smpls = [...m.samples];
-                if (smpls.length < c) { for (let i = 0; i < c - smpls.length; i++) smpls.push({ id: Date.now()+i+Math.random(), o2: parseFloat(m.day)===0?'20.9':'', co2: parseFloat(m.day)===0?'0.03':'', weight: '' }); } 
+                if (smpls.length < c) { for (let i = 0; i < c - smpls.length; i++) smpls.push({ id: Date.now()+i+Math.random(), o2: parseFloat(m.day)===0?'20.9':'', co2: parseFloat(m.day)===0?'0.03':'', weight: '', initialWeight: '' }); } 
                 else if (smpls.length > c) { smpls = smpls.slice(0, c); }
                 return { ...m, samples: smpls };
               });
@@ -2071,7 +2832,7 @@
                          : (m.evaluateQuality !== undefined ? m.evaluateQuality : false)
                      }))
                    })));
-                   if(d.analysis) setAnalysis({ graphNotes: d.analysis.graphNotes||'', conclusion: d.analysis.conclusion||'', variantConclusions: d.analysis.variantConclusions||{}, recommendation: d.analysis.recommendation||'retest', nextSteps: d.analysis.nextSteps||[], temperatureImage: d.analysis.temperatureImage||null });
+                   if(d.analysis) setAnalysis({ graphNotes: d.analysis.graphNotes||'', conclusion: d.analysis.conclusion||'', variantConclusions: d.analysis.variantConclusions||{}, recommendation: d.analysis.recommendation||'retest', nextSteps: d.analysis.nextSteps||[], temperatureImages: getTempImages(d.analysis), temperatureLabel: d.analysis.temperatureLabel||'', showGasSection: d.analysis.showGasSection ?? null, showHubPredictions: d.analysis.showHubPredictions ?? null, showWeightLoss: d.analysis.showWeightLoss ?? null, generalObservations: d.analysis.generalObservations||'', targetAchieved: d.analysis.targetAchieved||null, targetEvaluation: d.analysis.targetEvaluation||'' });
                 }
             };
 
@@ -2089,7 +2850,16 @@
 
           const handleGroupChange = (id, section, field, value) => {
             setGroups(prev => prev.map(g => {
-              if (g.id !== id) return g;
+              if (g.id !== id) {
+                // Verification rounds must keep an identical packaging
+                // configuration to their Round-1 source, so packaging spec
+                // edits propagate to linked R2 groups (sample count stays
+                // independent per round).
+                if (section === 'specs' && g.verificationOf === id && field !== 'sampleCount') {
+                  return { ...g, specs: { ...g.specs, [field]: value } };
+                }
+                return g;
+              }
               if (section === 'name') return { ...g, name: value };
               if (section === 'specs') return { ...g, specs: { ...g.specs, [field]: value } };
               if (section === 'startGas') return { ...g, specs: { ...g.specs, startGas: { ...g.specs.startGas, [field]: value } } };
@@ -2265,7 +3035,7 @@
               const numericDays = (g.measurements || []).map(m => parseFloat(m.day)).filter(d => !isNaN(d));
               const lastDay = numericDays.length > 0 ? Math.max(...numericDays) : 0;
               const sCount = g.specs?.sampleCount || 3;
-              const newSamples = Array.from({length: sCount}, (_, i) => ({ id: Date.now()+i, o2: '', co2: '', weight: '' }));
+              const newSamples = Array.from({length: sCount}, (_, i) => ({ id: Date.now()+i, o2: '', co2: '', weight: '', initialWeight: '' }));
               return {
                 ...g,
                 measurements: [...(g.measurements || []), {
@@ -2325,7 +3095,7 @@
             // fields are meaningless.
             const isMAP = !g.specs?.atmosphereStrategy || g.specs.atmosphereStrategy === 'MAP';
 
-            setEditingMeasurement({ groupId, index, data: meas, day0Samples: day0?.samples, isEvaluationDay, isDayEditable, projectCriteria: project.criteria, startWeight: g.specs.startWeight, projectTotalDuration: project.totalDuration, isMAP });
+            setEditingMeasurement({ groupId, index, data: meas, day0Samples: day0?.samples, isEvaluationDay, isDayEditable, projectCriteria: project.criteria, startWeight: g.specs.startWeight || project.packagings?.[0]?.startWeight || project.startWeight, projectTotalDuration: project.totalDuration, isMAP });
             setSampleModalOpen(true);
           };
           
@@ -2351,7 +3121,7 @@
               if (g.id !== groupId) return g;
               const lastDay = parseFloat(g.measurements[g.measurements.length - 1]?.day || 0);
               const sCount = g.specs.sampleCount || 3;
-              const newSamples = Array.from({length: sCount}, (_, i) => ({ id: Date.now() + i, o2: '', co2: '', weight: '' }));
+              const newSamples = Array.from({length: sCount}, (_, i) => ({ id: Date.now() + i, o2: '', co2: '', weight: '', initialWeight: '' }));
               return { ...g, measurements: [...g.measurements, { day: lastDay + 1, samples: newSamples, quality: 9, notes: '', images: [], qualityParams: [], evaluateQuality: false }]};
             }));
           };
@@ -2373,7 +3143,7 @@
             const o = parseInt(project.retailOpenDays) || 0;
             const sCount = groups[0]?.specs.sampleCount || 3;
             
-            const genS = (isD0) => Array.from({length: sCount}, (_, i) => ({ id: Date.now()+i, o2: isD0?'20.9':'', co2: isD0?'0.03':'', weight: '' }));
+            const genS = (isD0) => Array.from({length: sCount}, (_, i) => ({ id: Date.now()+i, o2: isD0?'20.9':'', co2: isD0?'0.03':'', weight: '', initialWeight: '' }));
 
             const meas = [{ day: 0, samples: genS(true), quality: 10, notes: 'Start', images: [], qualityParams: [], evaluateQuality: true }];
             if (p > 0) meas.push({ day: p, samples: genS(false), quality: 9, notes: 'End Packing', images: [], qualityParams: [], evaluateQuality: true });
@@ -2398,7 +3168,35 @@
             setActiveGroupId(newId);
           };
 
-          const duplicateGroup = (id) => { const org = groups.find(g => g.id === id); const newId = Math.max(...groups.map(g => g.id), 0) + 1; setGroups(p => [...p, { ...org, id: newId, name: `${org.name} (Copy)` }]); setActiveGroupId(newId); };
+          const duplicateGroup = (id) => { const org = groups.find(g => g.id === id); const newId = Math.max(...groups.map(g => g.id), 0) + 1; const { verificationOf, round, ...rest } = org; setGroups(p => [...p, { ...rest, id: newId, name: `${org.name} (Copy)` }]); setActiveGroupId(newId); };
+
+          // === VERIFICATION ROUND (Round 2) ===
+          // A second test round for the same variant. The packaging
+          // configuration is copied from — and stays locked to — Round 1, so
+          // the second round is a true verification of the first. Deviating
+          // configurations are by definition a new trial and belong in a new
+          // report. Measurements start empty on the same evaluation days.
+          const addVerificationRound = (sourceId) => {
+            const src = groups.find(g => g.id === sourceId);
+            if (!src || src.verificationOf) return;
+            if (groups.some(g => g.verificationOf === sourceId)) return;
+            const newId = Math.max(...groups.map(g => g.id), 0) + 1;
+            const sCount = src.specs?.sampleCount || 3;
+            const genS = (isD0) => Array.from({length: sCount}, (_, i) => ({ id: Date.now()+i, o2: isD0?'20.9':'', co2: isD0?'0.03':'', weight: '', initialWeight: '' }));
+            const meas = (src.measurements || []).map(m => ({
+              day: m.day, samples: genS(parseFloat(m.day) === 0), quality: 9,
+              notes: parseFloat(m.day) === 0 ? 'Start (Round 2)' : '', images: [], qualityParams: [],
+              evaluateQuality: m.evaluateQuality || false
+            }));
+            setGroups(prev => {
+              const idx = prev.findIndex(g => g.id === sourceId);
+              const ng = { id: newId, name: `${src.name} (R2)`, round: 2, verificationOf: sourceId, specs: JSON.parse(JSON.stringify(src.specs || {})), measurements: meas, predictedImage: null };
+              const arr = [...prev];
+              arr.splice(idx + 1, 0, ng);
+              return arr;
+            });
+            setActiveGroupId(newId);
+          };
           
           const removeGroup = (id) => { 
             if(groups.length > 1) { 
@@ -2420,9 +3218,26 @@
             }
           };
           const removeNextStep = (i) => setAnalysis(prev => ({ ...prev, nextSteps: prev.nextSteps.filter((_, idx) => idx !== i) }));
+          // Inline edit + reorder for detailed conclusion points. Legacy string
+          // entries are normalised to { text, variantId } on first edit.
+          const updateNextStep = (i, field, value) => setAnalysis(prev => ({
+            ...prev,
+            nextSteps: prev.nextSteps.map((s, idx) => {
+              if (idx !== i) return s;
+              const stepObj = typeof s === 'string' ? { text: s, variantId: 'general' } : s;
+              return { ...stepObj, [field]: value };
+            })
+          }));
+          const moveNextStep = (i, dir) => setAnalysis(prev => {
+            const arr = [...prev.nextSteps];
+            const j = dir === 'up' ? i - 1 : i + 1;
+            if (j < 0 || j >= arr.length) return prev;
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+            return { ...prev, nextSteps: arr };
+          });
 
           if (isPreview) {
-            return <PrintPreview clientInfo={clientInfo} project={project} groups={groups} supplyChain={supplyChain} onBack={() => setIsPreview(false)} analysis={analysis} unitSystem={unitSystem} />;
+            return <PrintPreview clientInfo={clientInfo} project={project} groups={groups} supplyChain={supplyChain} onBack={() => setIsPreview(false)} analysis={analysis} unitSystem={unitSystem} lang={lang} />;
           }
 
           // Auto-detect section visibility for checkbox defaults (null = auto, true/false = manual override)
@@ -2566,7 +3381,7 @@
                         {(rt.saveAs || '').split(' ').map((w, i) => <span key={i} className={i === 0 ? '' : 'opacity-60 font-medium'}>{w}</span>)}
                       </span>
                     </button>
-                    <button onClick={() => { if(!clientInfo.companyName) alert(rt.warningFillCompany); setIsPreview(true); }} className="bg-blue-600 text-white p-2 lg:pr-3 rounded-xl font-bold flex items-center gap-2 hover:bg-blue-700 transition-all shadow-md hover:shadow-blue-500/30" title={rt.previewReport}>
+                    <button onClick={() => { const warnings = []; if(!clientInfo.companyName) warnings.push(rt.warningFillCompany); if(!(project.packagings?.[0]?.startWeight || project.startWeight)) warnings.push(rt.warningFillNetWeight); if(warnings.length) alert(warnings.join('\n')); setIsPreview(true); }} className="bg-blue-600 text-white p-2 lg:pr-3 rounded-xl font-bold flex items-center gap-2 hover:bg-blue-700 transition-all shadow-md hover:shadow-blue-500/30" title={rt.previewReport}>
                       <FileText size={18} className="shrink-0"/>
                       <span className="hidden lg:flex flex-col items-start leading-[1.05] text-[10px] uppercase tracking-tight">
                         {(rt.previewReport || '').split(' ').map((w, i) => <span key={i} className={i === 0 ? '' : 'opacity-80 font-medium'}>{w}</span>)}
@@ -2986,6 +3801,14 @@
                              <label className="block mb-3 text-xs font-bold tracking-wide text-green-700 uppercase flex items-center gap-2"><CheckCircle size={16}/> {rt.trialTarget}</label>
                              <textarea rows="4" className={`${inputClass} resize-y focus:ring-green-500 focus:border-green-500`} value={project.trialTarget || ''} onChange={e => handleProjectChange('trialTarget', e.target.value)} />
                            </div>
+                           <div>
+                             <label className="block mb-3 text-xs font-bold tracking-wide text-blue-700 uppercase flex items-center gap-2"><ClipboardList size={16}/> {rt.processDesc}</label>
+                             <textarea rows="4" className={`${inputClass} resize-y focus:ring-blue-500 focus:border-blue-500`} value={project.processDescription || ''} onChange={e => handleProjectChange('processDescription', e.target.value)} placeholder={rt.processDescPlaceholder} />
+                           </div>
+                           <div>
+                             <label className="block mb-3 text-xs font-bold tracking-wide text-amber-700 uppercase flex items-center gap-2"><Thermometer size={16}/> {rt.ripening}</label>
+                             <textarea rows="4" className={`${inputClass} resize-y focus:ring-amber-500 focus:border-amber-500`} value={project.ripeningProtocol || ''} onChange={e => handleProjectChange('ripeningProtocol', e.target.value)} placeholder={rt.ripeningPlaceholder} />
+                           </div>
                          </div>
                        </div>
 
@@ -3274,7 +4097,7 @@
                            <div className="space-y-3">
                              {groups.map((g, idx) => (
                                <div key={g.id} onClick={() => setActiveGroupId(g.id)} className={`p-4 rounded-xl border-2 cursor-pointer transition-all relative group shadow-sm ${activeGroupId === g.id ? 'bg-white border-green-500 transform scale-[1.02]' : 'bg-slate-50 border-slate-200 hover:bg-white hover:border-slate-300'}`}>
-                                 <div className="flex items-center gap-3 font-extrabold text-base text-slate-800"><div className="w-4 h-4 rounded-full shrink-0 shadow-sm" style={{ backgroundColor: CHART_COLORS[idx % CHART_COLORS.length].stroke }}></div><span className="truncate">{g.name || rt.variantFallback}</span></div>
+                                 <div className="flex items-center gap-3 font-extrabold text-base text-slate-800"><div className="w-4 h-4 rounded-full shrink-0 shadow-sm" style={{ backgroundColor: CHART_COLORS[idx % CHART_COLORS.length].stroke }}></div><span className="truncate">{g.name || rt.variantFallback}</span>{(g.round === 2 || g.verificationOf) && <span className="text-[8px] font-extrabold uppercase bg-blue-50 text-blue-700 border border-blue-200 rounded px-1 py-0.5 shrink-0">R2</span>}</div>
                                  <div className="absolute top-2 right-2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <div className="flex gap-1"><button onClick={(e) => { e.stopPropagation(); moveGroup(g.id, 'up'); }} className="p-1.5 bg-white border border-slate-200 text-slate-500 rounded-lg hover:bg-slate-100 shadow-sm"><ChevronUp size={16}/></button><button onClick={(e) => { e.stopPropagation(); moveGroup(g.id, 'down'); }} className="p-1.5 bg-white border border-slate-200 text-slate-500 rounded-lg hover:bg-slate-100 shadow-sm"><ChevronDown size={16}/></button></div>
                                     <div className="flex gap-1 mt-1"><button onClick={(e) => { e.stopPropagation(); duplicateGroup(g.id); }} className="p-1.5 bg-blue-50 text-blue-600 border border-blue-100 rounded-lg hover:bg-blue-100 shadow-sm"><Copy size={16} /></button><button onClick={(e) => { e.stopPropagation(); removeGroup(g.id); }} className="p-1.5 bg-red-50 text-red-600 border border-red-100 rounded-lg hover:bg-red-100 shadow-sm"><Trash2 size={16} /></button></div>
@@ -3285,14 +4108,28 @@
                        </div>
                        <div className="lg:col-span-9 bg-white p-6 sm:p-10 rounded-3xl shadow-sm border border-slate-200 space-y-10 overflow-hidden relative">
                            <div className="absolute top-0 left-0 w-1 h-full bg-slate-200"></div>
-                           {groups.find(g => g.id === activeGroupId) && (
+                           {(() => {
+                             const activeG = groups.find(g => g.id === activeGroupId);
+                             if (!activeG) return null;
+                             const isR2 = !!activeG.verificationOf || activeG.round === 2;
+                             const hasR2 = groups.some(x => x.verificationOf === activeG.id);
+                             return (
                              <>
                                <div>
-                                 <h3 className="font-extrabold text-2xl mb-8 text-slate-800 border-b-2 border-slate-100 pb-4">{rt.variantConfig}</h3>
+                                 <div className="flex flex-wrap items-center justify-between gap-4 mb-8 border-b-2 border-slate-100 pb-4">
+                                   <h3 className="font-extrabold text-2xl text-slate-800">{rt.variantConfig}</h3>
+                                   {isR2 ? (
+                                     <span className="text-xs font-extrabold uppercase tracking-wider px-3 py-2 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-2"><Copy size={14}/> {rt.verificationBadge}</span>
+                                   ) : !hasR2 ? (
+                                     <button type="button" onClick={() => addVerificationRound(activeG.id)} className="px-5 py-2.5 rounded-xl text-sm font-bold transition-all border shadow-sm bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 flex items-center gap-2">
+                                       <Plus size={16}/> {rt.addVerificationRound}
+                                     </button>
+                                   ) : null}
+                                 </div>
                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
                                    <div><label className={labelClass}>{rt.variantName}</label><input type="text" className={`${inputClass} text-lg font-bold`} value={groups.find(g => g.id === activeGroupId).name || ''} onChange={(e) => handleGroupChange(activeGroupId, 'name', null, e.target.value)} /></div>
-                                   <div><label className={labelClass}>{rt.packagingType}</label><select className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.packaging || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'packaging', e.target.value)}>{PACKAGING_TYPES.map(type => <option key={type} value={type}>{getI18nLabel(PACKAGING_TYPES_I18N, type, lang)}</option>)}</select></div>
-                                   <div><label className={labelClass}>{rt.atmosphereStrategy}</label><select className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.atmosphereStrategy || 'MAP'} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'atmosphereStrategy', e.target.value)}>
+                                   <div><label className={labelClass}>{rt.packagingType}</label><select className={`${inputClass} ${isR2 ? 'bg-slate-200 cursor-not-allowed' : ''}`} disabled={isR2} value={groups.find(g => g.id === activeGroupId).specs.packaging || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'packaging', e.target.value)}>{PACKAGING_TYPES.map(type => <option key={type} value={type}>{getI18nLabel(PACKAGING_TYPES_I18N, type, lang)}</option>)}</select></div>
+                                   <div><label className={labelClass}>{rt.atmosphereStrategy}</label><select className={`${inputClass} ${isR2 ? 'bg-slate-200 cursor-not-allowed' : ''}`} disabled={isR2} value={groups.find(g => g.id === activeGroupId).specs.atmosphereStrategy || 'MAP'} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'atmosphereStrategy', e.target.value)}>
                                      <option value="MAP">{rt.optMAP}</option>
                                      <option value="MHP">{rt.optMHP}</option>
                                      <option value="Open">{rt.optOpen}</option>
@@ -3300,14 +4137,20 @@
                                  </div>
                                  <div className="bg-gradient-to-br from-slate-50 to-slate-100 p-8 rounded-2xl border border-slate-200 shadow-sm mb-10">
                                    <label className="block mb-6 text-sm font-extrabold tracking-widest text-blue-900 uppercase border-b border-blue-200 pb-2">{rt.packagingSpecs}</label>
+                                   {isR2 && (
+                                     <div className="mb-6 -mt-2 text-xs font-bold text-blue-800 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 flex items-start gap-2">
+                                       <AlertCircle size={16} className="shrink-0 mt-0.5"/>
+                                       <span>{rt.verificationLockedNote}</span>
+                                     </div>
+                                   )}
                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-6">
-                                      <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">{rt.lengthMm}</label><input type="number" className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.length || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'length', e.target.value)} /></div>
-                                      <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">{rt.widthMm}</label><input type="number" className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.width || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'width', e.target.value)} /></div>
-                                      <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">{rt.heightMm}</label><input type="number" className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.height || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'height', e.target.value)} /></div>
+                                      <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">{rt.lengthMm}</label><input type="number" className={`${inputClass} ${isR2 ? 'bg-slate-200 cursor-not-allowed' : ''}`} disabled={isR2} value={groups.find(g => g.id === activeGroupId).specs.length || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'length', e.target.value)} /></div>
+                                      <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">{rt.widthMm}</label><input type="number" className={`${inputClass} ${isR2 ? 'bg-slate-200 cursor-not-allowed' : ''}`} disabled={isR2} value={groups.find(g => g.id === activeGroupId).specs.width || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'width', e.target.value)} /></div>
+                                      <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">{rt.heightMm}</label><input type="number" className={`${inputClass} ${isR2 ? 'bg-slate-200 cursor-not-allowed' : ''}`} disabled={isR2} value={groups.find(g => g.id === activeGroupId).specs.height || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'height', e.target.value)} /></div>
                                    </div>
                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                                     <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">{rt.material}</label><input className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.material || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'material', e.target.value)} /></div>
-                                     <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">{rt.transmissionValue}</label><input type="text" className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.holes || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'holes', e.target.value)} /></div>
+                                     <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">{rt.material}</label><input className={`${inputClass} ${isR2 ? 'bg-slate-200 cursor-not-allowed' : ''}`} disabled={isR2} value={groups.find(g => g.id === activeGroupId).specs.material || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'material', e.target.value)} /></div>
+                                     <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">{rt.transmissionValue}</label><input type="text" className={`${inputClass} ${isR2 ? 'bg-slate-200 cursor-not-allowed' : ''}`} disabled={isR2} value={groups.find(g => g.id === activeGroupId).specs.holes || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'holes', e.target.value)} /></div>
                                      <div><label className="text-xs text-blue-700 font-extrabold uppercase tracking-wider mb-2 block">{rt.samplesPerMeasurement}</label><input type="number" min="1" className={`${inputClass} bg-white border-blue-300 ring-2 ring-blue-50 font-extrabold text-blue-900 text-lg`} value={groups.find(g => g.id === activeGroupId).specs.sampleCount || 3} onChange={(e) => handleSampleCountChange(activeGroupId, parseInt(e.target.value))} /></div>
                                    </div>
                                  </div>
@@ -3403,7 +4246,8 @@
                                  })()}
                                </div>
                              </>
-                           )}
+                             );
+                           })()}
                        </div>
                     </div>
                   </div>
@@ -3464,13 +4308,26 @@
                          <div className="space-y-3 mt-4">
                            {analysis.nextSteps && analysis.nextSteps.map((s, i) => {
                               const stepObj = typeof s === 'string' ? { text: s, variantId: 'general' } : s;
-                              const vName = stepObj.variantId === 'general' ? rt.general : groups.find(g => g.id === parseInt(stepObj.variantId))?.name || rt.deletedVariant;
                               return (
-                                <div key={i} className="text-sm bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex justify-between items-start gap-4 hover:border-slate-300 transition-colors">
-                                  <div className="flex items-center">
-                                    <span className="text-[10px] font-extrabold uppercase bg-slate-100 text-slate-600 px-2.5 py-1 rounded-md mr-3 border border-slate-200">{vName}</span>
-                                    <span className="text-slate-800 font-medium">{stepObj.text}</span>
+                                <div key={i} className="text-sm bg-white p-3 rounded-xl border border-slate-200 shadow-sm flex items-center gap-3 hover:border-slate-300 transition-colors">
+                                  <div className="flex flex-col shrink-0">
+                                    <button onClick={() => moveNextStep(i, 'up')} disabled={i === 0} className="p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 rounded disabled:opacity-30 transition-colors" title="Move up"><ChevronUp size={16}/></button>
+                                    <button onClick={() => moveNextStep(i, 'down')} disabled={i === analysis.nextSteps.length - 1} className="p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 rounded disabled:opacity-30 transition-colors" title="Move down"><ChevronDown size={16}/></button>
                                   </div>
+                                  <select
+                                    className="text-[10px] font-extrabold uppercase bg-slate-100 text-slate-600 px-2 py-1.5 rounded-md border border-slate-200 shrink-0 outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer max-w-[130px]"
+                                    value={String(stepObj.variantId ?? 'general')}
+                                    onChange={e => updateNextStep(i, 'variantId', e.target.value)}
+                                  >
+                                    <option value="general">{rt.general}</option>
+                                    {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+                                  </select>
+                                  <input
+                                    type="text"
+                                    className="flex-1 text-slate-800 font-medium bg-transparent border border-transparent hover:border-slate-200 focus:border-blue-400 focus:bg-slate-50 rounded-lg px-2 py-1.5 outline-none transition-colors min-w-0"
+                                    value={stepObj.text || ''}
+                                    onChange={e => updateNextStep(i, 'text', e.target.value)}
+                                  />
                                   <button onClick={() => removeNextStep(i)} className="text-red-400 hover:text-red-600 shrink-0 bg-red-50 p-2 rounded-lg hover:bg-red-100 transition-colors"><Trash2 size={16}/></button>
                                 </div>
                               );
@@ -3480,7 +4337,41 @@
                            )}
                          </div>
                        </div>
-                       
+
+                       {/* Trial Target evaluation — references the target defined in Setup
+                           and records whether it was achieved, with an explanation. */}
+                       <div className="md:col-span-2 bg-green-50/40 p-8 rounded-3xl border border-green-200 shadow-sm mt-4">
+                         <label className={`${labelClass} text-sm mb-3 flex items-center gap-2`}><Target size={16} className="text-green-700"/> {rt.targetEval}</label>
+                         {project.trialTarget ? (
+                           <div className="bg-white p-4 rounded-xl border border-slate-200 mb-5 text-sm text-slate-700 italic shadow-sm">
+                             <span className="text-[10px] font-extrabold uppercase tracking-widest text-green-700 not-italic block mb-1">{rt.trialTarget}</span>
+                             {project.trialTarget}
+                           </div>
+                         ) : (
+                           <div className="bg-white p-4 rounded-xl border border-dashed border-slate-300 mb-5 text-sm text-slate-400 italic">{rt.noTrialTarget}</div>
+                         )}
+                         <div className="flex flex-wrap gap-3 mb-5">
+                           {[
+                             ['achieved',    rt.targetAchievedOpt,    'bg-green-600 border-green-700 ring-green-600/20'],
+                             ['partial',     rt.targetPartialOpt,     'bg-orange-500 border-orange-600 ring-orange-500/20'],
+                             ['notAchieved', rt.targetNotAchievedOpt, 'bg-red-600 border-red-700 ring-red-600/20']
+                           ].map(([val, label, activeCls]) => (
+                             <button key={val} type="button"
+                               onClick={() => setAnalysis(prev => ({ ...prev, targetAchieved: prev.targetAchieved === val ? null : val }))}
+                               className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all border shadow-sm ${analysis.targetAchieved === val ? `${activeCls} text-white ring-4 transform scale-[1.02]` : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'}`}>
+                               {label}
+                             </button>
+                           ))}
+                         </div>
+                         <textarea rows="3" className={`${inputClass} resize-y`} placeholder={rt.targetEvalPlaceholder} value={analysis.targetEvaluation || ''} onChange={e => setAnalysis(prev => ({ ...prev, targetEvaluation: e.target.value }))} />
+                       </div>
+
+                       {/* General observations — trial-level notes independent from samples. */}
+                       <div className="md:col-span-2 mt-4">
+                         <label className={`${labelClass} text-sm mb-3`}>{rt.generalObs}</label>
+                         <textarea rows="4" className={`${inputClass} resize-y`} placeholder={rt.generalObsPlaceholder} value={analysis.generalObservations || ''} onChange={e => setAnalysis(prev => ({ ...prev, generalObservations: e.target.value }))} />
+                       </div>
+
                        <div className="md:col-span-1 mt-6">
                            <label className={`${labelClass} text-sm mb-3`}>{rt.gasAnalysis}</label>
                            <RichTextEditor 
@@ -3501,28 +4392,33 @@
                            />
                            <span className="text-[9px] text-slate-400 italic shrink-0">(optional)</span>
                          </div>
-                         <div className="border-2 border-dashed border-slate-300 rounded-2xl p-6 flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-blue-50 hover:border-blue-300 transition-all cursor-pointer relative overflow-hidden shadow-sm group min-h-[160px] h-full">
-                           <input type="file" accept="image/*" className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={(e) => {
-                               const file = e.target.files[0];
-                               if (file) {
+                         {getTempImages(analysis).length > 0 && (
+                           <div className="grid grid-cols-2 gap-3 mb-3">
+                               {getTempImages(analysis).map((img, i) => (
+                                 <div key={i} className="relative group border border-slate-200 rounded-xl p-2 bg-white flex items-center justify-center min-h-[100px]">
+                                     <img src={img} className="max-w-full max-h-40 object-contain rounded-lg shadow-sm" />
+                                     <button onClick={(e) => { e.preventDefault(); setAnalysis(prev => ({...prev, temperatureImages: getTempImages(prev).filter((_, idx) => idx !== i)})); }} className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-all shadow-lg hover:bg-red-600 hover:scale-110 z-20"><Trash2 size={16}/></button>
+                                 </div>
+                               ))}
+                           </div>
+                         )}
+                         <div className="border-2 border-dashed border-slate-300 rounded-2xl p-6 flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-blue-50 hover:border-blue-300 transition-all cursor-pointer relative overflow-hidden shadow-sm group min-h-[120px]">
+                           <input type="file" accept="image/*" multiple className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={(e) => {
+                               const files = Array.from(e.target.files || []);
+                               const target = e.target;
+                               files.forEach(file => {
                                  const reader = new FileReader();
-                                 reader.onloadend = () => setAnalysis(prev => ({...prev, temperatureImage: reader.result}));
+                                 reader.onloadend = () => setAnalysis(prev => ({...prev, temperatureImages: [...getTempImages(prev), reader.result]}));
                                  reader.readAsDataURL(file);
-                               }
+                               });
+                               target.value = '';
                            }} />
-                           {analysis.temperatureImage ? (
-                               <div className="relative w-full h-full flex items-center justify-center">
-                                   <img src={analysis.temperatureImage} className="max-w-full h-full max-h-48 object-contain rounded-lg shadow-sm" />
-                                   <button onClick={(e) => { e.preventDefault(); setAnalysis(prev => ({...prev, temperatureImage: null})); }} className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-all shadow-lg hover:bg-red-600 hover:scale-110 z-20"><Trash2 size={16}/></button>
+                           <div className="flex flex-col items-center">
+                               <div className="w-16 h-16 bg-white rounded-full shadow-sm flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                                   <Upload size={28} className="text-blue-500"/>
                                </div>
-                           ) : (
-                               <div className="flex flex-col items-center">
-                                   <div className="w-16 h-16 bg-white rounded-full shadow-sm flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                                       <Upload size={28} className="text-blue-500"/>
-                                   </div>
-                                   <span className="font-extrabold text-sm text-slate-700 block">{rt.uploadTempGraph}</span>
-                               </div>
-                           )}
+                               <span className="font-extrabold text-sm text-slate-700 block">{rt.uploadTempGraph}</span>
+                           </div>
                          </div>
                        </div>
 
