@@ -1609,12 +1609,15 @@
                                {groups.map((g, i) => {
                                  const isLargeBulk = g.specs?.packaging === 'Cube crate' || g.specs?.packaging === 'Pallet';
                                  const dimUnit = isLargeBulk ? 'cm' : 'mm';
+                                 // Pillow bags have no height — only length x seal width.
+                                 const isPillow = g.specs?.packaging === 'Pillow Bag';
+                                 const dims = [g.specs?.length || '-', g.specs?.width || '-', ...(isPillow ? [] : [g.specs?.height || '-'])].join('x');
                                  return (
                                    <tr key={g.id}>
                                      <td className="font-bold p-3 break-words" style={{ borderLeft: `4px solid ${CHART_COLORS[i % CHART_COLORS.length].stroke}` }}>{g.name}{(g.round === 2 || g.verificationOf) && <span className="ml-2 text-[9px] font-extrabold uppercase bg-blue-50 text-blue-700 border border-blue-200 rounded px-1.5 py-0.5 whitespace-nowrap">Verification R2</span>}</td>
                                      <td className="text-center p-3 break-words">{g.specs?.packaging || '-'}</td>
                                      <td className="text-center p-3 break-words">{g.specs?.material || '-'}</td>
-                                     <td className="text-center p-3 break-words">{g.specs?.length || '-'}x{g.specs?.width || '-'}x{g.specs?.height || '-'} {dimUnit}</td>
+                                     <td className="text-center p-3 break-words">{dims} {dimUnit}</td>
                                    </tr>
                                  );
                                })}
@@ -4349,11 +4352,15 @@
                                        <span>{rt.verificationLockedNote}</span>
                                      </div>
                                    )}
+                                   {/* Pillow bags have no height: hide the field and label
+                                       the second dimension as seal width. */}
+                                   {(() => { const isPillowVariant = activeG.specs?.packaging === 'Pillow Bag'; return (
                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-6">
                                       <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">{rt.lengthMm}</label><input type="number" className={`${inputClass} ${isR2 ? 'bg-slate-200 cursor-not-allowed' : ''}`} disabled={isR2} value={groups.find(g => g.id === activeGroupId).specs.length || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'length', e.target.value)} /></div>
-                                      <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">{rt.widthMm}</label><input type="number" className={`${inputClass} ${isR2 ? 'bg-slate-200 cursor-not-allowed' : ''}`} disabled={isR2} value={groups.find(g => g.id === activeGroupId).specs.width || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'width', e.target.value)} /></div>
-                                      <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">{rt.heightMm}</label><input type="number" className={`${inputClass} ${isR2 ? 'bg-slate-200 cursor-not-allowed' : ''}`} disabled={isR2} value={groups.find(g => g.id === activeGroupId).specs.height || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'height', e.target.value)} /></div>
+                                      <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">{isPillowVariant ? `${rt.widSeal} (mm)` : rt.widthMm}</label><input type="number" className={`${inputClass} ${isR2 ? 'bg-slate-200 cursor-not-allowed' : ''}`} disabled={isR2} value={groups.find(g => g.id === activeGroupId).specs.width || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'width', e.target.value)} /></div>
+                                      {!isPillowVariant && <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">{rt.heightMm}</label><input type="number" className={`${inputClass} ${isR2 ? 'bg-slate-200 cursor-not-allowed' : ''}`} disabled={isR2} value={groups.find(g => g.id === activeGroupId).specs.height || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'height', e.target.value)} /></div>}
                                    </div>
+                                   ); })()}
                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                                      <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">{rt.material}</label><input className={`${inputClass} ${isR2 ? 'bg-slate-200 cursor-not-allowed' : ''}`} disabled={isR2} value={groups.find(g => g.id === activeGroupId).specs.material || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'material', e.target.value)} /></div>
                                      <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">{rt.transmissionValue}</label><input type="text" className={`${inputClass} ${isR2 ? 'bg-slate-200 cursor-not-allowed' : ''}`} disabled={isR2} value={groups.find(g => g.id === activeGroupId).specs.holes || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'holes', e.target.value)} /></div>
