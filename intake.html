@@ -14,8 +14,10 @@
     <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
     
     <!-- LOAD CENTRAL STYLING & CONFIGURATION -->
-    <link rel="stylesheet" href="style.css">
-    <script src="config.js"></script>
+    <link rel="stylesheet" href="style.css?v=77634a3c">
+    <script src="config.js?v=37136610"></script>
+    <script src="board-db.js?v=a2107b12"></script>
+    <script src="product-tools.js?v=eca36103"></script>
 
     <!-- Print rules live in style.css so Intake, Proposal and Report share one source. -->
 </head>
@@ -34,7 +36,8 @@
           Upload, Image as ImageIcon, CheckCircle, Target, AlertCircle,
           Globe, AlertTriangle, Truck, Tractor, Ship, Plane, Warehouse, Store, 
           Utensils, Factory, Thermometer, Clock, ChevronRight, ArrowDown, ArrowUp, 
-          Beaker, Save, FolderOpen, FileText, Printer, Edit3, Camera, X, Mail, Send, Activity, UserPlus, Package, FileArchive
+          Beaker, Save, FolderOpen, FileText, Printer, Edit3, Camera, X, Mail, Send, Activity, UserPlus, Package, FileArchive,
+          Check
         } from 'https://esm.sh/lucide-react@0.292.0';
 
         // --- LINK WITH CONFIG.JS ---
@@ -80,6 +83,20 @@
             logoUpload: "Company Logo", clickUpload: "Click to upload",
             sec2Title: "2. Product(s) for Testing", prodDetails: "Details", delProd: "Remove Product",
             secATitle: "A. Product & Packaging", prodName: "Product Name", prodType: "Variety / Type", origin: "Origin", prodPhoto: "Product Photo", processingType: "State of product",
+            dashWithSheet: 'with product sheet',
+            dashUnavailableShort: 'The product database is not reachable — type a product name.',
+            productNameSelectHint: 'Select or type a product…',
+            productPickHint: 'Choose one of {n} products, or type a new name.',
+            productLinked: 'Linked to the product database',
+            productNotLinked: 'Not in the product database yet.',
+            productCreate: 'Add as new product',
+            productCreateAs: 'add as',
+            productStateWhole: 'Whole',
+            productStateProcessed: 'Processed',
+            productCreating: 'Adding…',
+            dashCreated: '✓ "{name}" added to the product database.',
+            dashCreateFailed: 'Could not add this product to the database.',
+            dashCreateUnavailable: 'The product database is not reachable — link the folder in the Project Board first.',
             whole: "Whole", processed: "Processed / Fresh-cut",
             maturity: "Maturity stage", treatment: "Post-harvest treatment",
             packType: "Packaging Type", material: "Current Material",
@@ -119,6 +136,20 @@
             logoUpload: "Bedrijfslogo", clickUpload: "Klik om te uploaden",
             sec2Title: "2. Product(en) voor de Test", prodDetails: "Details", delProd: "Verwijder Product",
             secATitle: "A. Product & Verpakking", prodName: "Productnaam", prodType: "Variëteit / Type", origin: "Herkomst", prodPhoto: "Product Foto", processingType: "Staat van het product",
+            dashWithSheet: 'met product sheet',
+            dashUnavailableShort: 'De productendatabase is niet bereikbaar — typ een productnaam.',
+            productNameSelectHint: 'Kies of typ een product…',
+            productPickHint: 'Kies uit {n} producten, of typ een nieuwe naam.',
+            productLinked: 'Gekoppeld aan de productendatabase',
+            productNotLinked: 'Nog niet in de productendatabase.',
+            productCreate: 'Als nieuw product toevoegen',
+            productCreateAs: 'toevoegen als',
+            productStateWhole: 'Heel',
+            productStateProcessed: 'Bewerkt',
+            productCreating: 'Toevoegen…',
+            dashCreated: '✓ "{name}" toegevoegd aan de productendatabase.',
+            dashCreateFailed: 'Kon dit product niet aan de database toevoegen.',
+            dashCreateUnavailable: 'De productendatabase is niet bereikbaar — koppel eerst de map in het Project Board.',
             whole: "Heel", processed: "Verwerkt / Gesneden",
             maturity: "Rijpheidsstadium", treatment: "Standaard Behandeling",
             packType: "Type Verpakking", material: "Huidig Materiaal",
@@ -158,6 +189,20 @@
             logoUpload: "Logotipo de la Empresa", clickUpload: "Haga clic para subir",
             sec2Title: "2. Producto(s) para Prueba", prodDetails: "Detalles", delProd: "Eliminar Producto",
             secATitle: "A. Producto y Empaque", prodName: "Nombre del Producto", prodType: "Variedad / Tipo", origin: "Origen", prodPhoto: "Foto del Producto", processingType: "Estado del producto",
+            dashWithSheet: 'con ficha de producto',
+            dashUnavailableShort: 'La base de datos de productos no está accesible — escriba un nombre.',
+            productNameSelectHint: 'Seleccione o escriba un producto…',
+            productPickHint: 'Elija entre {n} productos, o escriba un nombre nuevo.',
+            productLinked: 'Vinculado a la base de datos de productos',
+            productNotLinked: 'Aún no está en la base de datos de productos.',
+            productCreate: 'Añadir como producto nuevo',
+            productCreateAs: 'añadir como',
+            productStateWhole: 'Entero',
+            productStateProcessed: 'Procesado',
+            productCreating: 'Añadiendo…',
+            dashCreated: '✓ "{name}" añadido a la base de datos de productos.',
+            dashCreateFailed: 'No se pudo añadir este producto a la base de datos.',
+            dashCreateUnavailable: 'La base de datos de productos no está accesible — vincule primero la carpeta en el Project Board.',
             whole: "Entero", processed: "Procesado / Cortado",
             maturity: "Etapa de madurez", treatment: "Tratamiento estándar",
             packType: "Tipo de Empaque", material: "Material Actual",
@@ -503,7 +548,10 @@
           const [unitSystem, setUnitSystem] = useState('metric'); // 'metric' or 'imperial'
 
           const initialProduct = {
-            id: Date.now(), name: '', type: '', origin: '', processingType: 'Whole',
+            // `productId` links this row to the shared product database, so the
+            // trial keeps pointing at the same product through proposal, report
+            // and the dashboard as the card moves across the board.
+            id: Date.now(), name: '', productId: '', type: '', origin: '', processingType: 'Whole',
             maturityStage: '', postHarvestTreatment: '',
             packagings: [{ id: 1, packagingType: 'Punnets', material: '', length: '', width: '', height: '', weight: '' }],
             qualityCriteria: [], currentChallenge: '', trialTarget: '',
@@ -614,6 +662,102 @@
             if (products.length > 1) {
                 const newProds = products.filter(p => p.id !== id);
                 setProducts(newProds);
+            }
+          };
+
+          // === PRODUCT PICKER ===
+          // Same behaviour as proposal.html and report.html, but per product row:
+          // an intake can cover several products. Intake carries no gas or
+          // temperature targets, so selecting a product only settles WHICH
+          // product it is — the operating window is filled in later phases.
+          const Products = window.PerfoTecProduct;
+          const [dashProducts, setDashProducts] = useState([]);
+          const [dashState, setDashState] = useState('loading'); // loading | ready | unavailable
+          const [dashMsg, setDashMsg] = useState({});            // keyed by product row id
+          const [creatingProduct, setCreatingProduct] = useState(null); // row id being created
+
+          useEffect(() => {
+            let cancelled = false;
+            Products.loadProducts().then(list => {
+              if (cancelled) return;
+              setDashProducts(list);
+              setDashState(list.length > 0 ? 'ready' : 'unavailable');
+            });
+            return () => { cancelled = true; };
+          }, []);
+
+          // === LIVE LINK TO THE PRODUCT DATABASE ===
+          // A linked row must always show the product's CURRENT name, variety and
+          // state, not a snapshot from when it was first picked. Renaming a
+          // product in the dashboard therefore reaches every intake that points at
+          // it. Rows whose product no longer exists are left exactly as they are.
+          const syncedRowsRef = useRef({});
+          useEffect(() => {
+            if (dashProducts.length === 0) return;
+            setProducts(prev => {
+              let changed = false;
+              const next = prev.map(row => {
+                if (!row.productId || syncedRowsRef.current[row.id] === row.productId) return row;
+                const prod = dashProducts.find(p => p.id === row.productId);
+                if (!prod) return row;
+                syncedRowsRef.current[row.id] = row.productId;
+                const ident = Products.identityPatch(prod);
+                if (row.name === ident.productName && row.type === ident.type && row.processingType === ident.processingType) return row;
+                changed = true;
+                return { ...row, name: ident.productName, type: ident.type, processingType: ident.processingType };
+              });
+              return changed ? next : prev;
+            });
+          }, [dashProducts, products]);
+
+          const handleProductNameChange = (rowId, name) => {
+            const hit = Products.matchProduct(name, dashProducts);
+            const ident = hit ? Products.identityPatch(hit) : null;
+            setProducts(prev => prev.map(p => p.id !== rowId ? p : (
+              ident
+                ? { ...p, name: ident.productName, productId: ident.productId, type: ident.type, processingType: ident.processingType }
+                // Leaving a linked product clears the variety that came with it —
+                // otherwise "Polished" from Carrot Polished would linger under a
+                // different product's name. A variety typed by hand while nothing
+                // was linked is the user's own and stays.
+                : { ...p, name, productId: '', ...(p.productId ? { type: '' } : {}) }
+            )));
+            setDashMsg(m => ({ ...m, [rowId]: '' }));
+          };
+
+          // The state is passed in explicitly rather than read from the row's
+          // processing-type toggle: that toggle silently defaults to Whole, and a
+          // product's state decides which dashboard entry every later trial lands
+          // in. It has to be a deliberate choice, so the user picks it here.
+          const createProductFromName = async (rowId, state) => {
+            const row = products.find(p => p.id === rowId);
+            const name = (row && row.name || '').trim();
+            if (!name || creatingProduct) return;
+            setCreatingProduct(rowId + '|' + state);
+            try {
+              const prod = await Products.createProduct({
+                name, variety: row.type || '',
+                state: state === 'processed' ? 'processed' : 'whole'
+              });
+              setDashProducts(prev => prev.concat([prod])
+                .sort((a, b) => (a.hasSheet !== b.hasSheet) ? (a.hasSheet ? -1 : 1) : a.label.localeCompare(b.label)));
+              setDashState('ready');
+              // Adopt the created product wholesale, so the row's processing type
+              // cannot disagree with the state just chosen for it.
+              const ident = Products.identityPatch(prod);
+              setProducts(prev => prev.map(p => p.id !== rowId ? p : {
+                ...p, name: ident.productName, productId: ident.productId,
+                type: ident.type, processingType: ident.processingType
+              }));
+              setDashMsg(m => ({ ...m, [rowId]: (t.dashCreated || '✓ "{name}" added.').replace('{name}', name) }));
+            } catch (err) {
+              const msg = (err && err.code === 'NO_STORE')
+                ? (t.dashCreateUnavailable || 'The product database is not reachable.')
+                : (t.dashCreateFailed || 'Could not add this product to the database.');
+              if (!err || err.code !== 'NO_STORE') console.error('Creating the product failed:', err);
+              setDashMsg(m => ({ ...m, [rowId]: msg }));
+            } finally {
+              setCreatingProduct(null);
             }
           };
 
@@ -771,14 +915,16 @@
             return newErrors.length === 0;
           };
 
-          const handleExportJSON = () => {
+          // Build the canonical intake export object. Extracted so the Project
+          // Board autosave path can persist the same payload.
+          const buildExportData = () => {
             // Ensure the canonical contacts[] array reflects the primary-contact
             // UI fields before export (round-trip safety).
             const normalizedClient = globalConfig.buildContactsArray
               ? { ...clientInfo, contacts: globalConfig.buildContactsArray(clientInfo) }
               : clientInfo;
 
-            const exportData = {
+            return {
               isPerfoTecIntake: true,
               schemaVersion: globalConfig.SCHEMA_VERSION || '2.1',
               appVersion: globalConfig.APP_VERSION || '',
@@ -788,6 +934,10 @@
               client: normalizedClient,
               products: products
             };
+          };
+
+          const handleExportJSON = () => {
+            const exportData = buildExportData();
 
             // Automatically Generate Filename: Intake Form_[Company Name]_[ProductName1]_[ProductName2]
             const companyPart = clientInfo.companyName.trim() || 'Company';
@@ -811,10 +961,14 @@
             }
           };
 
-          const handleImportJSON = (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-
+          // Apply a parsed intake payload to component state. Lifted to
+          // component scope (was nested in handleImportJSON as processData) so
+          // both the file importer and the Project Board deep-link loader
+          // (?boardProject=) can reuse the exact same logic.
+          const applyIntakeData = (raw) => {
+            // A newly loaded intake must be re-checked against the product
+            // database, even if these row ids were already synced earlier.
+            syncedRowsRef.current = {};
             // Normalise a single contact entry so the multi-contact UI can
             // render it regardless of the field-name shape the JSON used.
             // Accepts both the canonical {name, role, email, phoneDirect,
@@ -831,8 +985,7 @@
                 phoneWork:   (raw.phoneWork || '') + ''
               };
             };
-
-            const processData = (raw) => {
+            {
                 // Run through the shared schema migration so legacy exports
                 // (flat contact fields, targetGoal, missing schemaVersion) are
                 // normalised to the canonical shape before use.
@@ -870,25 +1023,174 @@
                        setProducts(data.products.map(migrateProduct));
                    }
                    if(data.unitSystem) setUnitSystem(data.unitSystem);
-                } else { alert(t.validationErr || "Invalid intake file."); }
-            };
+                   return true;
+                } else if (data.isPerfoTecProposal || data.isPerfoTecReport) {
+                   // A downstream payload (proposal/report) can legitimately end up
+                   // here: the board lets a card move BACKWARDS, and the handoff then
+                   // copies that phase's file into intake.json. Convert it back —
+                   // the inverse of proposal.html's loadIntakeProduct — instead of
+                   // refusing, which used to leave the form empty while autosave
+                   // stayed armed and overwrote the file with a blank export.
+                   const ci = data.clientInfo || data.client || {};
+                   const pr = data.project || {};
+                   const rawContacts = Array.isArray(ci.contacts) ? ci.contacts : [];
+                   const normContacts = rawContacts.map(normalizeContact);
+                   setClientInfo(prev => ({
+                     ...prev,
+                     companyName: ci.companyName || pr.company || prev.companyName || '',
+                     street: ci.street || pr.street || prev.street || '',
+                     houseNumber: ci.houseNumber || pr.houseNumber || prev.houseNumber || '',
+                     addressExtra: ci.addressExtra || pr.addressExtra || prev.addressExtra || '',
+                     zipCode: ci.zipCode || pr.zipCode || prev.zipCode || '',
+                     city: ci.city || pr.city || prev.city || '',
+                     country: ci.country || pr.country || prev.country || '',
+                     website: ci.website || prev.website || '',
+                     logo: ci.logo || prev.logo || null,
+                     contacts: normContacts.length > 0 ? normContacts : prev.contacts
+                   }));
+                   setProducts(prev => {
+                     const base = (prev && prev[0]) || {};
+                     return [{
+                       ...base,
+                       id: base.id || Date.now(),
+                       name: pr.productName || base.name || '',
+                       type: pr.type || base.type || '',
+                       origin: pr.origin || base.origin || '',
+                       processingType: pr.processingType || base.processingType || 'Whole',
+                       maturityStage: pr.maturityStage || base.maturityStage || '',
+                       postHarvestTreatment: pr.postHarvestTreatment || base.postHarvestTreatment || '',
+                       currentChallenge: pr.currentChallenge || base.currentChallenge || '',
+                       trialTarget: pr.trialTarget || pr.targetGoal || base.trialTarget || '',
+                       transportMode: pr.transportMode || base.transportMode || '',
+                       qualityCriteria: (pr.criteria && pr.criteria.length ? pr.criteria : base.qualityCriteria) || [],
+                       photo: pr.startImage || pr.coverImage || base.photo || null,
+                       packagings: (pr.packagings && pr.packagings.length ? pr.packagings : base.packagings) || [],
+                       supplyChain: (Array.isArray(data.supplyChain) && data.supplyChain.length ? data.supplyChain : base.supplyChain) || []
+                     }, ...prev.slice(1)];
+                   });
+                   if(data.unitSystem) setUnitSystem(data.unitSystem);
+                   return true;
+                } else { alert(t.validationErr || "Invalid intake file."); return false; }
+            }
+          };
 
+          const handleImportJSON = (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
             if (globalConfig.importJSON) {
-                globalConfig.importJSON(file, processData, () => {
+                globalConfig.importJSON(file, applyIntakeData, () => {
                     alert("Error loading JSON file.");
                 });
             } else {
                 const reader = new FileReader();
                 reader.onload = (event) => {
                   try {
-                    const data = JSON.parse(event.target.result);
-                    processData(data);
+                    applyIntakeData(JSON.parse(event.target.result));
                   } catch (err) { alert("Error loading JSON file."); }
                 };
                 reader.readAsText(file);
             }
-            e.target.value = null; 
+            e.target.value = null;
           };
+
+          // === PROJECT BOARD INTEGRATION ===
+          // When opened as intake.html?boardProject=<id>, load that project's
+          // intake.json from the bound folder and autosave edits back to it.
+          const boardProjectId = new URLSearchParams(window.location.search).get('boardProject');
+          const [boardState, setBoardState] = useState(boardProjectId ? 'loading' : 'off');
+          const [boardTitle, setBoardTitle] = useState('');
+          const boardLoadedRef = useRef(false);
+          const boardSaveTimer = useRef(null);
+
+          const loadBoardProject = async () => {
+            const B = window.PerfoTecBoard;
+            const manifest = await B.readManifest();
+            const proj = (manifest.projects || []).find(p => p.id === boardProjectId);
+            if (proj) setBoardTitle(proj.title || '');
+            // Prefer this phase's file, but fall back to the latest available phase
+            // file so a moved/forwarded project always opens with its content.
+            const data = await B.readProjectData(boardProjectId, 'intake');
+            // Only arm the autosave when we actually understood the payload. If a
+            // file exists but could not be applied, writing back would replace real
+            // data with a blank export — so stay read-only and say so instead.
+            const applied = data ? applyIntakeData(data) : true;
+            if (!applied) { setBoardState('unreadable'); return; }
+            boardLoadedRef.current = true;
+            setBoardState('linked');
+          };
+
+          useEffect(() => {
+            if (!boardProjectId || !window.PerfoTecBoard) { if (boardProjectId) setBoardState('error'); return; }
+            let cancelled = false;
+            (async () => {
+              try {
+                const state = await window.PerfoTecBoard.permissionState();
+                if (state !== 'granted') { if (!cancelled) setBoardState('needs-permission'); return; }
+                if (!cancelled) await loadBoardProject();
+              } catch (err) {
+                if (cancelled) return;
+                setBoardState(err && err.code === 'NEEDS_PERMISSION' ? 'needs-permission' : 'error');
+              }
+            })();
+            return () => { cancelled = true; };
+          }, [boardProjectId]);
+
+          const grantBoardAccess = async () => {
+            try {
+              const ok = await window.PerfoTecBoard.requestAccess();
+              if (ok) { setBoardState('loading'); await loadBoardProject(); }
+            } catch (err) { setBoardState('error'); }
+          };
+
+          // Holds the currently-pending autosave so the shared "Board" button can
+          // flush it before navigating away (see PerfoTecBoard.registerFlush).
+          const pendingBoardSave = useRef(null);
+
+          useEffect(() => {
+            if (boardState !== 'linked' || !boardLoadedRef.current) return;
+            if (boardSaveTimer.current) clearTimeout(boardSaveTimer.current);
+            const doBoardSave = async () => {
+              pendingBoardSave.current = null;
+              try {
+                const B = window.PerfoTecBoard;
+                await B.writePhaseFile(boardProjectId, 'intake', buildExportData());
+                const manifest = await B.readManifest();
+                const idx = (manifest.projects || []).findIndex(p => p.id === boardProjectId);
+                if (idx >= 0) {
+                  const p = manifest.projects[idx];
+                  const patch = { files: { ...(p.files || {}), intake: true }, updatedAt: new Date().toISOString() };
+                  if (!p.client && clientInfo.companyName) patch.client = clientInfo.companyName;
+                  if (!p.product && products[0] && products[0].name) patch.product = products[0].name;
+                  // The product LINK is board-owned and always mirrored, unlike the
+                  // product NAME, which Pipedrive owns on CRM projects. An intake
+                  // can cover several products; the board card tracks the first.
+                  if (products[0] && products[0].productId && p.productId !== products[0].productId) {
+                    patch.productId = products[0].productId;
+                  }
+                  if (!p.image && products[0] && products[0].photo) {
+                    const scaled = await B.scaleImage(products[0].photo, 480);
+                    if (scaled) patch.image = scaled;
+                  }
+                  manifest.projects[idx] = { ...p, ...patch };
+                  await B.writeManifest(manifest);
+                }
+              } catch (err) { /* transient — next edit retries */ }
+            };
+            pendingBoardSave.current = doBoardSave;
+            boardSaveTimer.current = setTimeout(doBoardSave, 1200);
+            return () => { if (boardSaveTimer.current) clearTimeout(boardSaveTimer.current); };
+          }, [boardState, clientInfo, products, lang, unitSystem]);
+
+          // Flush a debounced autosave when the user leaves via the shared
+          // "Board" button, so the last edit is never dropped.
+          useEffect(() => {
+            const B = window.PerfoTecBoard;
+            if (!B || !B.registerFlush) return;
+            return B.registerFlush(() => {
+              if (boardSaveTimer.current) { clearTimeout(boardSaveTimer.current); boardSaveTimer.current = null; }
+              return pendingBoardSave.current ? pendingBoardSave.current() : null;
+            });
+          }, []);
 
           const handleSubmit = (e) => {
             if (e && e.preventDefault) e.preventDefault();
@@ -928,7 +1230,25 @@
 
           return (
             <div className="min-h-screen pb-20 font-sans text-slate-800">
-              
+
+              {/* PROJECT BOARD LINK BANNER */}
+              {boardProjectId && boardState !== 'off' && (
+                <div className="w-full text-white text-sm px-4 py-2 flex items-center justify-center gap-3 print:hidden" style={{ backgroundColor: (boardState === 'unreadable' || boardState === 'error') ? '#ea580c' : '#084BCD' }}>
+                  <span className="flex items-center gap-2">
+                    <FolderOpen size={16} />
+                    {boardState === 'linked' && <span>Linked to Project Board{boardTitle ? `: ${boardTitle}` : ''} — changes autosave to the project folder.</span>}
+                    {boardState === 'loading' && <span>Loading project from the board…</span>}
+                    {boardState === 'needs-permission' && <span>Grant access to the project folder to load this project.</span>}
+                    {boardState === 'error' && <span>Could not reach the project folder. Open this from the Project Board.</span>}
+                    {boardState === 'unreadable' && <span>This project's file could not be read as an intake — nothing was changed and autosave is off, so the file stays intact. Open the phase that owns it, or import the file manually.</span>}
+                  </span>
+                  {boardState === 'needs-permission' && (
+                    <button onClick={grantBoardAccess} className="bg-white/20 hover:bg-white/30 rounded-md px-3 py-1 font-bold">Grant access</button>
+                  )}
+                  <a href="board.html" className="hover:underline opacity-80 hover:opacity-100">← Board</a>
+                </div>
+              )}
+
               {/* SUCCESS MODAL (Instructions for Email) */}
               {isSuccessModalOpen && (
                 <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -1221,7 +1541,57 @@
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                               <div className="md:col-span-2">
                                 <label className={labelClass}>{t.prodName} <span className="text-red-500">*</span></label>
-                                <input type="text" className={`${inputClass} text-xl font-bold py-4`} value={prod.name} onChange={e => handleProductChange(prod.id, 'name', e.target.value)} />
+                                {/* Same control as proposal and report: pick from the
+                                    shared product database, or type a name that is not
+                                    in it yet and add it in one click. */}
+                                <input
+                                  type="text"
+                                  list="pt-intake-products"
+                                  className={`${inputClass} text-xl font-bold py-4`}
+                                  placeholder={t.productNameSelectHint}
+                                  value={prod.name}
+                                  onChange={e => handleProductNameChange(prod.id, e.target.value)}
+                                />
+                                <datalist id="pt-intake-products">
+                                  {dashProducts.map(dp => (
+                                    <option key={dp.id} value={dp.label}>{dp.state}{dp.hasSheet ? ' · ' + t.dashWithSheet : ''}</option>
+                                  ))}
+                                </datalist>
+
+                                <div className="mt-2 min-h-[24px]">
+                                  {prod.productId ? (
+                                    <span className="text-xs font-bold text-green-700 flex items-center gap-1.5">
+                                      <Check size={13} />{t.productLinked}
+                                    </span>
+                                  ) : (prod.name || '').trim() ? (
+                                    /* The state is chosen here, not taken from the toggle
+                                       below: it decides which dashboard entry every later
+                                       trial for this product lands in. */
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <span className="text-xs text-amber-700">{t.productNotLinked}</span>
+                                      <span className="text-xs text-slate-500">{t.productCreateAs}</span>
+                                      {[['whole', t.productStateWhole], ['processed', t.productStateProcessed]].map(([st, label]) => (
+                                        <button
+                                          key={st}
+                                          type="button"
+                                          onClick={() => createProductFromName(prod.id, st)}
+                                          disabled={!!creatingProduct}
+                                          className="text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-60 hover:bg-green-50"
+                                          style={{ borderColor: BRAND.colors.green, color: BRAND.colors.green }}
+                                        >
+                                          {creatingProduct === prod.id + '|' + st ? (t.productCreating || '…') : `+ ${label}`}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <span className="text-xs text-slate-400">
+                                      {dashState === 'ready'
+                                        ? (t.productPickHint || '').replace('{n}', dashProducts.length)
+                                        : t.dashUnavailableShort}
+                                    </span>
+                                  )}
+                                </div>
+                                {dashMsg[prod.id] && <div className="text-xs font-bold text-green-700 mt-2">{dashMsg[prod.id]}</div>}
                               </div>
                               
                               <div className="md:col-span-1 md:row-span-4 flex flex-col">
