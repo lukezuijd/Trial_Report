@@ -25,8 +25,10 @@
     <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
 
     <!-- LOAD CENTRAL STYLING & CONFIGURATION -->
-    <link rel="stylesheet" href="style.css">
-    <script src="config.js"></script>
+    <link rel="stylesheet" href="style.css?v=77634a3c">
+    <script src="config.js?v=37136610"></script>
+    <script src="board-db.js?v=a2107b12"></script>
+    <script src="product-tools.js?v=eca36103"></script>
 </head>
 <body class="bg-slate-50 text-slate-800 antialiased selection:bg-blue-200 selection:text-blue-900">
     <div id="root">
@@ -46,7 +48,8 @@
           ClipboardList, Image as ImageIcon, BarChart2, ChevronRight, 
           Save, Download, FolderOpen, LineChart, Tractor, Ship, Plane, 
           Warehouse, Store, Utensils, Factory, ArrowDown, ArrowUp, ChevronUp, ChevronDown,
-          Bold, Italic, Underline, List, FileArchive, Globe, AlertCircle, Building2, Target, Beaker, Package, PackagePlus
+          Bold, Italic, Underline, List, FileArchive, Globe, AlertCircle, Building2, Target, Beaker, Package, PackagePlus,
+          Check
         } from 'https://esm.sh/lucide-react@0.292.0';
 
         // --- BRAND CONFIGURATION ---
@@ -2061,6 +2064,327 @@
           );
         };
 
+        /* ==========================================================================
+         * MEASUREMENT SHEET — printable worksheet of every planned measurement.
+         *
+         * Printed BEFORE the trial is executed, so every cell is blank by default;
+         * the "show entered values" toggle turns the same sheet into a filled record.
+         *
+         * Row order deliberately follows the flow as filled in — never a re-sort:
+         *   1. Day     — the evaluation days in the order they appear in the editor
+         *   2. Variant — the variant list order (Groups tab, movable with ↑/↓)
+         *   3. ID      — sample number inside that variant
+         *
+         * Gas columns mirror the editor table: dropped entirely when no variant
+         * uses MAP, and blanked per row for MHP/Open variants and for days after
+         * the pack has been opened (retail simulation).
+         * ========================================================================== */
+        const MeasurementSheet = ({ clientInfo, project, groups, onBack, unitSystem = 'metric', lang = 'en', rt = {} }) => {
+          const [isPrinting, setIsPrinting] = useState(false);
+          const [showValues, setShowValues] = useState(false);
+
+          const isMAPGroup = (g) => !g.specs?.atmosphereStrategy || g.specs.atmosphereStrategy === 'MAP';
+          const anyMAP = (groups || []).some(isMAPGroup);
+          const totalDuration = parseFloat(project.totalDuration);
+          const retailDays = parseFloat(project.retailOpenDays) || 0;
+          const openDay = isNaN(totalDuration) ? NaN : totalDuration + retailDays;
+          // After the pack is opened the atmosphere is ambient — no gas to measure.
+          const isOpenedDay = (day) => !isNaN(totalDuration) && parseFloat(day) > totalDuration;
+
+          const projIsBulk = ['Cube crate', 'Pallet'].includes(project.packagings?.[0]?.packagingType || project.packagingType || 'Retail');
+          const weightUnit = globalConfig.getUnitLabel
+            ? globalConfig.getUnitLabel('weight', unitSystem, projIsBulk)
+            : (projIsBulk ? 'kg' : 'g');
+
+          // Day list in entry order, de-duplicated across variants. Days that only
+          // exist on a later variant are appended where they are first met.
+          const dayList = [];
+          (groups || []).forEach(g => (g.measurements || []).forEach(m => {
+            const d = parseFloat(m.day);
+            if (!isNaN(d) && !dayList.includes(d)) dayList.push(d);
+          }));
+
+          const baseDate = project.packingDate || project.date;
+          const dateFor = (d) => {
+            if (!baseDate) return '';
+            const dt = new Date(baseDate);
+            if (isNaN(dt.getTime())) return '';
+            dt.setDate(dt.getDate() + d);
+            return `${String(dt.getDate()).padStart(2, '0')}/${String(dt.getMonth() + 1).padStart(2, '0')}/${dt.getFullYear()}`;
+          };
+          const dayBadge = (d) => {
+            if (d === 0) return rt.sheetDayPacking || 'Packing';
+            if (retailDays > 0 && d === openDay) return rt.sheetDayRetail || 'Retail simulation (opened)';
+            if (!isNaN(totalDuration) && d === totalDuration) return rt.sheetDayEnd || 'End of packed period';
+            return '';
+          };
+
+          // Criteria come from the measurement itself when present (they may have
+          // been edited per day); otherwise from the global assessment criteria.
+          const criteriaFor = (m) => {
+            const params = (m.qualityParams || []).filter(p => p && p.name);
+            const source = params.length ? params : (project.criteria || []).map(c => ({ name: c, score: '', notes: '' }));
+            return source.map(p => ({
+              label: getI18nLabel(DEFAULT_CRITERIA_I18N, p.name, lang) || p.name,
+              score: p.score,
+              notes: p.notes
+            }));
+          };
+
+          const samplesOf = (g, m) => (m.samples && m.samples.length)
+            ? m.samples
+            : Array.from({ length: g.specs?.sampleCount || 3 }, () => ({}));
+
+          const val = (v) => (v === 0 || v === '0') ? '0' : (v || '');
+          const anyQuality = (groups || []).some(g => (g.measurements || []).some(m => m.evaluateQuality));
+          const colCount = 3 + (anyMAP ? 2 : 0);
+
+          const cellClass = 'border border-slate-300 px-2 py-1.5 align-middle';
+          const blankCell = 'border border-slate-300 px-2 py-1.5 text-center text-slate-900 font-bold';
+          const naCell = 'border border-slate-300 px-2 py-1.5 text-center text-slate-300 bg-slate-50';
+          const headCell = 'border border-slate-300 px-2 py-2 text-center font-extrabold uppercase tracking-wider text-[10px]';
+
+          const handlePrint = async () => {
+            setIsPrinting(true);
+            const company = clientInfo.companyName || 'Client';
+            const product = project.productName || 'Product';
+            const suggested = `PerfoTec_Measurement_Sheet_${company}_${product}`;
+            await document.fonts.ready;
+            if (globalConfig.printWithFilename) globalConfig.printWithFilename(suggested);
+            else window.print();
+            setIsPrinting(false);
+          };
+
+          const MetaCell = ({ label, value }) => (
+            <div className="border border-slate-300 rounded-lg px-3 py-2 bg-slate-50">
+              <div className="text-[8px] font-extrabold uppercase tracking-widest text-slate-500">{label}</div>
+              <div className="text-xs font-bold text-slate-800 truncate">{value || '—'}</div>
+            </div>
+          );
+
+          return (
+            <div className="min-h-screen bg-slate-600 p-0 sm:p-8 overflow-y-auto font-sans print:p-0 print:bg-white no-print-bg">
+              <style>{`
+                @media print {
+                  /* Long worksheets must be allowed to flow across pages, but a
+                     variant block (samples + its quality strip) stays together
+                     and the column header repeats on every page. */
+                  .msheet-table { break-inside: auto !important; page-break-inside: auto !important; }
+                  .msheet-table thead { display: table-header-group; }
+                  .msheet-table tbody, .msheet-table tr { break-inside: avoid; page-break-inside: avoid; }
+                  .msheet-meta { break-inside: avoid; page-break-inside: avoid; }
+                }
+              `}</style>
+
+              <div className="fixed bottom-8 right-8 flex flex-wrap items-center gap-4 no-print z-50">
+                <label className="bg-white border border-slate-300 text-slate-700 px-5 py-3 rounded-full shadow-lg font-bold flex items-center gap-3 cursor-pointer hover:bg-slate-50 transition">
+                  <input type="checkbox" checked={showValues} onChange={e => setShowValues(e.target.checked)} className="accent-green-600 w-4 h-4" />
+                  {rt.sheetShowValues || 'Show entered values'}
+                </label>
+                <button onClick={onBack} className="bg-slate-800 text-white px-6 py-3 rounded-full shadow-lg font-bold transition hover:bg-slate-900 flex items-center gap-2"><Edit3 size={18}/> {rt.sheetBack || 'Edit'}</button>
+                <button
+                  disabled={isPrinting}
+                  onClick={handlePrint}
+                  className="bg-green-600 text-white px-6 py-3 rounded-full shadow-lg font-bold flex items-center gap-2 hover:bg-green-700 transition disabled:opacity-70 disabled:cursor-wait"
+                >
+                  {isPrinting
+                    ? <><svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg> Preparing...</>
+                    : <><Printer size={18}/> {rt.sheetPrint || 'Print / PDF'}</>
+                  }
+                </button>
+              </div>
+
+              <div id="print-content" className="max-w-[21cm] mx-auto bg-white shadow-2xl min-h-[29.7cm] p-10 relative print:shadow-none print:max-w-full print:w-full print:p-0 text-slate-800">
+
+                {/* HEADER */}
+                <div className="flex items-start justify-between gap-6 border-b-4 pb-4 mb-5" style={{ borderColor: BRAND.colors.green }}>
+                  <div className="min-w-0">
+                    <p className="text-[9px] font-extrabold tracking-[0.2em] uppercase" style={{ color: BRAND.colors.blue }}>{rt.sheetEyebrow || 'Trial worksheet'}</p>
+                    <h1 className="text-2xl font-extrabold uppercase brand-heading leading-tight" style={{ color: BRAND.colors.green }}>{rt.sheetTitle || 'Measurement Sheet'}</h1>
+                    <p className="text-sm font-bold text-slate-600 mt-1 truncate">{project.reportTitle || ''}</p>
+                  </div>
+                  <img src={BRAND.logos.default} alt="PerfoTec" className="h-12 object-contain shrink-0" crossOrigin="anonymous" />
+                </div>
+
+                {/* PROJECT META */}
+                <div className="msheet-meta grid grid-cols-4 gap-2 mb-5">
+                  <MetaCell label={rt.companyName || 'Company'} value={clientInfo.companyName} />
+                  <MetaCell label={rt.productName || 'Product'} value={project.productName} />
+                  <MetaCell label={rt.packingDate || 'Packing date'} value={formatDateToDDMMYYYY(project.packingDate || project.date)} />
+                  <MetaCell label={rt.perfoTecEmployee || 'PerfoTec employee'} value={project.employee} />
+                  <MetaCell label={rt.totalDays || 'Days packed'} value={project.totalDuration} />
+                  <MetaCell label={rt.retailSim || 'Retail simulation'} value={retailDays > 0 ? `+${retailDays}` : '—'} />
+                  <MetaCell label={rt.testLocation || 'Location'} value={project.testLocation} />
+                  <MetaCell label={rt.sheetTotalRows || 'Measurements'} value={String(
+                    dayList.reduce((acc, d) => acc + (groups || []).reduce((a, g) => {
+                      const m = (g.measurements || []).find(mm => parseFloat(mm.day) === d);
+                      return a + (m ? samplesOf(g, m).length : 0);
+                    }, 0), 0)
+                  )} />
+                </div>
+
+                {/* VARIANT LEGEND */}
+                <div className="msheet-meta mb-6">
+                  <h2 className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500 mb-2">{rt.sheetVariants || 'Variants'}</h2>
+                  <table className="w-full text-xs" style={{ borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr className="bg-slate-100">
+                        <th className={`${headCell} text-left`}>{rt.variantName || 'Variant'}</th>
+                        <th className={`${headCell} text-left`}>{rt.packagingType || 'Packaging'}</th>
+                        <th className={headCell}>{rt.atmosphereStrategy || 'Strategy'}</th>
+                        <th className={`${headCell} text-left`}>{rt.transmissionValue || 'Transmission'}</th>
+                        <th className={headCell}>{rt.samplesPerMeasurement || 'Samples'}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(groups || []).map((g, idx) => (
+                        <tr key={g.id}>
+                          <td className={cellClass}>
+                            <span className="inline-flex items-center gap-2 font-extrabold text-slate-800">
+                              <span className="w-2.5 h-2.5 rounded-full inline-block shrink-0" style={{ backgroundColor: CHART_COLORS[idx % CHART_COLORS.length].stroke }}></span>
+                              {g.name || `${rt.variantFallback || 'Variant'} ${idx + 1}`}
+                              {(g.round === 2 || g.verificationOf) && <span className="text-[8px] font-extrabold uppercase border border-slate-400 rounded px-1">R2</span>}
+                            </span>
+                          </td>
+                          <td className={cellClass}>{getI18nLabel(PACKAGING_TYPES_I18N, g.specs?.packaging, lang) || g.specs?.packaging || '—'}</td>
+                          <td className={`${cellClass} text-center font-bold`}>{g.specs?.atmosphereStrategy || 'MAP'}</td>
+                          <td className={cellClass}>{g.specs?.holes || '—'}</td>
+                          <td className={`${cellClass} text-center font-bold`}>{samplesOf(g, (g.measurements || [])[0] || {}).length}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* MEASUREMENT TABLE — Day ▸ Variant ▸ ID */}
+                {dayList.length === 0 ? (
+                  <p className="text-sm italic text-slate-400">{rt.sheetNoDays || 'No evaluation days defined yet.'}</p>
+                ) : (
+                  <table className="msheet-table w-full text-xs" style={{ borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: BRAND.colors.green, color: '#ffffff' }}>
+                        <th className={`${headCell} text-left`} style={{ width: '32%' }}>{rt.variantFallback || 'Variant'}</th>
+                        <th className={headCell} style={{ width: '8%' }}>{rt.sheetColId || 'ID'}</th>
+                        {anyMAP && <th className={headCell} style={{ width: '15%' }}>O₂ (%)</th>}
+                        {anyMAP && <th className={headCell} style={{ width: '15%' }}>CO₂ (%)</th>}
+                        <th className={headCell}>{rt.sheetColWeight || 'Weight'} <span className="normal-case">({weightUnit})</span></th>
+                      </tr>
+                    </thead>
+
+                    {dayList.map(d => {
+                      const rowsForDay = (groups || [])
+                        .map((g, gIdx) => ({ g, gIdx, m: (g.measurements || []).find(mm => parseFloat(mm.day) === d) }))
+                        .filter(x => !!x.m);
+                      const opened = isOpenedDay(d);
+                      const badge = dayBadge(d);
+                      const dateStr = dateFor(d);
+
+                      return rowsForDay.map(({ g, gIdx, m }, blockIdx) => {
+                        const gasCells = anyMAP && isMAPGroup(g) && !opened;
+                        const samples = samplesOf(g, m);
+                        const crit = m.evaluateQuality ? criteriaFor(m) : [];
+
+                        return (
+                          <tbody key={`${d}-${g.id}`}>
+                            {/* Day band — stays glued to the first variant of that day */}
+                            {blockIdx === 0 && (
+                              <tr>
+                                <td colSpan={colCount} className="border border-slate-300 px-2 py-1.5" style={{ backgroundColor: BRAND.colors.blue, color: '#ffffff' }}>
+                                  <div className="flex items-center justify-between gap-4">
+                                    <span className="font-extrabold uppercase tracking-wider text-[11px]">
+                                      {rt.day || 'Day'} P+{d}
+                                      {dateStr && <span className="font-bold opacity-80 normal-case"> · {dateStr}</span>}
+                                      {badge && <span className="ml-2 text-[9px] font-extrabold uppercase bg-white/20 border border-white/40 rounded px-1.5 py-0.5">{badge}</span>}
+                                    </span>
+                                    {!showValues && (
+                                      <span className="text-[9px] font-bold uppercase tracking-widest opacity-90 whitespace-nowrap">
+                                        {rt.sheetExecutedBy || 'Measured by'}: ________________
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+
+                            {samples.map((s, sIdx) => (
+                              <tr key={sIdx} style={{ height: '24px' }}>
+                                {sIdx === 0 && (
+                                  <td className={`${cellClass} font-extrabold text-slate-800`} rowSpan={samples.length}>
+                                    <span className="inline-flex items-center gap-2">
+                                      <span className="w-2.5 h-2.5 rounded-full inline-block shrink-0" style={{ backgroundColor: CHART_COLORS[gIdx % CHART_COLORS.length].stroke }}></span>
+                                      {g.name || `${rt.variantFallback || 'Variant'} ${gIdx + 1}`}
+                                      <span className="text-[9px] font-bold text-slate-400 uppercase">{g.specs?.atmosphereStrategy || 'MAP'}</span>
+                                    </span>
+                                  </td>
+                                )}
+                                <td className={`${blankCell} bg-slate-50`}>{sIdx + 1}</td>
+                                {anyMAP && (gasCells
+                                  ? <td className={blankCell}>{showValues ? val(s.o2) : ''}</td>
+                                  : <td className={naCell}>—</td>)}
+                                {anyMAP && (gasCells
+                                  ? <td className={blankCell}>{showValues ? val(s.co2) : ''}</td>
+                                  : <td className={naCell}>—</td>)}
+                                <td className={blankCell}>{showValues ? val(s.weight) : ''}</td>
+                              </tr>
+                            ))}
+
+                            {/* Quality evaluation — only for days where it is enabled */}
+                            {m.evaluateQuality && (
+                              <tr>
+                                <td colSpan={colCount} className="border border-slate-300 px-2 py-2 bg-slate-50">
+                                  <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                                    <span className="text-[9px] font-extrabold uppercase tracking-widest" style={{ color: BRAND.colors.green }}>
+                                      {rt.sheetQuality || 'Quality evaluation'}
+                                    </span>
+                                    <span className="inline-flex items-center gap-1.5">
+                                      <span className="text-[10px] font-extrabold uppercase text-slate-600">{rt.sheetOverall || 'Overall'}</span>
+                                      <span className="inline-block w-9 text-center border border-slate-400 rounded bg-white text-xs font-extrabold text-slate-900">{showValues ? (m.quality || '') : ' '}</span>
+                                    </span>
+                                    {crit.map((c, ci) => (
+                                      <span key={ci} className="inline-flex items-center gap-1.5">
+                                        <span className="text-[10px] font-bold text-slate-700">{c.label}</span>
+                                        <span className="inline-block w-9 text-center border border-slate-400 rounded bg-white text-xs font-extrabold text-slate-900">{showValues ? val(c.score) : ' '}</span>
+                                      </span>
+                                    ))}
+                                    {crit.length === 0 && (
+                                      <span className="text-[10px] italic text-slate-400">{rt.noCriteriaModal || 'No criteria selected.'}</span>
+                                    )}
+                                    <span className="flex-1 inline-flex items-baseline gap-1.5 min-w-[120px]">
+                                      <span className="text-[10px] font-bold text-slate-500 uppercase">{rt.thNotes || 'Notes'}</span>
+                                      <span className="flex-1 border-b border-dotted border-slate-400 text-[10px] text-slate-700">
+                                        {showValues ? (m.notes || crit.filter(c => c.notes).map(c => `${c.label}: ${c.notes}`).join(' · ') || ' ') : ' '}
+                                      </span>
+                                    </span>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        );
+                      });
+                    })}
+                  </table>
+                )}
+
+                {/* SCORE SCALE — only relevant when a quality evaluation is planned */}
+                {anyQuality && (
+                  <div className="msheet-meta mt-5 pt-3 border-t border-slate-200">
+                    <p className="text-[9px] font-extrabold uppercase tracking-widest text-slate-400 mb-1.5">{rt.scoreScale || 'Score Scale (1-10)'}</p>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-slate-600">
+                      {MINI_SCORES.map(s => (
+                        <span key={s[0]} className="inline-flex items-center gap-1.5">
+                          <strong className="border border-slate-300 rounded px-1 font-extrabold">{s[0]}</strong>
+                          <span className="font-medium">{s[1]}</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        };
+
         const App = () => {
           // === LANGUAGE STATE (auto-detect browser language) ===
           const getInitialLang = () => {
@@ -2130,6 +2454,23 @@
               productSheetBrowse: 'Choose product-sheet file',
               productSheetDropActive: 'Drop the file to import…',
               productSheetParseFail: 'Could not parse this product sheet. Check that it contains a defects matrix and an "Optimal Conditions" section.',
+              dashWithSheet: 'with product sheet',
+              dashUnavailableShort: 'The product database is not reachable — type a product name.',
+              productNameSelectHint: 'Select or type a product…',
+              productPickHint: 'Choose one of {n} products, or type a new name.',
+              productLinked: 'Linked to the product database',
+              productNotLinked: 'Not in the product database yet.',
+              productMissing: 'This product is no longer in the product database — the values below are the ones last saved.',
+              productCreate: 'Add as new product',
+              productCreateAs: 'add as',
+              productStateWhole: 'Whole',
+              productStateProcessed: 'Processed',
+              productCreating: 'Adding…',
+              dashAppliedDefects: '✓ Imported from the product database, including {n} defects.',
+              dashAppliedNoDefects: '✓ Imported the target window. This product has no defects matrix yet.',
+              dashCreated: '✓ "{name}" added to the product database.',
+              dashCreateFailed: 'Could not add this product to the database.',
+              dashCreateUnavailable: 'The product database is not reachable — link the folder in the Project Board first.',
               // Groups tab — atmosphere strategy + evaluation days + measurement table modal headers
               atmosphereStrategy: 'Atmosphere Strategy',
               optMAP: 'MAP (Atmosphere buildup)', optMHP: 'MHP (No atmosphere buildup)', optOpen: 'Open (No packaging)',
@@ -2223,7 +2564,21 @@
               testLocationToPlaceholder: 'e.g. Rotterdam, NL — leave empty for a single site',
               // Packed-packaging photo (P+0)
               warningPackedPhoto: 'Warning: Add a P+0 photo of the fully packed packaging (as stored/transported) for:',
-              packedPhotoHint: 'Each variant needs at least one P+0 photo of the fully packed packaging, exactly as the product is stored or transported.'
+              packedPhotoHint: 'Each variant needs at least one P+0 photo of the fully packed packaging, exactly as the product is stored or transported.',
+              // Measurement sheet (printable worksheet)
+              sheetButton: 'Measurement Sheet',
+              sheetTitle: 'Measurement Sheet',
+              sheetEyebrow: 'Trial worksheet',
+              sheetBack: 'Edit',
+              sheetPrint: 'Print / PDF',
+              sheetShowValues: 'Show entered values',
+              sheetVariants: 'Variants',
+              sheetColId: 'ID', sheetColWeight: 'Weight',
+              sheetQuality: 'Quality evaluation', sheetOverall: 'Overall',
+              sheetExecutedBy: 'Measured by',
+              sheetTotalRows: 'Measurements',
+              sheetDayPacking: 'Packing', sheetDayEnd: 'End of packed period', sheetDayRetail: 'Retail simulation (opened)',
+              sheetNoDays: 'No evaluation days defined yet.'
             },
             nl: {
               tabSetup: 'Project & Klant', tabGroups: 'Variant Resultaten', tabAnalysis: 'Analyse & Concl.',
@@ -2278,6 +2633,23 @@
               productSheetBrowse: 'Kies product-sheet bestand',
               productSheetDropActive: 'Laat het bestand los om te importeren…',
               productSheetParseFail: 'Kon deze product sheet niet inlezen. Controleer of er een defectenmatrix en een "Optimale Condities" sectie in staat.',
+              dashWithSheet: 'met product sheet',
+              dashUnavailableShort: 'De productendatabase is niet bereikbaar — typ een productnaam.',
+              productNameSelectHint: 'Kies of typ een product…',
+              productPickHint: 'Kies uit {n} producten, of typ een nieuwe naam.',
+              productLinked: 'Gekoppeld aan de productendatabase',
+              productNotLinked: 'Nog niet in de productendatabase.',
+              productMissing: 'Dit product staat niet meer in de productendatabase — onderstaande waarden zijn de laatst opgeslagen waarden.',
+              productCreate: 'Als nieuw product toevoegen',
+              productCreateAs: 'toevoegen als',
+              productStateWhole: 'Heel',
+              productStateProcessed: 'Bewerkt',
+              productCreating: 'Toevoegen…',
+              dashAppliedDefects: '✓ Overgenomen uit de productendatabase, inclusief {n} defecten.',
+              dashAppliedNoDefects: '✓ Doelvenster overgenomen. Dit product heeft nog geen defectenmatrix.',
+              dashCreated: '✓ "{name}" toegevoegd aan de productendatabase.',
+              dashCreateFailed: 'Kon dit product niet aan de database toevoegen.',
+              dashCreateUnavailable: 'De productendatabase is niet bereikbaar — koppel eerst de map in het Project Board.',
               atmosphereStrategy: 'Atmosfeer Strategie',
               optMAP: 'MAP (gericht op atmosfeer)', optMHP: 'MHP (geen atmosfeer opbouw)', optOpen: 'Open (geen verpakking)',
               globalEvalDays: 'Globale Evaluatiedagen', evalDaysDesc: 'Geef de dagen op waarop verpakkingen worden geopend en beoordeeld.',
@@ -2368,7 +2740,21 @@
               testLocationToPlaceholder: 'bijv. Rotterdam, NL — leeg laten bij één locatie',
               // Packed-packaging photo (P+0)
               warningPackedPhoto: 'Waarschuwing: Voeg een P+0 foto toe van de volledig ingepakte verpakking (zoals opgeslagen/getransporteerd) voor:',
-              packedPhotoHint: 'Elke variant heeft minimaal één P+0 foto nodig van de volledig ingepakte verpakking, precies zoals het product wordt opgeslagen of getransporteerd.'
+              packedPhotoHint: 'Elke variant heeft minimaal één P+0 foto nodig van de volledig ingepakte verpakking, precies zoals het product wordt opgeslagen of getransporteerd.',
+              // Measurement sheet (printable worksheet)
+              sheetButton: 'Meetoverzicht',
+              sheetTitle: 'Meetoverzicht',
+              sheetEyebrow: 'Werkblad proef',
+              sheetBack: 'Bewerken',
+              sheetPrint: 'Printen / PDF',
+              sheetShowValues: 'Ingevulde waarden tonen',
+              sheetVariants: 'Varianten',
+              sheetColId: 'ID', sheetColWeight: 'Gewicht',
+              sheetQuality: 'Kwaliteitsbeoordeling', sheetOverall: 'Totaal',
+              sheetExecutedBy: 'Gemeten door',
+              sheetTotalRows: 'Metingen',
+              sheetDayPacking: 'Verpakken', sheetDayEnd: 'Einde verpakte periode', sheetDayRetail: 'Retail simulatie (geopend)',
+              sheetNoDays: 'Nog geen evaluatiedagen ingevuld.'
             },
             es: {
               tabSetup: 'Proyecto y Cliente', tabGroups: 'Resultados de Variantes', tabAnalysis: 'Análisis y Concl.',
@@ -2423,6 +2809,23 @@
               productSheetBrowse: 'Elegir archivo de ficha',
               productSheetDropActive: 'Suelte el archivo para importar…',
               productSheetParseFail: 'No se pudo procesar esta ficha. Verifique que contenga una matriz de defectos y una sección "Condiciones Óptimas".',
+              dashWithSheet: 'con ficha de producto',
+              dashUnavailableShort: 'La base de datos de productos no está accesible — escriba un nombre.',
+              productNameSelectHint: 'Seleccione o escriba un producto…',
+              productPickHint: 'Elija entre {n} productos, o escriba un nombre nuevo.',
+              productLinked: 'Vinculado a la base de datos de productos',
+              productNotLinked: 'Aún no está en la base de datos de productos.',
+              productMissing: 'Este producto ya no está en la base de datos — los valores siguientes son los últimos guardados.',
+              productCreate: 'Añadir como producto nuevo',
+              productCreateAs: 'añadir como',
+              productStateWhole: 'Entero',
+              productStateProcessed: 'Procesado',
+              productCreating: 'Añadiendo…',
+              dashAppliedDefects: '✓ Importado de la base de datos de productos, incluidos {n} defectos.',
+              dashAppliedNoDefects: '✓ Ventana objetivo importada. Este producto aún no tiene matriz de defectos.',
+              dashCreated: '✓ "{name}" añadido a la base de datos de productos.',
+              dashCreateFailed: 'No se pudo añadir este producto a la base de datos.',
+              dashCreateUnavailable: 'La base de datos de productos no está accesible — vincule primero la carpeta en el Project Board.',
               atmosphereStrategy: 'Estrategia de Atmósfera',
               optMAP: 'MAP (Modificación de atmósfera)', optMHP: 'MHP (Sin modificación de atmósfera)', optOpen: 'Abierto (Sin empaque)',
               globalEvalDays: 'Días de Evaluación Global', evalDaysDesc: 'Especifique los días en que se abren y evalúan los paquetes.',
@@ -2513,7 +2916,21 @@
               testLocationToPlaceholder: 'ej. Rotterdam, NL — dejar vacío para un solo sitio',
               // Packed-packaging photo (P+0)
               warningPackedPhoto: 'Advertencia: Añada una foto P+0 del empaque completamente embalado (tal como se almacena/transporta) para:',
-              packedPhotoHint: 'Cada variante necesita al menos una foto P+0 del empaque completamente embalado, exactamente como el producto se almacena o transporta.'
+              packedPhotoHint: 'Cada variante necesita al menos una foto P+0 del empaque completamente embalado, exactamente como el producto se almacena o transporta.',
+              // Measurement sheet (printable worksheet)
+              sheetButton: 'Hoja Mediciones',
+              sheetTitle: 'Hoja de Mediciones',
+              sheetEyebrow: 'Hoja de trabajo del ensayo',
+              sheetBack: 'Editar',
+              sheetPrint: 'Imprimir / PDF',
+              sheetShowValues: 'Mostrar valores introducidos',
+              sheetVariants: 'Variantes',
+              sheetColId: 'ID', sheetColWeight: 'Peso',
+              sheetQuality: 'Evaluación de calidad', sheetOverall: 'Total',
+              sheetExecutedBy: 'Medido por',
+              sheetTotalRows: 'Mediciones',
+              sheetDayPacking: 'Envasado', sheetDayEnd: 'Fin del periodo envasado', sheetDayRetail: 'Simulación retail (abierto)',
+              sheetNoDays: 'Aún no hay días de evaluación definidos.'
             }
           };
           const rt = RT[lang] || RT['en'];
@@ -2521,6 +2938,8 @@
           const [activeTab, setActiveTab] = useState('setup');
           const [activeGroupId, setActiveGroupId] = useState(1);
           const [isPreview, setIsPreview] = useState(false);
+          // Printable worksheet of all planned measurements (Day ▸ Variant ▸ ID)
+          const [isSheet, setIsSheet] = useState(false);
           const [unitSystem, setUnitSystem] = useState('metric'); // 'metric' or 'imperial'
           const fileInputRef = useRef(null);
           
@@ -2544,7 +2963,10 @@
 
           const [project, setProject] = useState({
             reportTitle: 'Quality Report MAP Test',
-            productName: '', processingType: 'Whole', type: '', origin: '', company: '', contactName: '', contactEmail: '', contactRole: '', contactPhone: '', street: '', houseNumber: '', addressExtra: '', zipCode: '', city: '', country: '', employee: '', trialTarget: '', currentChallenge: '',
+            // `productName` is what the report prints; `productId` links it to the
+            // shared product database so board, dashboard and the other forms
+            // agree on which product this trial is about.
+            productName: '', productId: '', processingType: 'Whole', type: '', origin: '', company: '', contactName: '', contactEmail: '', contactRole: '', contactPhone: '', street: '', houseNumber: '', addressExtra: '', zipCode: '', city: '', country: '', employee: '', trialTarget: '', currentChallenge: '',
             rrO2: '', rrCO2: '', rrTemp: '', startWeight: '',
             // Packaging — mirrors proposal so the Setup tab has full parity.
             packagings: [{ id: 1, packagingType: 'Retail', material: '', length: '', width: '', height: '', startWeight: '' }],
@@ -2772,7 +3194,9 @@
             }));
           };
 
-          const exportData = async () => {
+          // Build the canonical report export object. Extracted from exportData
+          // so the Project Board autosave path can persist the same payload.
+          const buildExportData = () => {
             // Rebuild canonical contacts[] so report exports round-trip cleanly.
             const normalizedClientInfo = globalConfig.buildContactsArray
               ? { ...clientInfo, contacts: globalConfig.buildContactsArray(clientInfo) }
@@ -2784,7 +3208,7 @@
             // multi-contact UI's current state — never stale shadow flats.
             const primaryContact = (normalizedClientInfo.contacts && normalizedClientInfo.contacts[0]) || {};
 
-            const data = {
+            return {
               isPerfoTecReport: true,
               schemaVersion: globalConfig.SCHEMA_VERSION || '2.1',
               appVersion: globalConfig.APP_VERSION || '',
@@ -2794,6 +3218,10 @@
               project: { ...project, company: clientInfo.companyName, street: clientInfo.street, houseNumber: clientInfo.houseNumber, addressExtra: clientInfo.addressExtra, zipCode: clientInfo.zipCode, city: clientInfo.city, country: clientInfo.country, contactName: primaryContact.name || '', contactRole: primaryContact.role || '', contactEmail: primaryContact.email || '', contactPhone: primaryContact.phoneDirect || primaryContact.phoneWork || '' },
               clientInfo: normalizedClientInfo, supplyChain, groups, analysis
             };
+          };
+
+          const exportData = async () => {
+            const data = buildExportData();
             const jsonString = JSON.stringify(data, null, 2);
             const defaultName = `perfotec_report_${project.productName ? project.productName.replace(/[^a-z0-9]/gi, '_').toLowerCase() : 'data'}.json`;
             if (globalConfig.exportJSON) {
@@ -2892,15 +3320,17 @@
             setPendingProductSelection(null);
           };
 
-          const importData = (e) => {
-            const file = e.target.files[0]; if(!file) return;
-
-            // Local aliases for the helpers declared at component scope above —
-            // keeps the existing processData body unchanged.
-            const extractPrimaryContact = reportExtractPrimaryContact;
-            const seedContacts = reportSeedContacts;
-
-            const processData = (raw) => {
+          // Apply a parsed report/intake/proposal payload to component state.
+          // Lifted to component scope (was nested in importData as processData)
+          // so both the file <input> importer and the Project Board deep-link
+          // loader (?boardProject=) can reuse the exact same logic.
+          const applyReportData = (raw) => {
+            // A newly loaded document must be re-checked against the product
+            // database, even when it carries the same product id as the last one.
+            setDocLoadSeq(n => n + 1);
+                // Local aliases for the helpers declared at component scope above.
+                const extractPrimaryContact = reportExtractPrimaryContact;
+                const seedContacts = reportSeedContacts;
                 // Normalise legacy shapes (flat contacts, targetGoal alias, missing
                 // schemaVersion) before we read from the payload.
                 const d = globalConfig.migrateSchema ? globalConfig.migrateSchema(raw) : raw;
@@ -3019,19 +3449,243 @@
                    })));
                    if(d.analysis) setAnalysis({ graphNotes: d.analysis.graphNotes||'', conclusion: d.analysis.conclusion||'', variantConclusions: d.analysis.variantConclusions||{}, recommendation: d.analysis.recommendation||'retest', nextSteps: d.analysis.nextSteps||[], temperatureImages: getTempImages(d.analysis), temperatureLabel: d.analysis.temperatureLabel||'', showGasSection: d.analysis.showGasSection ?? null, showHubPredictions: d.analysis.showHubPredictions ?? null, showWeightLoss: d.analysis.showWeightLoss ?? null, generalObservations: d.analysis.generalObservations||'', targetAchieved: d.analysis.targetAchieved||null, targetEvaluation: d.analysis.targetEvaluation||'' });
                 }
-            };
+          };
 
+          const importData = (e) => {
+            const file = e.target.files[0]; if(!file) return;
             if (globalConfig.importJSON) {
-                globalConfig.importJSON(file, processData, () => alert("Error loading JSON file."));
+                globalConfig.importJSON(file, applyReportData, () => alert("Error loading JSON file."));
             } else {
-                const reader = new FileReader(); 
-                reader.onload = (ev) => { 
-                    try { processData(JSON.parse(ev.target.result)); } catch(err){ alert("Error loading file."); } 
-                }; 
-                reader.readAsText(file); 
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    try { applyReportData(JSON.parse(ev.target.result)); } catch(err){ alert("Error loading file."); }
+                };
+                reader.readAsText(file);
             }
             e.target.value = '';
           };
+
+          // === PROJECT BOARD INTEGRATION ===
+          // When opened as ...report.html?boardProject=<id>, load that project's
+          // report.json from the bound local folder and autosave edits back to it.
+          const boardProjectId = new URLSearchParams(window.location.search).get('boardProject');
+          const [boardState, setBoardState] = useState(boardProjectId ? 'loading' : 'off'); // off|loading|needs-permission|linked|error
+          const [boardTitle, setBoardTitle] = useState('');
+          const [boardPeople, setBoardPeople] = useState([]); // product managers from the board registry [{name,email,phone}]
+          const boardLoadedRef = useRef(false);
+          const boardSaveTimer = useRef(null);
+
+          const normBoardPeople = (arr) => (arr || []).map(x => typeof x === 'string' ? { name: x, email: '', phone: '' } : { name: (x && x.name) || '', email: (x && x.email) || '', phone: (x && x.phone) || '' }).filter(x => x.name);
+
+          const loadBoardProject = async () => {
+            const B = window.PerfoTecBoard;
+            const manifest = await B.readManifest();
+            const proj = (manifest.projects || []).find(p => p.id === boardProjectId);
+            if (proj) setBoardTitle(proj.title || '');
+            const pmList = normBoardPeople(manifest.people && manifest.people.productManagers);
+            setBoardPeople(pmList);
+            // Prefer this phase's file, but fall back to the latest available phase
+            // file so a moved/forwarded project always opens with its content.
+            const data = await B.readProjectData(boardProjectId, 'report');
+            // Refuse to arm the autosave for a payload we do not recognise: writing
+            // back would replace real data with a blank export. Known shapes only.
+            if (data && !(data.isPerfoTecIntake || data.isPerfoTecProposal || data.isPerfoTecReport)) {
+              setBoardState('unreadable');
+              return;
+            }
+            if (data) applyReportData(data);
+            // Couple board metadata into the tool: packing date ← board packing date,
+            // PerfoTec employee ← product manager (+ their email/phone), when empty.
+            if (proj) {
+              const pmPerson = proj.productManager ? pmList.find(x => x.name === proj.productManager) : null;
+              setProject(pr => ({
+                ...pr,
+                packingDate: pr.packingDate || proj.startDate || pr.packingDate,
+                employee: pr.employee || proj.productManager || '',
+                employeeEmail: pr.employeeEmail || (pmPerson && pmPerson.email) || '',
+                employeePhone: pr.employeePhone || (pmPerson && pmPerson.phone) || ''
+              }));
+            }
+            boardLoadedRef.current = true;
+            setBoardState('linked');
+          };
+
+          useEffect(() => {
+            if (!boardProjectId || !window.PerfoTecBoard) { if (boardProjectId) setBoardState('error'); return; }
+            let cancelled = false;
+            (async () => {
+              try {
+                const state = await window.PerfoTecBoard.permissionState();
+                if (state !== 'granted') { if (!cancelled) setBoardState('needs-permission'); return; }
+                if (!cancelled) await loadBoardProject();
+              } catch (err) {
+                if (cancelled) return;
+                setBoardState(err && err.code === 'NEEDS_PERMISSION' ? 'needs-permission' : 'error');
+              }
+            })();
+            return () => { cancelled = true; };
+          }, [boardProjectId]);
+
+          const grantBoardAccess = async () => {
+            try {
+              const ok = await window.PerfoTecBoard.requestAccess();
+              if (ok) { setBoardState('loading'); await loadBoardProject(); }
+            } catch (err) { setBoardState('error'); }
+          };
+
+          // Deep-link: ...report.html?boardProject=<id>&measureDay=<day> opens the
+          // Measurements tab and scrolls to (and flashes) that day's row.
+          const measureDayParam = new URLSearchParams(window.location.search).get('measureDay');
+          const measureDayHandled = useRef(false);
+          useEffect(() => {
+            if (measureDayParam == null || measureDayParam === '') return;
+            // If board-linked, wait until the project data has loaded.
+            if (boardProjectId && boardState !== 'linked') return;
+            if (measureDayHandled.current) return;
+            const target = parseFloat(measureDayParam);
+            // 'groups' is the tab that holds the measurements table ("Variant
+            // Results"). It used to say 'measurements', which matches no tab key at
+            // all — the whole tab body then rendered empty on every ?measureDay link.
+            setActiveTab('groups');
+
+            // The measurements table renders ONLY the active variant, so the row
+            // anchor for this day exists only when a group containing that day is
+            // selected. Without this the deep link silently did nothing whenever
+            // the day was absent from the default group (a Control variant often
+            // has far fewer evaluation days than the treated ones). Prefer a group
+            // that actually has data for the day, then any group that has the day.
+            if (!isNaN(target) && Array.isArray(groups) && groups.length > 0) {
+              const rowFor = (g) => (g.measurements || []).find(m => parseFloat(m.day) === target);
+              const hasDay = (g) => !!rowFor(g);
+              const hasData = (g) => {
+                const m = rowFor(g);
+                if (!m) return false;
+                if (Array.isArray(m.images) && m.images.length) return true;
+                if ((m.notes || '').trim()) return true;
+                if (Array.isArray(m.qualityParams) && m.qualityParams.length) return true;
+                return (m.samples || []).some(s => ['weight', 'o2', 'co2'].some(k => {
+                  const v = String(s[k] == null ? '' : s[k]).trim();
+                  return v && parseFloat(v) !== 0;
+                }));
+              };
+              const current = groups.find(g => g.id === activeGroupId);
+              if (current && hasDay(current)) {
+                measureDayHandled.current = true;   // already looking at the right variant
+              } else {
+                const pick = groups.find(hasData) || groups.find(hasDay);
+                if (pick) { setActiveGroupId(pick.id); measureDayHandled.current = true; }
+                // No group has this day yet — leave it unhandled so a later data
+                // load (import, or a slower board fetch) can still target it.
+              }
+            }
+
+            // Poll instead of guessing a delay: the row may not be mounted yet on a
+            // slow load, or right after the group switch above.
+            let tries = 0;
+            const iv = setInterval(() => {
+              const el = document.getElementById('meas-day-' + measureDayParam);
+              if (el) {
+                clearInterval(iv);
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                el.style.transition = 'background-color 0.3s';
+                el.style.backgroundColor = '#dcfce7';
+                setTimeout(() => { el.style.backgroundColor = ''; }, 2600);
+              } else if (++tries > 40) {
+                clearInterval(iv); // ~4s — give up quietly rather than spin forever
+              }
+            }, 100);
+            return () => clearInterval(iv);
+          }, [boardState, measureDayParam, groups, activeGroupId]);
+
+          // Holds the currently-pending autosave so the shared "Board" button can
+          // flush it before navigating away (see PerfoTecBoard.registerFlush).
+          const pendingBoardSave = useRef(null);
+
+          // Debounced write-back to the project folder (mirrors the dashboard's autosave).
+          useEffect(() => {
+            if (boardState !== 'linked' || !boardLoadedRef.current) return;
+            if (boardSaveTimer.current) clearTimeout(boardSaveTimer.current);
+            const doBoardSave = async () => {
+              pendingBoardSave.current = null;
+              try {
+                const B = window.PerfoTecBoard;
+                await B.writePhaseFile(boardProjectId, 'report', buildExportData());
+                const manifest = await B.readManifest();
+                const idx = (manifest.projects || []).findIndex(p => p.id === boardProjectId);
+                if (idx >= 0) {
+                  const p = manifest.projects[idx];
+                  const patch = { files: { ...(p.files || {}), report: true }, updatedAt: new Date().toISOString() };
+                  if (!p.client && clientInfo.companyName) patch.client = clientInfo.companyName;
+                  if (!p.product && project.productName) patch.product = project.productName;
+                  // The product LINK is board-owned and always mirrored, unlike the
+                  // product NAME, which Pipedrive owns on CRM projects and is
+                  // therefore only filled when the board has nothing yet.
+                  if (project.productId && p.productId !== project.productId) patch.productId = project.productId;
+                  // Mirror coupled fields tool → board: packing date and PerfoTec
+                  // employee (= product manager on the board).
+                  if (project.packingDate) patch.startDate = project.packingDate;
+                  if (project.employee) patch.productManager = project.employee;
+                  if (!p.image && (project.coverImage || project.startImage)) {
+                    const scaled = await B.scaleImage(project.coverImage || project.startImage, 480);
+                    if (scaled) patch.image = scaled;
+                  }
+                  // Generate one action per planned measurement day (P+day), dated
+                  // from the packing date. A day counts as DONE when its measurement
+                  // actually has data entered (a photo, notes, quality params, or a
+                  // sample weight/gas value) — a blank row (all zeros) stays open.
+                  // Manual done-overrides (doneManual) and manual actions are kept.
+                  const measHasData = (m) => {
+                    if (!m) return false;
+                    if (Array.isArray(m.images) && m.images.length) return true;
+                    if ((m.notes || '').trim()) return true;
+                    if (Array.isArray(m.qualityParams) && m.qualityParams.length) return true;
+                    if (Array.isArray(m.samples) && m.samples.some(s => {
+                      const w = String(s.weight == null ? '' : s.weight).trim();
+                      const o2 = String(s.o2 == null ? '' : s.o2).trim();
+                      const co2 = String(s.co2 == null ? '' : s.co2).trim();
+                      return (w && parseFloat(w) > 0) || (o2 && parseFloat(o2) !== 0) || (co2 && parseFloat(co2) !== 0);
+                    })) return true;
+                    return false;
+                  };
+                  const dayDone = (d) => {
+                    const rows = (groups || []).map(g => (g.measurements || []).find(mm => parseFloat(mm.day) === d)).filter(Boolean);
+                    return rows.length > 0 && rows.every(measHasData);
+                  };
+                  const days = Array.from(new Set((groups || []).flatMap(g => (g.measurements || []).map(m => parseFloat(m.day))))).filter(d => !isNaN(d)).sort((a, b) => a - b);
+                  const baseDate = project.packingDate || p.startDate;
+                  const dateFor = (d) => { if (!baseDate) return ''; const dt = new Date(baseDate); if (isNaN(dt.getTime())) return ''; dt.setDate(dt.getDate() + d); return dt.toISOString().slice(0, 10); };
+                  const prevActions = p.actions || [];
+                  const prevMeasByDay = {};
+                  prevActions.forEach(a => { if (a && a.kind === 'measurement' && a.day != null) prevMeasByDay[String(a.day)] = a; });
+                  // Keep manual actions; drop legacy auto/measurement (regenerated).
+                  const manualActions = prevActions.filter(a => a && a.kind !== 'measurement' && !a.auto);
+                  const measActions = days.map(d => {
+                    const prevA = prevMeasByDay[String(d)] || {};
+                    const action = { id: 'meas-' + d, kind: 'measurement', day: d, date: dateFor(d), text: 'Measurement P+' + d, done: dayDone(d) };
+                    if (prevA.doneManual != null) action.doneManual = prevA.doneManual;
+                    return action;
+                  });
+                  patch.actions = [...measActions, ...manualActions];
+                  manifest.projects[idx] = { ...p, ...patch };
+                  await B.writeManifest(manifest);
+                }
+              } catch (err) { /* transient — next edit retries */ }
+            };
+            pendingBoardSave.current = doBoardSave;
+            boardSaveTimer.current = setTimeout(doBoardSave, 1200);
+            return () => { if (boardSaveTimer.current) clearTimeout(boardSaveTimer.current); };
+          }, [boardState, clientInfo, project, supplyChain, groups, analysis, lang, unitSystem]);
+
+          // Flush a debounced autosave when the user leaves via the shared
+          // "Board" button, so the last edit is never dropped.
+          useEffect(() => {
+            const B = window.PerfoTecBoard;
+            if (!B || !B.registerFlush) return;
+            return B.registerFlush(() => {
+              if (boardSaveTimer.current) { clearTimeout(boardSaveTimer.current); boardSaveTimer.current = null; }
+              return pendingBoardSave.current ? pendingBoardSave.current() : null;
+            });
+          }, []);
 
           const handleGroupChange = (id, section, field, value) => {
             setGroups(prev => prev.map(g => {
@@ -3092,92 +3746,15 @@
             defectsMatrix: (p.defectsMatrix || []).map(r => r.id === rowId ? { ...r, [field]: value } : r)
           }));
 
-          // === PRODUCT-SHEET IMPORTER ===
-          // Drop-zone parser: takes a PerfoTec product-sheet HTML and fills
-          // gas/temp targets + the defects matrix. Mirrors proposal.html so
-          // both tools speak the same product-sheet format.
-          const extractProductSheetTranslations = (htmlText) => {
-            const startMarker = 'const translations';
-            const startIdx = htmlText.indexOf(startMarker);
-            if (startIdx === -1) return null;
-            const eqIdx = htmlText.indexOf('=', startIdx);
-            if (eqIdx === -1) return null;
-            const braceStart = htmlText.indexOf('{', eqIdx);
-            if (braceStart === -1) return null;
-            let depth = 0, i = braceStart, inStr = null, escaped = false;
-            while (i < htmlText.length) {
-              const c = htmlText[i];
-              if (escaped) { escaped = false; i++; continue; }
-              if (inStr) {
-                if (c === '\\') { escaped = true; i++; continue; }
-                if (c === inStr) inStr = null;
-                i++; continue;
-              }
-              if (c === '"' || c === "'" || c === '`') { inStr = c; i++; continue; }
-              if (c === '{') depth++;
-              else if (c === '}') { depth--; if (depth === 0) { i++; break; } }
-              i++;
-            }
-            const objLit = htmlText.substring(braceStart, i);
-            try { return new Function('return ' + objLit)(); } catch (e) { return null; }
-          };
-          const stripHtml = (html) => {
-            if (!html) return '';
-            const tmp = document.createElement('div');
-            tmp.innerHTML = String(html);
-            return tmp.textContent.replace(/\s+/g, ' ').trim();
-          };
-          const parseProductSheet = (htmlText, targetLang) => {
-            const result = { defects: [], o2Target: '', co2Target: '', tempCritical: '', o2Acp: '' };
-            if (!htmlText || typeof htmlText !== 'string') return result;
-            try {
-              const doc = new DOMParser().parseFromString(htmlText, 'text/html');
-              const allTrans = extractProductSheetTranslations(htmlText);
-              const wanted = targetLang || 'nl';
-              const langDict = (allTrans && allTrans[wanted] && Object.keys(allTrans[wanted]).length > 0)
-                ? allTrans[wanted] : null;
-              const cellText = (td) => {
-                const key = td.getAttribute && td.getAttribute('data-translate');
-                if (key && langDict && langDict[key]) return stripHtml(langDict[key]);
-                return td.textContent.replace(/\s+/g, ' ').trim();
-              };
-              const rows = doc.querySelectorAll('#common-defects table.data-table tbody tr, table.data-table tbody tr');
-              const seen = new Set();
-              rows.forEach((tr, i) => {
-                const tds = tr.querySelectorAll('td');
-                if (tds.length < 4) return;
-                const defect = cellText(tds[0]);
-                const cause = cellText(tds[1]);
-                const effectMHP = cellText(tds[2]);
-                const effectMAP = cellText(tds[3]);
-                if (!defect && !cause) return;
-                const key = defect + '|' + cause;
-                if (seen.has(key)) return;
-                seen.add(key);
-                result.defects.push({ id: Date.now() + i, defect, cause, effectMHP, effectMAP });
-              });
-              const blocks = doc.querySelectorAll('#optimal-conditions .condition-block, .condition-block');
-              blocks.forEach(block => {
-                const title = (block.querySelector('.condition-title')?.textContent || '').trim();
-                const value = (block.querySelector('.condition-value')?.textContent || '').replace(/\s+/g, ' ').trim();
-                if (!value) return;
-                if (/O₂|O2/i.test(title) && !/CO/i.test(title)) result.o2Target = value;
-                else if (/CO₂|CO2/i.test(title)) result.co2Target = value;
-                else if (/Temp/i.test(title)) result.tempCritical = value;
-              });
-              let acpText = '';
-              if (langDict && langDict.res_box_text) acpText = stripHtml(langDict.res_box_text);
-              else {
-                const acpHost = doc.querySelector('[data-translate="res_box_text"]') ||
-                                doc.querySelector('#anaerobic-respiration p') ||
-                                doc.querySelector('section .text-xs.text-gray-700');
-                acpText = acpHost?.textContent || '';
-              }
-              const acpMatch = acpText.match(/(\d+(?:[.,]\d+)?)\s*[-–]\s*(\d+(?:[.,]\d+)?)\s*%/);
-              if (acpMatch) result.o2Acp = `${acpMatch[1].replace(',', '.')}% - ${acpMatch[2].replace(',', '.')}%`;
-            } catch (e) { /* return partial result */ }
-            return result;
-          };
+          // === PRODUCTS ===
+          // Sheet parsing and the product database come from product-tools.js,
+          // shared with intake.html and proposal.html. Report used to carry its
+          // own parser that only understood the pre-2026 sheet template, so the
+          // sheets written by the current product-sheet skill silently failed to
+          // import here; using the shared one fixes that and keeps the three
+          // forms in step as the template evolves.
+          const Products = window.PerfoTecProduct;
+
           const applyProductSheet = (parsed) => {
             if (!parsed) return;
             setProject(p => ({
@@ -3186,6 +3763,8 @@
               ...(parsed.co2Target ? { co2Target: parsed.co2Target } : {}),
               ...(parsed.tempCritical ? { tempMin: parsed.tempCritical } : {}),
               ...(parsed.o2Acp ? { acpO2: parsed.o2Acp } : {}),
+              ...(parsed.co2Max ? { co2Max: parsed.co2Max } : {}),
+              ...(parsed.ethyleneProfile ? { ethyleneProfile: parsed.ethyleneProfile } : {}),
               defectsMatrix: parsed.defects && parsed.defects.length > 0 ? parsed.defects : (p.defectsMatrix || [])
             }));
           };
@@ -3193,8 +3772,8 @@
             if (!file) return;
             const reader = new FileReader();
             reader.onload = (ev) => {
-              const parsed = parseProductSheet(ev.target?.result || '', lang);
-              if (parsed.defects.length === 0 && !parsed.o2Target && !parsed.co2Target && !parsed.tempCritical) {
+              const parsed = Products.parseSheet(ev.target?.result || '', lang);
+              if (!Products.sheetHasData(parsed)) {
                 alert(rt.productSheetParseFail || 'Could not parse this product sheet.');
                 return;
               }
@@ -3209,6 +3788,108 @@
             setProductSheetDragOver(false);
             const file = e.dataTransfer?.files?.[0];
             if (file) handleProductSheetFile(file);
+          };
+
+          // === PRODUCT PICKER ===
+          // Identical behaviour to intake and proposal: pick from the shared
+          // product database, or type a name and add it as a new product.
+          const [dashProducts, setDashProducts] = useState([]);
+          // Bumped whenever a document is loaded, so the live-link effect below
+          // re-checks it against the product database even when the product id is
+          // unchanged from the previous document.
+          const [docLoadSeq, setDocLoadSeq] = useState(0);
+          const [dashState, setDashState] = useState('loading'); // loading | ready | unavailable
+          const [dashMsg, setDashMsg] = useState('');
+          const [creatingProduct, setCreatingProduct] = useState(null); // null | 'whole' | 'processed'
+
+          useEffect(() => {
+            let cancelled = false;
+            Products.loadProducts().then(list => {
+              if (cancelled) return;
+              setDashProducts(list);
+              setDashState(list.length > 0 ? 'ready' : 'unavailable');
+            });
+            return () => { cancelled = true; };
+          }, []);
+
+          const applyDashProduct = (prod) => {
+            if (!prod) return;
+            const { patch, defectCount } = Products.targetPatch(prod, lang);
+            setProject(p => ({ ...p, ...Products.identityPatch(prod), ...patch }));
+            // Defects may come from the dashboard's own matrix or from an attached
+            // sheet; what matters to the user is whether any came across at all.
+            setDashMsg(
+              defectCount > 0
+                ? (rt.dashAppliedDefects || 'Imported from the product database, including {n} defects.').replace('{n}', defectCount)
+                : (rt.dashAppliedNoDefects || 'Imported the target window. This product has no defects matrix yet.')
+            );
+          };
+
+          // === LIVE LINK TO THE PRODUCT DATABASE ===
+          // A linked project must always show the product's CURRENT data, not a
+          // snapshot from when it was first picked. Renaming a product or editing
+          // its targets in the dashboard therefore reaches every project that
+          // points at it, the next time that project is opened.
+          //
+          // Runs once per product id: after a project is loaded (from the board or
+          // a file) and the product list has arrived. A product that no longer
+          // exists leaves the document untouched — better a stale document than a
+          // silently emptied one — and says so.
+          useEffect(() => {
+            const id = project.productId;
+            if (!id || dashProducts.length === 0) return;
+            const prod = dashProducts.find(p => p.id === id);
+            if (!prod) { setDashMsg(rt.productMissing || ''); return; }
+            applyDashProduct(prod);
+          }, [project.productId, dashProducts, docLoadSeq]);
+
+          const handleProductNameChange = (name) => {
+            const hit = Products.matchProduct(name, dashProducts);
+            if (hit) { applyDashProduct(hit); return; }
+            setDashMsg('');
+            setProject(p => ({
+              ...p,
+              productName: name,
+              productId: '',
+              // Leaving a linked product: clear what came from it (variety and the
+              // whole characteristics block). A brand-new product has no data yet,
+              // and showing the previous product's values under this name would be
+              // plainly wrong. Values typed by hand while nothing was linked stay.
+              ...(p.productId ? { type: '', ...Products.emptyTargetPatch() } : {})
+            }));
+          };
+
+          // The state is passed in explicitly rather than read from the form's
+          // processing-type toggle: that toggle silently defaults to Whole, and a
+          // product's state decides which dashboard entry every later trial lands
+          // in. It has to be a deliberate choice, so the user picks it here.
+          const createProductFromName = async (state) => {
+            const name = (project.productName || '').trim();
+            if (!name || creatingProduct) return;
+            setCreatingProduct(state === 'processed' ? 'processed' : 'whole');
+            try {
+              const prod = await Products.createProduct({
+                name,
+                variety: project.type || '',
+                state: state === 'processed' ? 'processed' : 'whole'
+              });
+              setDashProducts(prev => prev.concat([prod])
+                .sort((a, b) => (a.hasSheet !== b.hasSheet) ? (a.hasSheet ? -1 : 1) : a.label.localeCompare(b.label)));
+              setDashState('ready');
+              // Adopt the created product wholesale, so the form's processing
+              // type cannot disagree with the state just chosen for it.
+              setProject(p => ({ ...p, ...Products.identityPatch(prod) }));
+              setDashMsg((rt.dashCreated || '✓ "{name}" added to the product database.').replace('{name}', name));
+            } catch (err) {
+              if (err && err.code === 'NO_STORE') {
+                setDashMsg(rt.dashCreateUnavailable || 'The product database is not reachable.');
+              } else {
+                console.error('Creating the product failed:', err);
+                setDashMsg(rt.dashCreateFailed || 'Could not add this product to the database.');
+              }
+            } finally {
+              setCreatingProduct(null);
+            }
           };
 
           // === EVALUATION DAYS (Groups tab) ===
@@ -3425,6 +4106,10 @@
             return <PrintPreview clientInfo={clientInfo} project={project} groups={groups} supplyChain={supplyChain} onBack={() => setIsPreview(false)} analysis={analysis} unitSystem={unitSystem} lang={lang} />;
           }
 
+          if (isSheet) {
+            return <MeasurementSheet clientInfo={clientInfo} project={project} groups={groups} onBack={() => setIsSheet(false)} unitSystem={unitSystem} lang={lang} rt={rt} />;
+          }
+
           // Auto-detect section visibility for checkbox defaults (null = auto, true/false = manual override)
           const autoShowGas = groups.some(g =>
             (!g.specs?.atmosphereStrategy || g.specs.atmosphereStrategy === 'MAP') &&
@@ -3446,7 +4131,25 @@
           // --- EDITOR VIEW ---
           return (
             <div className="min-h-screen font-sans text-slate-800 bg-slate-50 pb-20">
-              
+
+              {/* PROJECT BOARD LINK BANNER */}
+              {boardProjectId && boardState !== 'off' && (
+                <div className="w-full text-white text-sm px-4 py-2 flex items-center justify-center gap-3 print:hidden" style={{ backgroundColor: (boardState === 'unreadable' || boardState === 'error') ? '#ea580c' : '#084BCD' }}>
+                  <span className="flex items-center gap-2">
+                    <FolderOpen size={16} />
+                    {boardState === 'linked' && <span>Linked to Project Board{boardTitle ? `: ${boardTitle}` : ''} — changes autosave to the project folder.</span>}
+                    {boardState === 'loading' && <span>Loading project from the board…</span>}
+                    {boardState === 'needs-permission' && <span>Grant access to the project folder to load this project.</span>}
+                    {boardState === 'error' && <span>Could not reach the project folder. Open this from the Project Board.</span>}
+                    {boardState === 'unreadable' && <span>This project's file is not a recognised intake/proposal/report — nothing was changed and autosave is off, so the file stays intact.</span>}
+                  </span>
+                  {boardState === 'needs-permission' && (
+                    <button onClick={grantBoardAccess} className="bg-white/20 hover:bg-white/30 rounded-md px-3 py-1 font-bold">Grant access</button>
+                  )}
+                  <a href="board.html" className="underline/50 hover:underline opacity-80 hover:opacity-100">← Board</a>
+                </div>
+              )}
+
               {/* Modals */}
               <SampleModal isOpen={sampleModalOpen} onClose={() => setSampleModalOpen(false)} data={editingMeasurement ? editingMeasurement.data : {}} onSave={saveSampleData} day0Samples={editingMeasurement ? editingMeasurement.day0Samples : null} projectCriteria={project.criteria || []} isEvaluationDay={editingMeasurement ? editingMeasurement.isEvaluationDay : false} isDayEditable={editingMeasurement ? editingMeasurement.isDayEditable : false} startWeight={editingMeasurement ? editingMeasurement.startWeight : 0} projectTotalDuration={project.totalDuration} isMAP={editingMeasurement ? editingMeasurement.isMAP : true} rt={rt} />
               <DetailsModal isOpen={detailsModalOpen} onClose={() => setDetailsModalOpen(false)} data={editingMeasurement ? editingMeasurement.data : {}} onSave={saveDetailsData} rt={rt} />
@@ -3564,6 +4267,12 @@
                       <Save size={18} className="text-green-600 shrink-0"/>
                       <span className="hidden lg:flex flex-col items-start leading-[1.05] text-[10px] uppercase tracking-tight">
                         {(rt.saveAs || '').split(' ').map((w, i) => <span key={i} className={i === 0 ? '' : 'opacity-60 font-medium'}>{w}</span>)}
+                      </span>
+                    </button>
+                    <button onClick={() => setIsSheet(true)} className="bg-white border border-slate-300 text-slate-700 p-2 lg:pr-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm" title={rt.sheetButton}>
+                      <ClipboardList size={18} className="shrink-0" style={{ color: BRAND.colors.green }}/>
+                      <span className="hidden lg:flex flex-col items-start leading-[1.05] text-[10px] uppercase tracking-tight">
+                        {(rt.sheetButton || '').split(' ').map((w, i) => <span key={i} className={i === 0 ? '' : 'opacity-60 font-medium'}>{w}</span>)}
                       </span>
                     </button>
                     <button onClick={() => {
@@ -3801,7 +4510,17 @@
                          </div>
                          <p className="text-sm text-slate-600 mb-4">Contact details of the PerfoTec employee leading this trial.</p>
                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                           <div><label className={labelClass}>{rt.perfoTecEmployee}</label><input type="text" className={inputClass} value={project.employee || ''} onChange={e => handleProjectChange('employee', e.target.value)} /></div>
+                           <div><label className={labelClass}>{rt.perfoTecEmployee}</label>
+                             {boardPeople.length > 0 ? (
+                               <select className={inputClass} value={project.employee || ''} onChange={e => { const nm = e.target.value; const person = boardPeople.find(x => x.name === nm); handleProjectChange('employee', nm); if (person) { handleProjectChange('employeeEmail', person.email || ''); handleProjectChange('employeePhone', person.phone || ''); } }}>
+                                 <option value="">—</option>
+                                 {(project.employee && !boardPeople.some(x => x.name === project.employee)) && <option value={project.employee}>{project.employee}</option>}
+                                 {boardPeople.map(x => <option key={x.name} value={x.name}>{x.name}</option>)}
+                               </select>
+                             ) : (
+                               <input type="text" className={inputClass} value={project.employee || ''} onChange={e => handleProjectChange('employee', e.target.value)} />
+                             )}
+                           </div>
                            <div><label className={labelClass}>{rt.employeeEmail}</label><input type="email" className={inputClass} value={project.employeeEmail || ''} onChange={e => handleProjectChange('employeeEmail', e.target.value)} /></div>
                            <div><label className={labelClass}>{rt.employeePhone}</label><input type="text" className={inputClass} value={project.employeePhone || ''} onChange={e => handleProjectChange('employeePhone', e.target.value)} /></div>
                          </div>
@@ -3845,7 +4564,58 @@
                          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                            <div className="md:col-span-2">
                              <label className={labelClass}>{rt.productName} <span className="text-red-500">*</span></label>
-                             <input type="text" className={`${inputClass} text-xl font-bold py-4`} value={project.productName || ''} onChange={e => handleProjectChange('productName', e.target.value)} />
+                             {/* Same control as intake and proposal: pick from the
+                                 shared product database, or type a name that is not
+                                 in it yet. */}
+                             <input
+                               type="text"
+                               list="pt-report-products"
+                               className={`${inputClass} text-xl font-bold py-4`}
+                               placeholder={rt.productNameSelectHint}
+                               value={project.productName || ''}
+                               onChange={e => handleProductNameChange(e.target.value)}
+                             />
+                             <datalist id="pt-report-products">
+                               {dashProducts.map(p => (
+                                 <option key={p.id} value={p.label}>{p.state}{p.hasSheet ? ' · ' + rt.dashWithSheet : ''}</option>
+                               ))}
+                             </datalist>
+
+                             <div className="mt-2 min-h-[24px]">
+                               {project.productId ? (
+                                 <span className="text-xs font-bold text-green-700 flex items-center gap-1.5">
+                                   <Check size={13} />{rt.productLinked}
+                                 </span>
+                               ) : (project.productName || '').trim() ? (
+                                 /* The state is chosen here, not taken from the toggle
+                                    below: it decides which dashboard entry every later
+                                    trial for this product lands in, so it must never be
+                                    a silent default. */
+                                 <div className="flex flex-wrap items-center gap-2">
+                                   <span className="text-xs text-amber-700">{rt.productNotLinked}</span>
+                                   <span className="text-xs text-slate-500">{rt.productCreateAs}</span>
+                                   {[['whole', rt.productStateWhole], ['processed', rt.productStateProcessed]].map(([st, label]) => (
+                                     <button
+                                       key={st}
+                                       type="button"
+                                       onClick={() => createProductFromName(st)}
+                                       disabled={!!creatingProduct}
+                                       className="text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-60 hover:bg-green-50"
+                                       style={{ borderColor: BRAND.colors.green, color: BRAND.colors.green }}
+                                     >
+                                       {creatingProduct === st ? (rt.productCreating || '…') : `+ ${label}`}
+                                     </button>
+                                   ))}
+                                 </div>
+                               ) : (
+                                 <span className="text-xs text-slate-400">
+                                   {dashState === 'ready'
+                                     ? (rt.productPickHint || '').replace('{n}', dashProducts.length)
+                                     : rt.dashUnavailableShort}
+                                 </span>
+                               )}
+                             </div>
+                             {dashMsg && <div className="text-xs font-bold text-green-700 mt-2">{dashMsg}</div>}
                            </div>
 
                            <div className="md:col-span-1 md:row-span-4 flex flex-col">
@@ -4285,8 +5055,17 @@
                          * Index-based identity (no value-shifting while typing),
                          * sort happens only on commit-add. */}
                         <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm">
-                           <label className="block mb-2 font-extrabold text-slate-800 text-lg">{rt.globalEvalDays}</label>
-                           <p className="text-sm text-slate-500 mb-6">{rt.evalDaysDesc}</p>
+                           <div className="flex flex-wrap items-start justify-between gap-4">
+                              <div>
+                                 <label className="block mb-2 font-extrabold text-slate-800 text-lg">{rt.globalEvalDays}</label>
+                                 <p className="text-sm text-slate-500 mb-6">{rt.evalDaysDesc}</p>
+                              </div>
+                              {/* Same worksheet as the header button — surfaced here because
+                                  this is where the measurement plan is put together. */}
+                              <button type="button" onClick={() => setIsSheet(true)} className="text-sm bg-white border border-slate-300 text-slate-700 px-5 py-2.5 rounded-xl font-bold hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm inline-flex items-center gap-2 shrink-0">
+                                 <ClipboardList size={16} style={{ color: BRAND.colors.green }}/> {rt.sheetButton}
+                              </button>
+                           </div>
                            <div className="flex flex-wrap gap-3 mb-6">
                               {(groups.find(g => g.id === activeGroupId)?.measurements || []).map((m, i) => (
                                 <div key={i} className="flex gap-2 items-center bg-slate-50 p-2 rounded-xl border border-slate-200 shadow-sm">
@@ -4434,7 +5213,7 @@
                                          const isOpened = project.totalDuration && parseFloat(m.day) > parseFloat(project.totalDuration);
 
                                          return (
-                                           <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                                           <tr key={idx} id={'meas-day-' + m.day} className="hover:bg-slate-50 transition-colors">
                                              <td className="p-4 text-center font-extrabold text-slate-700 bg-slate-50/50">P+{m.day}</td>
                                              <td className="p-4 text-xs font-bold text-slate-400">{m.samples?.length || 0}x</td>
                                              {isMAP && <td className="p-4 font-extrabold text-blue-700">{isOpened ? '-' : `${avgO2}`}</td>}
