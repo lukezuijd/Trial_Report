@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PerfoTec – Product Intake Form</title>
+    <!-- Montserrat: official PerfoTec typeface -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        /* ── PerfoTec brand tokens v2.0 ───────────────────────── */
+        :root {
+            --pf-green:      #008837;
+            --pf-green-dark: #006A2A;
+            --pf-green-tint: #F0FAF4;
+            --pf-blue:       #084BCD;
+            --pf-blue-tint:  #F1F6FF;
+            --pf-charcoal:   #333333;
+            --pf-ink:        #1A1B1F;
+            --pf-mist:       #F7F7F7;
+            --pf-cool:       #E4EBF3;
+            --pf-white:      #FFFFFF;
+            --pf-warm:       #C05C0A;   /* challenge/warning accent */
+            --pf-indigo:     #3730A3;   /* supply chain */
+            --pf-slate:      #6B7280;
+            --pf-border:     #CBD5E1;
+            --pf-font: "Montserrat", Arial, "Helvetica Neue", Helvetica, sans-serif;
+            --pf-r: 6px;
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: var(--pf-font);
+            background: #64748B;
+            padding: 20px;
+            color: var(--pf-ink);
+            font-size: 8pt;
+            line-height: 1.35;
+        }
+
+        /* ── A4 PAGE ───────────────────────────────────────────── */
+        .page {
+            background: var(--pf-white);
+            width: 210mm;
+            min-height: 297mm;
+            margin: 0 auto;
+            padding: 10mm 12mm 8mm;
+            box-shadow: 0 8px 48px rgba(0,0,0,.30);
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            position: relative;
+        }
+
+        /* Gradient accent bar along the top */
+        .page::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; height: 4px;
+            background: linear-gradient(90deg, var(--pf-green) 0%, var(--pf-blue) 100%);
+        }
+
+        /* ── HEADER ────────────────────────────────────────────── */
+        .hdr {
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            gap: 10px;
+            align-items: center;
+            padding-bottom: 8px;
+            border-bottom: 2px solid var(--pf-green);
+        }
+
+        .hdr-logo { height: 24px; object-fit: contain; display: block; }
+
+        .hdr-center { text-align: center; }
+
+        .hdr-title {
+            font-size: 15pt;
+            font-weight: 900;
+            color: var(--pf-blue);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            line-height: 1;
+        }
+
+        .hdr-sub {
+            font-size: 6pt;
+            font-weight: 600;
+            color: var(--pf-slate);
+            text-transform: uppercase;
+            letter-spacing: .5px;
+            margin-top: 2px;
+        }
+
+        /* Right side of header: date */
+        .hdr-right {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 4px;
+        }
+
+        /* PerfoTec logo — click to replace */
+        .logo-wrap {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            cursor: pointer;
+        }
+        .logo-wrap input[type="file"] {
+            position: absolute; inset: 0; opacity: 0;
+            cursor: pointer; width: 100%; height: 100%; z-index: 2;
+        }
+        .logo-wrap:hover .hdr-logo { opacity: .65; }
+        .logo-wrap::after {
+            content: '↑ replace';
+            position: absolute; bottom: -10px; left: 50%;
+            transform: translateX(-50%);
+            font-size: 5pt; font-weight: 700; color: var(--pf-blue);
+            white-space: nowrap; opacity: 0;
+            transition: opacity .15s;
+            pointer-events: none;
+        }
+        .logo-wrap:hover::after { opacity: 1; }
+
+        .date-row {
+            display: flex; align-items: center; gap: 4px; justify-content: flex-end;
+        }
+        .date-row .lbl { margin-bottom: 0; }
+
+        /* ── SECTION HEADERS ───────────────────────────────────── */
+        .sec {
+            display: flex; align-items: center; gap: 6px;
+            padding: 3px 9px;
+            border-radius: 5px;
+            margin-bottom: 5px;
+        }
+        .sec.green  { background: var(--pf-green);  color: var(--pf-white); }
+        .sec.blue   { background: var(--pf-blue);   color: var(--pf-white); }
+        .sec.warm   { background: var(--pf-warm);   color: var(--pf-white); }
+        .sec.indigo { background: var(--pf-indigo); color: var(--pf-white); }
+        .sec.light  {
+            background: var(--pf-cool);
+            border-left: 3px solid var(--pf-blue);
+        }
+
+        .sec-num {
+            width: 15px; height: 15px;
+            border-radius: 50%;
+            background: rgba(255,255,255,.22);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 7.5pt; font-weight: 800; flex-shrink: 0;
+        }
+
+        .sec-title {
+            font-size: 8pt; font-weight: 800;
+            text-transform: uppercase; letter-spacing: .5px;
+        }
+        .sec.light .sec-title { color: var(--pf-blue); }
+
+        .sec-hint {
+            font-size: 6pt; font-weight: 600; opacity: .72; margin-left: 2px;
+        }
+
+        /* ── FIELD ROWS / FIELDS ───────────────────────────────── */
+        .row {
+            display: flex; gap: 7px;
+            margin-bottom: 5px;
+            align-items: flex-end;
+        }
+        .row.top { align-items: flex-start; }
+
+        .f    { display: flex; flex-direction: column; flex: 1; }
+        .f.w2 { flex: 2; }
+        .f.w3 { flex: 3; }
+        .f.w4 { flex: 4; }
+        .f.w5 { flex: 5; }
+
+        /* Label */
+        .lbl {
+            font-size: 5.5pt; font-weight: 700;
+            text-transform: uppercase; letter-spacing: .45px;
+            color: var(--pf-slate);
+            margin-bottom: 2px; white-space: nowrap;
+        }
+        .lbl.req::after { content: ' *'; color: #DC2626; }
+        .lbl.green { color: var(--pf-green); }
+        .lbl.blue  { color: var(--pf-blue);  }
+        .lbl.warm  { color: var(--pf-warm);  }
+
+        /* Underline input */
+        .line {
+            border: none;
+            border-bottom: 1px solid var(--pf-ink);
+            height: 16px; width: 100%;
+            background: transparent;
+            font-family: var(--pf-font);
+            font-size: 8pt; outline: none;
+            color: var(--pf-ink); padding: 0 2px;
+        }
+        .line::placeholder { color: #BBBEC6; font-size: 7pt; font-style: italic; }
+        .line.bold { font-weight: 700; font-size: 9pt; }
+
+        /* Textarea */
+        .box {
+            border: 1px solid var(--pf-border);
+            border-radius: 5px; width: 100%;
+            background: var(--pf-mist);
+            font-family: var(--pf-font);
+            font-size: 8pt; outline: none;
+            padding: 5px 7px; resize: none;
+            color: var(--pf-ink); line-height: 1.5;
+        }
+        .box::placeholder { color: #BBBEC6; font-style: italic; font-size: 7.5pt; }
+        .box.warm  { border-color: var(--pf-warm);  background: #FFF8F3; }
+        .box.green { border-color: var(--pf-green); background: var(--pf-green-tint); }
+
+        /* ── CHECKBOXES / RADIOS ───────────────────────────────── */
+        .checks { display: flex; flex-wrap: wrap; gap: 2px 12px; align-items: center; }
+
+        .chk {
+            display: flex; align-items: center; gap: 3px;
+            font-size: 7.5pt; font-weight: 500;
+            cursor: pointer; white-space: nowrap;
+        }
+        .chk input[type="checkbox"],
+        .chk input[type="radio"] {
+            width: 10px; height: 10px;
+            accent-color: var(--pf-green);
+            cursor: pointer; flex-shrink: 0;
+        }
+        .chk input[type="radio"] { accent-color: var(--pf-blue); }
+
+        /* ── CARDS (coloured blocks) ───────────────────────────── */
+        .card {
+            border-radius: var(--pf-r);
+            padding: 5px 8px;
+        }
+        .card.blue  { background: var(--pf-blue-tint); border: 1px solid #BDD0F6; }
+        .card.mist  { background: var(--pf-mist);      border: 1px solid var(--pf-cool); }
+        .card.amber {
+            background: #FFFBEB; border: 1px solid #FDE68A;
+            font-size: 7pt; font-style: italic;
+            color: var(--pf-slate); line-height: 1.45;
+            padding: 4px 7px;
+        }
+        .card.amber strong { font-style: normal; color: var(--pf-charcoal); }
+
+        /* ── PHOTO BOX ─────────────────────────────────────────── */
+        .photo-box {
+            width: 25mm; height: 28mm;
+            border: 1.5px dashed var(--pf-border);
+            border-radius: var(--pf-r);
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            background: var(--pf-mist); flex-shrink: 0;
+        }
+        .photo-box p {
+            font-size: 5.5pt; font-weight: 700; text-transform: uppercase;
+            color: #94A3B8; text-align: center;
+            margin-top: 4px; line-height: 1.4; letter-spacing: .3px;
+        }
+
+        /* ── SUPPLY CHAIN ──────────────────────────────────────── */
+        .transport-bar {
+            display: flex; align-items: center; gap: 8px;
+            background: #EEEEFF; border: 1px solid #C4C7F5;
+            border-radius: 5px; padding: 4px 8px; margin-bottom: 4px;
+        }
+        .transport-bar .lbl { margin-bottom: 0; color: var(--pf-indigo); }
+
+        table { width: 100%; border-collapse: collapse; font-size: 7.5pt; }
+
+        thead th {
+            background: var(--pf-indigo);
+            color: var(--pf-white);
+            padding: 3px 5px;
+            text-align: left;
+            font-size: 6.5pt; font-weight: 700;
+            text-transform: uppercase; letter-spacing: .3px;
+            white-space: nowrap;
+            font-family: var(--pf-font);
+        }
+
+        tbody td {
+            border-bottom: 1px solid var(--pf-cool);
+            padding: 2px 3px; vertical-align: middle;
+        }
+        tbody tr:nth-child(even) td { background: var(--pf-mist); }
+
+        .td-n {
+            width: 16px; text-align: center;
+            font-weight: 700; color: var(--pf-indigo);
+        }
+
+        /* Inline field for table cells */
+        .si {
+            border: none;
+            border-bottom: 1px solid var(--pf-border);
+            background: transparent;
+            font-family: var(--pf-font);
+            font-size: 7.5pt; width: 100%;
+            outline: none; padding: 1px 2px; color: var(--pf-ink);
+        }
+        .si::placeholder { color: #BBBEC6; font-style: italic; font-size: 7pt; }
+
+        .si-chks { display: flex; gap: 6px; align-items: center; }
+        .si-chks .chk { font-size: 7pt; }
+
+        /* ── FOOTER ────────────────────────────────────────────── */
+        .footer {
+            border-top: 1.5px solid var(--pf-green);
+            padding-top: 4px; margin-top: auto;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .footer-note {
+            font-size: 5.5pt; color: var(--pf-slate);
+            max-width: 130mm; line-height: 1.5;
+        }
+        .footer-note a { color: var(--pf-blue); }
+        .footer-brand {
+            font-size: 7pt; font-weight: 700;
+            color: var(--pf-green); text-align: right; white-space: nowrap;
+        }
+
+        /* ── SCREEN-ONLY TOOLBAR ───────────────────────────────── */
+        .toolbar {
+            position: fixed; bottom: 20px; right: 20px;
+            display: flex; gap: 8px; z-index: 200;
+        }
+
+        .btn {
+            border: none; border-radius: 50px;
+            padding: 9px 20px; font-family: var(--pf-font);
+            font-weight: 700; font-size: 9pt; cursor: pointer;
+            display: flex; align-items: center; gap: 6px;
+            transition: all .15s;
+            box-shadow: 0 4px 14px rgba(0,0,0,.18);
+        }
+        .btn-print { background: var(--pf-green);  color: var(--pf-white); }
+        .btn-print:hover { background: var(--pf-green-dark); transform: translateY(-1px); }
+        .btn-clear { background: var(--pf-white); color: var(--pf-slate); border: 1px solid var(--pf-cool); }
+        .btn-clear:hover { background: var(--pf-mist); }
+
+        /* ── PRINT ─────────────────────────────────────────────── */
+        @media print {
+            @page { size: A4; margin: 0; }
+
+            body { background: var(--pf-white); padding: 0; margin: 0; }
+
+            .page {
+                width: 100%; min-height: 100vh;
+                padding: 10mm 12mm 8mm;
+                box-shadow: none;
+            }
+
+            .toolbar { display: none !important; }
+
+            /* Hide photo box and logo-swap hint in print */
+            .photo-box { display: none !important; }
+            .logo-wrap::after { display: none !important; }
+
+            .line { border-bottom: .5pt solid #000; }
+            .si   { border-bottom: .5pt solid #aaa; }
+            .box  { border: .5pt solid #aaa; background: var(--pf-white) !important; }
+
+            input, textarea {
+                -webkit-appearance: none;
+                background: transparent !important;
+            }
+
+            /* Hide all placeholder text when printing — fields appear blank */
+            ::placeholder { color: transparent !important; }
+
+            /* Preserve background colours in print */
+            .sec.green, .sec.blue, .sec.warm, .sec.indigo,
+            .sec.light, .card.blue, .card.mist, .card.amber,
+            .transport-bar,
+            tbody tr:nth-child(even) td, thead th {
+                print-color-adjust: exact;
+                -webkit-print-color-adjust: exact;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ── Toolbar (screen only) ──────────────────────────────── -->
+<div class="toolbar">
+    <button class="btn btn-clear" onclick="clearForm()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M3 6h18M19 6l-1 14H6L5 6M8 6V4h8v2"/>
+        </svg>
+        Clear form
+    </button>
+    <button class="btn btn-print" onclick="window.print()">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <polyline points="6 9 6 2 18 2 18 9"/>
+            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+            <rect x="6" y="14" width="12" height="8"/>
+        </svg>
+        Print / Save as PDF
+    </button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<div class="page">
+
+    <!-- ── HEADER ────────────────────────────────────────────── -->
+    <div class="hdr">
+
+        <!-- Left: PerfoTec logo — click to replace with your own -->
+        <div class="logo-wrap" title="Click to replace logo">
+            <img id="hdr-logo" class="hdr-logo"
+                 src="https://cdn.prod.website-files.com/68b594c756c22085ddc6c1ea/68b59ba2f027bfeecd25261b_PerfoTec%20logo.png"
+                 alt="PerfoTec" />
+            <input type="file" accept="image/*" onchange="handleLogo(event)" />
+        </div>
+
+        <!-- Centre: form title -->
+        <div class="hdr-center">
+            <div class="hdr-title">Product Intake Form</div>
+            <div class="hdr-sub">Modified Atmosphere Packaging &nbsp;·&nbsp; Confidential Test Request</div>
+        </div>
+
+        <!-- Right: date -->
+        <div class="hdr-right">
+            <div class="date-row">
+                <span class="lbl">Date:</span>
+                <input type="text" class="line"
+                       style="width:72px; font-size:7.5pt; text-align:center;"
+                       placeholder="DD / MM / YYYY" />
+            </div>
+        </div>
+    </div>
+
+    <!-- ── ① COMPANY & CONTACT ────────────────────────────────── -->
+    <div>
+        <div class="sec green">
+            <div class="sec-num">1</div>
+            <span class="sec-title">Company &amp; Contact</span>
+        </div>
+
+        <div class="row">
+            <div class="f w4">
+                <div class="lbl req">Company Name</div>
+                <input type="text" class="line bold" placeholder="Your company name" />
+            </div>
+            <div class="f w2">
+                <div class="lbl">Country / Region</div>
+                <input type="text" class="line" placeholder="e.g. Netherlands" />
+            </div>
+            <div class="f w2">
+                <div class="lbl">Website</div>
+                <input type="text" class="line" placeholder="www.yourcompany.com" />
+            </div>
+        </div>
+
+        <div class="row" style="margin-bottom:0;">
+            <div class="f w3">
+                <div class="lbl req">Contact Name</div>
+                <input type="text" class="line" />
+            </div>
+            <div class="f w2">
+                <div class="lbl">Job Title</div>
+                <input type="text" class="line" />
+            </div>
+            <div class="f w3">
+                <div class="lbl req">Email</div>
+                <input type="email" class="line" placeholder="name@company.com" />
+            </div>
+            <div class="f w2">
+                <div class="lbl">Phone</div>
+                <input type="tel" class="line" placeholder="+31 6 ..." />
+            </div>
+        </div>
+    </div>
+
+    <!-- ── ② PRODUCT & PACKAGING ──────────────────────────────── -->
+    <div>
+        <div class="sec blue">
+            <div class="sec-num">2</div>
+            <span class="sec-title">Product &amp; Packaging</span>
+        </div>
+
+        <div style="display:flex; gap:8px; align-items:flex-start;">
+            <div style="flex:1;">
+
+                <!-- Basic product info -->
+                <div class="row">
+                    <div class="f w4">
+                        <div class="lbl req blue">Product Name</div>
+                        <input type="text" class="line bold" placeholder="e.g. Strawberry, Broccoli, Avocado" />
+                    </div>
+                    <div class="f w2">
+                        <div class="lbl">Variety / Type</div>
+                        <input type="text" class="line" placeholder="e.g. Elsanta, Hass" />
+                    </div>
+                    <div class="f w2">
+                        <div class="lbl">Country of Origin</div>
+                        <input type="text" class="line" placeholder="e.g. Spain" />
+                    </div>
+                </div>
+
+                <div class="row">
+                    <!-- Radio: mutually exclusive -->
+                    <div class="f w3" style="align-self:flex-end;">
+                        <div class="lbl req">State of Product</div>
+                        <div class="checks" style="margin-top:3px; gap:14px;">
+                            <label class="chk">
+                                <input type="radio" name="prod-state" /> Whole / Intact
+                            </label>
+                            <label class="chk">
+                                <input type="radio" name="prod-state" /> Processed / Fresh-cut
+                            </label>
+                        </div>
+                    </div>
+                    <div class="f w2">
+                        <div class="lbl">Maturity Stage at Packing</div>
+                        <input type="text" class="line" placeholder="e.g. Breaker, Class 1" />
+                    </div>
+                    <div class="f w2">
+                        <div class="lbl">Post-Harvest Treatment</div>
+                        <input type="text" class="line" placeholder="e.g. 1-MCP, wax, none" />
+                    </div>
+                </div>
+
+                <!-- MAP experience + gas requirements card -->
+                <div class="card mist" style="margin-bottom:5px;">
+
+                    <!-- Already using MAP? — radio (mutually exclusive) -->
+                    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:5px;">
+                        <div class="lbl" style="margin-bottom:0; white-space:nowrap;">
+                            Already using MAP packaging?
+                        </div>
+                        <div class="checks">
+                            <label class="chk"><input type="radio" name="map-exp" /> Yes</label>
+                            <label class="chk"><input type="radio" name="map-exp" /> No</label>
+                            <label class="chk"><input type="radio" name="map-exp" /> Not sure</label>
+                        </div>
+                    </div>
+
+                    <!-- O₂ / CO₂ section with disclaimer -->
+                    <div class="card amber" style="margin-bottom:5px;">
+                        <strong>Gas values — only fill in if you already know them.</strong>
+                        Leave these blank if unsure. PerfoTec will determine the optimal gas composition during testing.
+                    </div>
+
+                    <div class="row" style="margin-bottom:0;">
+                        <div class="f">
+                            <div class="lbl green">Target O₂ (%)</div>
+                            <input type="text" class="line" placeholder="e.g. 5 %" />
+                        </div>
+                        <div class="f">
+                            <div class="lbl blue">Critical CO₂ (%)</div>
+                            <input type="text" class="line" placeholder="e.g. 10 %" />
+                        </div>
+                        <div class="f w4">
+                            <div class="lbl">Source of these values</div>
+                            <input type="text" class="line" placeholder="e.g. previous trial, literature, supplier spec" />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Packaging type + dimensions card -->
+                <div class="card blue">
+                    <div class="lbl blue" style="margin-bottom:4px;">Packaging Type &amp; Dimensions</div>
+
+                    <div class="checks" style="margin-bottom:5px; gap:2px 10px;">
+                        <label class="chk"><input type="checkbox" /> Punnets</label>
+                        <label class="chk"><input type="checkbox" /> Tray (sealed)</label>
+                        <label class="chk"><input type="checkbox" /> Flow pack</label>
+                        <label class="chk"><input type="checkbox" /> Pillow bag</label>
+                        <label class="chk"><input type="checkbox" /> Clamshell</label>
+                        <label class="chk"><input type="checkbox" /> Box / Crate</label>
+                        <label class="chk"><input type="checkbox" /> Pallet</label>
+                        <label class="chk">
+                            <input type="checkbox" /> Other:
+                            <input type="text" class="si" style="width:44px; margin-left:2px;" />
+                        </label>
+                    </div>
+
+                    <div class="row" style="margin-bottom:0;">
+                        <div class="f w4">
+                            <div class="lbl req">Current Film / Material</div>
+                            <input type="text" class="line" placeholder="e.g. OPP 30 μm, BOPP, PET/PE" />
+                        </div>
+                        <div class="f w2">
+                            <div class="lbl req">Length (mm)</div>
+                            <input type="number" class="line" placeholder="e.g. 250" />
+                        </div>
+                        <div class="f w2">
+                            <div class="lbl req">Width (mm)</div>
+                            <input type="number" class="line" placeholder="e.g. 180" />
+                        </div>
+                        <div class="f w2">
+                            <div class="lbl">Height (mm)</div>
+                            <input type="number" class="line" placeholder="e.g. 50" />
+                        </div>
+                        <div class="f w2">
+                            <div class="lbl req">Net Weight (g)</div>
+                            <input type="number" class="line" placeholder="e.g. 500" />
+                        </div>
+                    </div>
+                </div>
+
+            </div><!-- /flex left -->
+
+            <!-- Photo placeholder -->
+            <div class="photo-box">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" stroke-width="1.5">
+                    <rect x="3" y="3" width="18" height="18" rx="2"/>
+                    <circle cx="8.5" cy="8.5" r="1.5"/>
+                    <polyline points="21 15 16 10 5 21"/>
+                </svg>
+                <p>Product<br>photo<br><span style="font-size:5pt;font-weight:500;opacity:.7;">(optional)</span></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── ③ CHALLENGE & GOAL ─────────────────────────────────── -->
+    <div>
+        <div class="sec warm">
+            <div class="sec-num">3</div>
+            <span class="sec-title">Challenge &amp; Target Goal</span>
+        </div>
+
+        <div class="row top" style="margin-bottom:0;">
+            <div class="f">
+                <div class="lbl req warm">⚠ What is the current problem?</div>
+                <textarea class="box warm" rows="6"
+                    placeholder="Describe the issue you face — e.g. product loses firmness after 5 days, excessive condensation in packaging, high decay rate during transport to the UK..."></textarea>
+            </div>
+            <div class="f">
+                <div class="lbl req green">✓ What result are you aiming for?</div>
+                <textarea class="box green" rows="6"
+                    placeholder="What does a successful test look like? — e.g. extend shelf life from 7 to 14 days, reduce weight loss to below 3%, maintain colour until end of shelf life..."></textarea>
+            </div>
+        </div>
+    </div>
+
+    <!-- ── QUALITY CRITERIA ────────────────────────────────────── -->
+    <div>
+        <div class="sec light">
+            <span class="sec-title">Quality Criteria to Evaluate</span>
+            <span class="sec-hint">(tick all that apply)</span>
+        </div>
+        <div class="checks" style="padding:1px 4px; gap:3px 14px;">
+            <label class="chk"><input type="checkbox" /> Shelf life extension</label>
+            <label class="chk"><input type="checkbox" /> Firmness / Texture</label>
+            <label class="chk"><input type="checkbox" /> Colour retention</label>
+            <label class="chk"><input type="checkbox" /> Visual appearance</label>
+            <label class="chk"><input type="checkbox" /> Weight loss reduction</label>
+            <label class="chk"><input type="checkbox" /> Decay / Mould prevention</label>
+            <label class="chk"><input type="checkbox" /> Flavour / Aroma</label>
+            <label class="chk"><input type="checkbox" /> Condensation control</label>
+            <label class="chk"><input type="checkbox" /> O₂ / CO₂ levels</label>
+            <label class="chk">
+                <input type="checkbox" /> Other:&nbsp;
+                <input type="text" class="si" style="width:68px;" />
+            </label>
+        </div>
+    </div>
+
+    <!-- ── ④ SUPPLY CHAIN ─────────────────────────────────────── -->
+    <div>
+        <div class="sec indigo">
+            <div class="sec-num">4</div>
+            <span class="sec-title">Supply Chain Overview</span>
+            <span class="sec-hint">(from harvest to consumer)</span>
+        </div>
+
+        <!-- Transport mode — checkboxes (can be multiple) -->
+        <div class="transport-bar">
+            <div class="lbl" style="margin-bottom:0; color:var(--pf-indigo); white-space:nowrap;">
+                Primary transport:
+            </div>
+            <div class="checks">
+                <label class="chk"><input type="checkbox" /> Road</label>
+                <label class="chk"><input type="checkbox" /> Air Freight</label>
+                <label class="chk"><input type="checkbox" /> Sea Freight</label>
+                <label class="chk"><input type="checkbox" /> Storage only</label>
+            </div>
+        </div>
+
+        <!--
+            Supply chain table
+            ── All stage fields start EMPTY.
+            ── Placeholder text shows examples — the customer fills in their own chain.
+        -->
+        <table>
+            <thead>
+                <tr>
+                    <th style="width:16px;">#</th>
+                    <th style="width:38%;">Stage / Activity</th>
+                    <th style="width:60px;">Temperature</th>
+                    <th style="width:52px;">Duration</th>
+                    <th>Action at this step</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td class="td-n">1</td>
+                    <td><input type="text" class="si" placeholder="e.g. Farm / Harvest" /></td>
+                    <td><input type="text" class="si" placeholder="e.g. 15 °C" /></td>
+                    <td><input type="text" class="si" placeholder="e.g. 1 day" /></td>
+                    <td><div class="si-chks">
+                        <label class="chk"><input type="checkbox" /> Pack</label>
+                        <label class="chk"><input type="checkbox" /> Unpack</label>
+                        <label class="chk"><input type="checkbox" /> — None</label>
+                    </div></td>
+                </tr>
+                <tr>
+                    <td class="td-n">2</td>
+                    <td><input type="text" class="si" placeholder="e.g. Packing House" /></td>
+                    <td><input type="text" class="si" placeholder="e.g. 12 °C" /></td>
+                    <td><input type="text" class="si" placeholder="e.g. 1 day" /></td>
+                    <td><div class="si-chks">
+                        <label class="chk"><input type="checkbox" /> Pack</label>
+                        <label class="chk"><input type="checkbox" /> Unpack</label>
+                        <label class="chk"><input type="checkbox" /> — None</label>
+                    </div></td>
+                </tr>
+                <tr>
+                    <td class="td-n">3</td>
+                    <td><input type="text" class="si" placeholder="e.g. Transport" /></td>
+                    <td><input type="text" class="si" placeholder="e.g. 6 °C" /></td>
+                    <td><input type="text" class="si" placeholder="e.g. 3 days" /></td>
+                    <td><div class="si-chks">
+                        <label class="chk"><input type="checkbox" /> Pack</label>
+                        <label class="chk"><input type="checkbox" /> Unpack</label>
+                        <label class="chk"><input type="checkbox" /> — None</label>
+                    </div></td>
+                </tr>
+                <tr>
+                    <td class="td-n">4</td>
+                    <td><input type="text" class="si" placeholder="e.g. Distribution Centre" /></td>
+                    <td><input type="text" class="si" placeholder="e.g. 4 °C" /></td>
+                    <td><input type="text" class="si" placeholder="e.g. 1–2 days" /></td>
+                    <td><div class="si-chks">
+                        <label class="chk"><input type="checkbox" /> Pack</label>
+                        <label class="chk"><input type="checkbox" /> Unpack</label>
+                        <label class="chk"><input type="checkbox" /> — None</label>
+                    </div></td>
+                </tr>
+                <tr>
+                    <td class="td-n">5</td>
+                    <td><input type="text" class="si" placeholder="e.g. Retail / Store" /></td>
+                    <td><input type="text" class="si" placeholder="e.g. 18 °C" /></td>
+                    <td><input type="text" class="si" placeholder="e.g. 4–5 days" /></td>
+                    <td><div class="si-chks">
+                        <label class="chk"><input type="checkbox" /> Pack</label>
+                        <label class="chk"><input type="checkbox" /> Unpack</label>
+                        <label class="chk"><input type="checkbox" /> — None</label>
+                    </div></td>
+                </tr>
+                <tr>
+                    <td class="td-n">6</td>
+                    <td><input type="text" class="si" placeholder="e.g. Consumer / End user" /></td>
+                    <td><input type="text" class="si" placeholder="e.g. 20 °C" /></td>
+                    <td><input type="text" class="si" placeholder="e.g. 2 days" /></td>
+                    <td><div class="si-chks">
+                        <label class="chk"><input type="checkbox" /> Pack</label>
+                        <label class="chk"><input type="checkbox" /> Unpack</label>
+                        <label class="chk"><input type="checkbox" /> — None</label>
+                    </div></td>
+                </tr>
+                <tr>
+                    <td class="td-n" style="color:#B0BAC7;">+</td>
+                    <td><input type="text" class="si" placeholder="Additional step (if applicable)" /></td>
+                    <td><input type="text" class="si" /></td>
+                    <td><input type="text" class="si" /></td>
+                    <td><div class="si-chks">
+                        <label class="chk"><input type="checkbox" /> Pack</label>
+                        <label class="chk"><input type="checkbox" /> Unpack</label>
+                        <label class="chk"><input type="checkbox" /> — None</label>
+                    </div></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ── FOOTER ─────────────────────────────────────────────── -->
+    <div class="footer">
+        <div class="footer-note">
+            By completing this form you agree that PerfoTec B.V. may use the provided information
+            to prepare a customised test proposal. All information is treated as strictly confidential.
+            &nbsp;·&nbsp;
+            <a href="https://www.perfotec.com/privacy-policy">Privacy Policy</a>
+        </div>
+        <div class="footer-brand">
+            PerfoTec B.V. &nbsp;·&nbsp; www.perfotec.com &nbsp;·&nbsp; info@perfotec.com
+        </div>
+    </div>
+
+</div><!-- /page -->
+
+<script>
+    const ORIGINAL_LOGO = 'https://cdn.prod.website-files.com/68b594c756c22085ddc6c1ea/68b59ba2f027bfeecd25261b_PerfoTec%20logo.png';
+
+    // Replace logo image with uploaded file
+    function handleLogo(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = ev => {
+            document.getElementById('hdr-logo').src = ev.target.result;
+        };
+        reader.readAsDataURL(file);
+    }
+
+    // Clear all inputs and restore original logo
+    function clearForm() {
+        if (!confirm('Clear all fields and start with a blank form?')) return;
+        document.querySelectorAll('input[type="text"], input[type="email"], input[type="tel"], input[type="number"], textarea')
+            .forEach(el => el.value = '');
+        document.querySelectorAll('input[type="checkbox"], input[type="radio"]')
+            .forEach(el => el.checked = false);
+        document.getElementById('hdr-logo').src = ORIGINAL_LOGO;
+    }
+</script>
+
+</body>
+</html>
