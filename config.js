@@ -28,9 +28,11 @@ window.PERFOTEC_CONFIG = {
     // === 0. APP META ===
     APP_VERSION: '2.1.0',
 
-    // Webhook URL for the client intake form (intake_client.html).
-    // Keep config.js out of version control — this URL must stay private.
-    INTAKE_WEBHOOK_URL: 'https://hook.eu1.make.com/xybivi92y6ry2ia8fhc2f4mwxc8i3m7m',
+    // NOTE: this file is PUBLIC — it ships with the app to GitHub Pages. Never
+    // put credentials, webhook URLs or tokens here, and do not add a secrets file
+    // alongside it either: none of these pages sends data anywhere, and that is
+    // deliberate. A page served from a public URL cannot keep a secret, so any
+    // endpoint baked in here is callable by anyone who views the source.
 
     // SCHEMA_VERSION tracks the exported JSON shape. Bump this when the
     // structure of exported data changes in a way importers need to migrate.
