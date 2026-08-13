@@ -1,0 +1,1893 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PerfoTec Project Board</title>
+    <meta name="description" content="PerfoTec Project Board — local project management for the freshness workflow.">
+    <meta name="author" content="PerfoTec B.V.">
+    <meta name="theme-color" content="#008837">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Pinned to Babel 7 (v8 breaks the ESM importmap integration). -->
+    <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+
+    <link rel="stylesheet" href="style.css?v=77634a3c">
+    <script src="config.js?v=37136610"></script>
+    <script src="board-db.js?v=a2107b12"></script>
+</head>
+<body class="bg-[var(--brand-light-gray)] text-[var(--brand-black)]">
+    <a href="#main-content" class="skip-to-content">Skip to content</a>
+
+    <div id="root">
+        <div style="padding: 2rem; text-align: center; font-family: sans-serif; color: #666;" role="status">
+            Loading…
+        </div>
+    </div>
+
+    <script type="text/babel" data-type="module">
+        import React, { useState, useEffect, useMemo, useCallback, useRef } from 'https://esm.sh/react@18.2.0';
+        import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
+        import {
+            FolderOpen, Plus, Filter, X, Trash2, Pencil, ExternalLink,
+            GripVertical, AlertTriangle, RefreshCw, Calendar, User, Building2,
+            Package, Briefcase, ArrowRight, Check, LayoutDashboard,
+            ClipboardList, FileText, BarChart3, UserCog, Lock, CloudOff,
+            Image as ImageIcon, Upload, Settings, ChevronLeft, ChevronRight, List
+        } from 'https://esm.sh/lucide-react@0.292.0';
+
+        const Board = window.PerfoTecBoard;
+
+        // === Brand v2.0 (hardcoded — config.js still carries the 2023 palette) ===
+        const BRAND = {
+            green: '#008837', blue: '#084BCD', orange: '#ea580c',
+            black: '#211A1A', gray: '#E9E9E9', lightGray: '#F3F4F6', white: '#FFFFFF',
+            logo: (window.PERFOTEC_CONFIG && window.PERFOTEC_CONFIG.BRAND && window.PERFOTEC_CONFIG.BRAND.logos && window.PERFOTEC_CONFIG.BRAND.logos.default)
+                || 'https://cdn.prod.website-files.com/68b594c756c22085ddc6c1ea/68b59ba2f027bfeecd25261b_PerfoTec%20logo.png',
+            tagline: (window.PERFOTEC_CONFIG && window.PERFOTEC_CONFIG.BRAND && window.PERFOTEC_CONFIG.BRAND.tagline) || 'BEST FOR FRESHNESS'
+        };
+
+        // Accent colour per phase column (brand green → blue progression, orange = live/dashboard).
+        // Business Case is gone — projects now start at Intake, created in Pipedrive.
+        const PHASE_COLORS = {
+            intake: BRAND.green,
+            proposal: BRAND.blue,
+            report: BRAND.green,
+            dashboard: BRAND.orange
+        };
+        const PHASE_ICONS = {
+            intake: ClipboardList,
+            proposal: FileText,
+            report: BarChart3,
+            dashboard: LayoutDashboard
+        };
+        // Multiply an #rrggbb colour toward black for a solid gradient stop.
+        const darken = (hex, f = 0.8) => {
+            const n = parseInt(hex.slice(1), 16);
+            const r = Math.round(((n >> 16) & 255) * f);
+            const g = Math.round(((n >> 8) & 255) * f);
+            const b = Math.round((n & 255) * f);
+            return `rgb(${r},${g},${b})`;
+        };
+
+        // === Translations ===
+        const T = {
+            en: {
+                title: 'Project Board', subtitle: 'Manage every trial from Intake to Dashboard.',
+                crmOwned: 'Managed in Pipedrive', crmEditHint: 'Edit in Pipedrive',
+                openInPipedrive: 'Open the deal in Pipedrive',
+                lastSync: 'Last CRM sync', neverSynced: 'not synced yet',
+                conflictWarn: '{n} phase conflict(s) were resolved automatically — check the projects involved.',
+                flagDealLost: 'Deal lost in CRM', flagGateWithdrawn: 'Trial no longer set to Go',
+                chooseFolder: 'Choose project folder', grantAccess: 'Grant folder access',
+                changeFolder: 'Change folder', reload: 'Refresh',
+                switchFolderConfirm: 'The board is now using the folder "{name}".\n\nPick a different folder? Nothing is deleted — the board simply reads and writes the other folder from now on. Choose the shared SharePoint folder to work with the team.',
+                newProject: 'New project', editProject: 'Edit project', filter: 'Filter', clear: 'Clear filters',
+                noFolderTitle: 'Link the project database folder',
+                noFolderDesc: 'Select the shared database folder — the SharePoint folder "DataBase Trial WorkFlow" that you synced to this computer. Every project file lives there, so the whole team works on the same data. The browser asks you to pick it once; choose "Allow on every visit" and it stays linked after a restart.',
+                // Shared database (schema 2.0)
+                whoTitle: 'Who are you?',
+                whoDesc: 'The team shares one database. Your name is stamped on every change so everyone can see who moved a card — and so the board can show when a colleague is already working on a project.',
+                whoPlaceholder: 'e.g. Luke',
+                whoSave: 'Save', whoChange: 'Change name',
+                migrateTitle: 'Convert to the shared format',
+                migrateDesc: 'This folder still uses the single-user format: one board.json holding every project. On a shared folder that loses changes — two people saving at the same time overwrite each other. Converting gives every project its own file. Your board.json is kept as board.json.pre-split.',
+                migrateBtn: 'Convert now', migrateBusy: 'Converting…',
+                migrateDone: 'Converted: {n} project(s). The board now uses the shared format.',
+                lockedBy: '{name} is working on this',
+                conflictTitle: 'Someone else was faster',
+                conflictLine: '{name} changed "{card}" while you were editing it.',
+                conflictSomeone: 'A colleague',
+                conflictReloaded: 'The board has been reloaded, so you are looking at their version. Make your change again.',
+                artefactTitle: 'Sync conflict copies found',
+                artefactDesc: 'OneDrive could not merge these files, which means a change may not have arrived: {names}. Open the folder, check which version is correct and remove the copy.',
+                backupChip: 'Backup', backupNever: 'no backup yet',
+                backupTitle: 'Backups', backupClose: 'Close',
+                backupNow: 'Back up now', backupBusy: 'Backing up…',
+                backupDaily: 'Daily (7 slots)', backupWeekly: 'Weekly (4 kept)', backupMonthly: 'Monthly, full (12 kept)',
+                backupExplain: 'Daily and weekly snapshots hold the structure: cards, people and products. On the 1st of the month a full copy is made, including the phase exports. Whoever opens the board first that day makes the snapshot.',
+                backupEmpty: 'none yet',
+                backupRestore: 'Restore', backupRestoreBusy: 'Restoring…',
+                restoreConfirm: 'Restore {name}?\n\nThis overwrites the current cards, people and products with the versions from {date}. {n} card(s) will be written back. Phase exports (intake/proposal/report) are not touched.',
+                restoreDone: 'Restored: {n} card(s). The board has been reloaded.',
+                restoreFullHint: 'A full monthly copy is restored by hand: copy the files from the backup folder back over the database.',
+                startInPhase: 'Start a new {phase} document',
+                openDashboard: 'Open the Product Dashboard',
+                needsPermTitle: 'Folder access needed',
+                needsPermDesc: 'For security your browser asks permission once per session before reading or writing the project folder.',
+                unsupportedTitle: 'Browser not supported',
+                unsupportedDesc: 'This board needs the File System Access API. Open it via http://localhost in Chrome or Edge — not by double-clicking the file (file://).',
+                fTitle: 'Project title', fClient: 'Client (company)', fProduct: 'Product',
+                productLinked: 'Linked to the product database',
+                stateWhole: 'Whole', stateProcessed: 'Processed',
+                productUnlinked: 'Not in the product database yet — pick one from the list to link it',
+                viewBoard: 'Board', viewProducts: 'Products',
+                productsTitle: 'Products', noProducts: 'No products in this folder yet. Open the Product Dashboard to add them.',
+                productSheetYes: 'Product sheet', productSheetNo: 'No sheet',
+                productProjects: '{n} projects', productProject: '1 project', productNoProjects: 'No projects',
+                productUpdated: 'Updated', productOpen: 'Open in the dashboard',
+                fCommercial: 'Commercial lead (PerfoTec)', fPM: 'Product Manager (PerfoTec)',
+                fStart: 'Packing date', fNext: 'Next action', fPhase: 'Phase',
+                fPhoto: 'Product photo (optional)', uploadPhoto: 'Upload product photo', removePhoto: 'Remove',
+                fActions: 'Actions / next steps', addAction: 'Add action', actionPlaceholder: 'What needs to happen',
+                autoTag: 'auto', moreActions: 'more', selectNone: '— none —', addNewOption: '＋ Add new…', addPersonPrompt: 'Name of the new person:',
+                managePeople: 'Manage people', noPeople: 'No people yet.', rename: 'Rename', renamePrompt: 'New name:', confirmDeletePerson: 'Remove "{name}" from the list?',
+                emailPlaceholder: 'email', phonePlaceholder: 'phone',
+                agenda: 'Agenda', agendaAllPeople: 'All people', agendaEmpty: 'No actions yet.', agendaNoDate: 'No date',
+                overdue: 'Overdue', markDone: 'Mark done', markOpen: 'Mark open', allDone: 'All measurements done', autoMeasure: 'measurement', autoActionsHint: 'Measurement actions update automatically from the report.',
+                viewCalendar: 'Calendar', viewList: 'To-do', today: 'Today', agendaAllDone: 'Nothing to do — all caught up.', weekdays: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                save: 'Save', cancel: 'Cancel', delete: 'Delete', open: 'Open',
+                required: 'A project title is required.',
+                requiredClientProduct: 'Enter at least a client or a product.',
+                photoError: 'Could not read that image.',
+                confirmDelete: 'Delete this project and all its files? This cannot be undone.',
+                confirmDeleteShared: 'Remove this project from the board?\n\nThe card is removed for the whole team. Its documents (intake / proposal / report) are kept in the folder, so nothing is lost and a colleague who has one open is not cut off.',
+                all: 'All', search: 'Search…',
+                emptyColumn: 'Drop a card or JSON file here', noProjects: 'No projects yet — click a phase header to start a document, or use “New project”.',
+                notJson: 'Only .json files can be imported.', importFailed: 'Could not import',
+                openPhase: 'Open in tool', startPhase: 'Start this phase', untitled: 'No client yet', projOne: 'project', projMany: 'projects',
+                dashHint: 'Trial data will be imported into the dashboard automatically.',
+                titlePlaceholder: 'e.g. Westfalia — Avocado Peru',
+                error: 'Something went wrong'
+            },
+            nl: {
+                title: 'Project Board', subtitle: 'Beheer elke trial van Intake tot Dashboard.',
+                crmOwned: 'Beheerd in Pipedrive', crmEditHint: 'Wijzig in Pipedrive',
+                openInPipedrive: 'Open de deal in Pipedrive',
+                lastSync: 'Laatste CRM-sync', neverSynced: 'nog niet gesynchroniseerd',
+                conflictWarn: '{n} fase-conflict(en) automatisch opgelost — controleer de betrokken projecten.',
+                flagDealLost: 'Deal verloren in CRM', flagGateWithdrawn: 'Trial staat niet meer op Go',
+                chooseFolder: 'Kies projectmap', grantAccess: 'Geef toegang tot map',
+                changeFolder: 'Andere map', reload: 'Vernieuwen',
+                switchFolderConfirm: 'Het board gebruikt nu de map "{name}".\n\nEen andere map kiezen? Er wordt niets verwijderd — het board leest en schrijft vanaf nu simpelweg in de andere map. Kies de gedeelde SharePoint-map om met het team te werken.',
+                newProject: 'Nieuw project', editProject: 'Project bewerken', filter: 'Filter', clear: 'Filters wissen',
+                noFolderTitle: 'Koppel de projectdatabase-map',
+                noFolderDesc: 'Selecteer de gedeelde databasemap — de SharePoint-map "DataBase Trial WorkFlow" die je naar deze computer hebt gesynchroniseerd. Alle projectbestanden staan daarin, zodat het hele team op dezelfde data werkt. De browser vraagt je die één keer te kiezen; kies "Toestaan bij elk bezoek" en dan blijft hij ook na een herstart gekoppeld.',
+                // Gedeelde database (schema 2.0)
+                whoTitle: 'Wie ben je?',
+                whoDesc: 'Het team werkt op één database. Je naam wordt bij elke wijziging vastgelegd, zodat iedereen ziet wie een kaart heeft verplaatst — en zodat het board kan laten zien wanneer een collega al in een project werkt.',
+                whoPlaceholder: 'bijv. Luke',
+                whoSave: 'Opslaan', whoChange: 'Naam wijzigen',
+                migrateTitle: 'Omzetten naar het gedeelde formaat',
+                migrateDesc: 'Deze map gebruikt nog het formaat voor één gebruiker: één board.json met alle projecten erin. Op een gedeelde map gaan daarmee wijzigingen verloren — twee mensen die tegelijk opslaan overschrijven elkaar. Na omzetten heeft elk project zijn eigen bestand. Je board.json blijft bewaard als board.json.pre-split.',
+                migrateBtn: 'Nu omzetten', migrateBusy: 'Bezig met omzetten…',
+                migrateDone: 'Omgezet: {n} project(en). Het board gebruikt nu het gedeelde formaat.',
+                lockedBy: '{name} werkt hierin',
+                conflictTitle: 'Iemand anders was sneller',
+                conflictLine: '{name} heeft "{card}" gewijzigd terwijl jij ermee bezig was.',
+                conflictSomeone: 'Een collega',
+                conflictReloaded: 'Het board is opnieuw ingelezen, dus je kijkt nu naar hun versie. Voer je wijziging opnieuw door.',
+                artefactTitle: 'Conflictkopieën van de sync gevonden',
+                artefactDesc: 'OneDrive kon deze bestanden niet samenvoegen, dus mogelijk is een wijziging niet aangekomen: {names}. Open de map, kijk welke versie klopt en verwijder de kopie.',
+                backupChip: 'Back-up', backupNever: 'nog geen back-up',
+                backupTitle: 'Back-ups', backupClose: 'Sluiten',
+                backupNow: 'Back-up nu', backupBusy: 'Back-up bezig…',
+                backupDaily: 'Dagelijks (7 slots)', backupWeekly: 'Wekelijks (4 bewaard)', backupMonthly: 'Maandelijks, volledig (12 bewaard)',
+                backupExplain: 'De dagelijkse en wekelijkse snapshot bevatten de structuur: kaarten, personen en producten. Op de 1e van de maand wordt een volledige kopie gemaakt, inclusief de fase-exports. Wie het board die dag als eerste opent, maakt de snapshot.',
+                backupEmpty: 'nog geen',
+                backupRestore: 'Terugzetten', backupRestoreBusy: 'Bezig met terugzetten…',
+                restoreConfirm: '{name} terugzetten?\n\nDit overschrijft de huidige kaarten, personen en producten met de versies van {date}. Er worden {n} kaart(en) teruggeschreven. De fase-exports (intake/proposal/report) blijven ongemoeid.',
+                restoreDone: 'Teruggezet: {n} kaart(en). Het board is opnieuw ingelezen.',
+                restoreFullHint: 'Een volledige maandkopie zet je met de hand terug: kopieer de bestanden uit de back-upmap over de database heen.',
+                startInPhase: 'Start een nieuw {phase}-document',
+                openDashboard: 'Open het Product Dashboard',
+                needsPermTitle: 'Toegang tot de map nodig',
+                needsPermDesc: 'Voor de veiligheid vraagt je browser één keer per sessie toestemming voordat de projectmap gelezen of geschreven wordt.',
+                unsupportedTitle: 'Browser niet ondersteund',
+                unsupportedDesc: 'Dit board heeft de File System Access API nodig. Open het via http://localhost in Chrome of Edge — niet door het bestand te openen (file://).',
+                fTitle: 'Projecttitel', fClient: 'Opdrachtgever (bedrijf)', fProduct: 'Product',
+                productLinked: 'Gekoppeld aan de productendatabase',
+                stateWhole: 'Heel', stateProcessed: 'Bewerkt',
+                productUnlinked: 'Nog niet in de productendatabase — kies er een uit de lijst om te koppelen',
+                viewBoard: 'Board', viewProducts: 'Producten',
+                productsTitle: 'Producten', noProducts: 'Nog geen producten in deze map. Open het Product Dashboard om ze toe te voegen.',
+                productSheetYes: 'Product sheet', productSheetNo: 'Geen sheet',
+                productProjects: '{n} projecten', productProject: '1 project', productNoProjects: 'Geen projecten',
+                productUpdated: 'Bijgewerkt', productOpen: 'Openen in het dashboard',
+                fCommercial: 'Commercieel verantwoordelijk (PerfoTec)', fPM: 'Product Manager (PerfoTec)',
+                fStart: 'Inpakdatum', fNext: 'Volgende actie', fPhase: 'Fase',
+                fPhoto: 'Productfoto (optioneel)', uploadPhoto: 'Productfoto uploaden', removePhoto: 'Verwijderen',
+                fActions: 'Acties / volgende stappen', addAction: 'Actie toevoegen', actionPlaceholder: 'Wat er moet gebeuren',
+                autoTag: 'auto', moreActions: 'meer', selectNone: '— geen —', addNewOption: '＋ Nieuw toevoegen…', addPersonPrompt: 'Naam van de nieuwe persoon:',
+                managePeople: 'Personen beheren', noPeople: 'Nog geen personen.', rename: 'Hernoemen', renamePrompt: 'Nieuwe naam:', confirmDeletePerson: '"{name}" uit de lijst verwijderen?',
+                emailPlaceholder: 'e-mail', phonePlaceholder: 'telefoon',
+                agenda: 'Agenda', agendaAllPeople: 'Alle personen', agendaEmpty: 'Nog geen acties.', agendaNoDate: 'Geen datum',
+                overdue: 'Te laat', markDone: 'Afvinken', markOpen: 'Heropenen', allDone: 'Alle metingen gedaan', autoMeasure: 'meting', autoActionsHint: 'Meetacties worden automatisch bijgewerkt vanuit het rapport.',
+                viewCalendar: 'Kalender', viewList: 'Te doen', today: 'Vandaag', agendaAllDone: 'Niks te doen — alles is afgerond.', weekdays: ['Ma', 'Di', 'Wo', 'Do', 'Vr', 'Za', 'Zo'],
+                save: 'Opslaan', cancel: 'Annuleren', delete: 'Verwijderen', open: 'Openen',
+                required: 'Een projecttitel is verplicht.',
+                requiredClientProduct: 'Vul minimaal een opdrachtgever of product in.',
+                photoError: 'Kon die afbeelding niet lezen.',
+                confirmDelete: 'Dit project en alle bijbehorende bestanden verwijderen? Dit kan niet ongedaan gemaakt worden.',
+                confirmDeleteShared: 'Dit project van het board halen?\n\nDe kaart verdwijnt voor het hele team. De documenten (intake / proposal / report) blijven in de map staan, dus er gaat niets verloren en een collega die er nu in werkt wordt niet afgesloten.',
+                all: 'Alle', search: 'Zoeken…',
+                emptyColumn: 'Sleep hier een kaart of JSON-bestand', noProjects: 'Nog geen projecten — klik op een fase-header om een document te starten, of gebruik “Nieuw project”.',
+                notJson: 'Alleen .json-bestanden kunnen worden geïmporteerd.', importFailed: 'Kon niet importeren',
+                openPhase: 'Open in tool', startPhase: 'Start deze fase', untitled: 'Nog geen klant', projOne: 'project', projMany: 'projecten',
+                dashHint: 'Trial-data wordt automatisch in het dashboard geïmporteerd.',
+                titlePlaceholder: 'bijv. Westfalia — Avocado Peru',
+                error: 'Er ging iets mis'
+            },
+            es: {
+                title: 'Panel de Proyectos', subtitle: 'Gestione cada prueba desde la Recepción hasta el Panel.',
+                crmOwned: 'Gestionado en Pipedrive', crmEditHint: 'Editar en Pipedrive',
+                openInPipedrive: 'Abrir el negocio en Pipedrive',
+                lastSync: 'Última sincronización CRM', neverSynced: 'aún no sincronizado',
+                conflictWarn: '{n} conflicto(s) de fase resueltos automáticamente — revise los proyectos afectados.',
+                flagDealLost: 'Negocio perdido en el CRM', flagGateWithdrawn: 'La prueba ya no está en Go',
+                chooseFolder: 'Elegir carpeta', grantAccess: 'Conceder acceso',
+                changeFolder: 'Cambiar carpeta', reload: 'Actualizar',
+                switchFolderConfirm: 'El panel usa ahora la carpeta "{name}".\n\n¿Elegir otra carpeta? No se elimina nada — el panel simplemente leerá y escribirá en la otra carpeta a partir de ahora. Elija la carpeta compartida de SharePoint para trabajar con el equipo.',
+                newProject: 'Nuevo proyecto', editProject: 'Editar proyecto', filter: 'Filtro', clear: 'Limpiar',
+                noFolderTitle: 'Vincule la carpeta de base de datos',
+                noFolderDesc: 'Seleccione la carpeta compartida de la base de datos — la carpeta de SharePoint "DataBase Trial WorkFlow" sincronizada en este equipo. Todos los archivos de proyecto están allí, así todo el equipo trabaja sobre los mismos datos. El navegador le pide elegirla una vez; elija "Permitir en cada visita" y seguirá vinculada tras reiniciar.',
+                // Base de datos compartida (schema 2.0)
+                whoTitle: '¿Quién eres?',
+                whoDesc: 'El equipo comparte una base de datos. Su nombre se registra en cada cambio, para que todos vean quién movió una tarjeta — y para que el panel pueda mostrar cuándo un colega ya está trabajando en un proyecto.',
+                whoPlaceholder: 'ej. Luke',
+                whoSave: 'Guardar', whoChange: 'Cambiar nombre',
+                migrateTitle: 'Convertir al formato compartido',
+                migrateDesc: 'Esta carpeta usa todavía el formato de un solo usuario: un board.json con todos los proyectos. En una carpeta compartida eso pierde cambios — dos personas que guardan a la vez se sobrescriben. Al convertir, cada proyecto tiene su propio archivo. Su board.json se conserva como board.json.pre-split.',
+                migrateBtn: 'Convertir ahora', migrateBusy: 'Convirtiendo…',
+                migrateDone: 'Convertido: {n} proyecto(s). El panel usa ahora el formato compartido.',
+                lockedBy: '{name} está trabajando aquí',
+                conflictTitle: 'Alguien fue más rápido',
+                conflictLine: '{name} ha cambiado "{card}" mientras usted lo editaba.',
+                conflictSomeone: 'Un colega',
+                conflictReloaded: 'El panel se ha recargado, así que está viendo su versión. Vuelva a aplicar su cambio.',
+                artefactTitle: 'Copias de conflicto de sincronización',
+                artefactDesc: 'OneDrive no pudo combinar estos archivos, por lo que puede faltar un cambio: {names}. Abra la carpeta, compruebe qué versión es correcta y elimine la copia.',
+                backupChip: 'Copia', backupNever: 'sin copias aún',
+                backupTitle: 'Copias de seguridad', backupClose: 'Cerrar',
+                backupNow: 'Copiar ahora', backupBusy: 'Copiando…',
+                backupDaily: 'Diaria (7 espacios)', backupWeekly: 'Semanal (4 conservadas)', backupMonthly: 'Mensual, completa (12 conservadas)',
+                backupExplain: 'Las copias diaria y semanal contienen la estructura: tarjetas, personas y productos. El día 1 de cada mes se hace una copia completa, incluidas las exportaciones de fase. Quien abre el panel primero ese día crea la copia.',
+                backupEmpty: 'ninguna',
+                backupRestore: 'Restaurar', backupRestoreBusy: 'Restaurando…',
+                restoreConfirm: '¿Restaurar {name}?\n\nEsto sobrescribe las tarjetas, personas y productos actuales con las versiones del {date}. Se escribirán {n} tarjeta(s). Las exportaciones de fase (intake/proposal/report) no se tocan.',
+                restoreDone: 'Restaurado: {n} tarjeta(s). El panel se ha recargado.',
+                restoreFullHint: 'Una copia mensual completa se restaura a mano: copie los archivos de la carpeta de copia sobre la base de datos.',
+                startInPhase: 'Iniciar un nuevo documento de {phase}',
+                openDashboard: 'Abrir el Panel de Productos',
+                needsPermTitle: 'Se necesita acceso a la carpeta',
+                needsPermDesc: 'Por seguridad, el navegador pide permiso una vez por sesión antes de leer o escribir la carpeta.',
+                unsupportedTitle: 'Navegador no compatible',
+                unsupportedDesc: 'Este panel necesita la File System Access API. Ábralo vía http://localhost en Chrome o Edge — no con file://.',
+                fTitle: 'Título del proyecto', fClient: 'Cliente (empresa)', fProduct: 'Producto',
+                productLinked: 'Vinculado a la base de datos de productos',
+                stateWhole: 'Entero', stateProcessed: 'Procesado',
+                productUnlinked: 'Aún no está en la base de datos de productos — elija uno de la lista para vincularlo',
+                viewBoard: 'Board', viewProducts: 'Productos',
+                productsTitle: 'Productos', noProducts: 'Todavía no hay productos en esta carpeta. Abra el Panel de Productos para añadirlos.',
+                productSheetYes: 'Ficha de producto', productSheetNo: 'Sin ficha',
+                productProjects: '{n} proyectos', productProject: '1 proyecto', productNoProjects: 'Sin proyectos',
+                productUpdated: 'Actualizado', productOpen: 'Abrir en el panel',
+                fCommercial: 'Responsable comercial (PerfoTec)', fPM: 'Product Manager (PerfoTec)',
+                fStart: 'Fecha de empaque', fNext: 'Próxima acción', fPhase: 'Fase',
+                fPhoto: 'Foto del producto (opcional)', uploadPhoto: 'Subir foto del producto', removePhoto: 'Quitar',
+                fActions: 'Acciones / próximos pasos', addAction: 'Añadir acción', actionPlaceholder: 'Qué debe pasar',
+                autoTag: 'auto', moreActions: 'más', selectNone: '— ninguno —', addNewOption: '＋ Añadir nuevo…', addPersonPrompt: 'Nombre de la nueva persona:',
+                managePeople: 'Gestionar personas', noPeople: 'Aún no hay personas.', rename: 'Renombrar', renamePrompt: 'Nuevo nombre:', confirmDeletePerson: '¿Quitar "{name}" de la lista?',
+                emailPlaceholder: 'correo', phonePlaceholder: 'teléfono',
+                agenda: 'Agenda', agendaAllPeople: 'Todas las personas', agendaEmpty: 'Aún no hay acciones.', agendaNoDate: 'Sin fecha',
+                overdue: 'Atrasado', markDone: 'Completar', markOpen: 'Reabrir', allDone: 'Todas las mediciones hechas', autoMeasure: 'medición', autoActionsHint: 'Las acciones de medición se actualizan automáticamente desde el informe.',
+                viewCalendar: 'Calendario', viewList: 'Por hacer', today: 'Hoy', agendaAllDone: 'Nada pendiente — todo al día.', weekdays: ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'],
+                save: 'Guardar', cancel: 'Cancelar', delete: 'Eliminar', open: 'Abrir',
+                required: 'El título del proyecto es obligatorio.',
+                requiredClientProduct: 'Ingrese al menos un cliente o un producto.',
+                photoError: 'No se pudo leer esa imagen.',
+                confirmDelete: '¿Eliminar este proyecto y todos sus archivos? No se puede deshacer.',
+                confirmDeleteShared: '¿Quitar este proyecto del panel?\n\nLa tarjeta desaparece para todo el equipo. Sus documentos (intake / proposal / report) se conservan en la carpeta, así no se pierde nada y un colega que lo tenga abierto no queda cortado.',
+                all: 'Todos', search: 'Buscar…',
+                emptyColumn: 'Suelte una tarjeta o archivo JSON', noProjects: 'Aún no hay proyectos — haga clic en un encabezado de fase para iniciar un documento, o use “Nuevo proyecto”.',
+                notJson: 'Solo se pueden importar archivos .json.', importFailed: 'No se pudo importar',
+                openPhase: 'Abrir en herramienta', startPhase: 'Iniciar esta fase', untitled: 'Sin cliente', projOne: 'proyecto', projMany: 'proyectos',
+                dashHint: 'Los datos de la prueba se importarán al panel automáticamente.',
+                titlePlaceholder: 'p.ej. Westfalia — Aguacate Perú',
+                error: 'Algo salió mal'
+            }
+        };
+        const LANGS = (window.PERFOTEC_CONFIG && window.PERFOTEC_CONFIG.LANGUAGES) || [{ code: 'en', label: 'EN' }, { code: 'nl', label: 'NL' }, { code: 'es', label: 'ES' }];
+        const getInitialLang = () => {
+            const cfg = window.PERFOTEC_CONFIG;
+            if (cfg && cfg.getLanguage) return cfg.getLanguage();
+            const saved = localStorage.getItem('perfotec_lang');
+            if (saved && T[saved]) return saved;
+            const b = (navigator.language || '').substring(0, 2).toLowerCase();
+            return T[b] ? b : 'en';
+        };
+
+        const LangSwitcher = ({ lang, setLang }) => (
+            <div className="lang-selector" role="radiogroup" aria-label="Language">
+                {LANGS.map(l => (
+                    <button key={l.code} type="button" role="radio" aria-checked={lang === l.code}
+                        className={`lang-btn ${lang === l.code ? 'active' : ''}`}
+                        onClick={() => {
+                            setLang(l.code);
+                            if (window.PERFOTEC_CONFIG && window.PERFOTEC_CONFIG.setLanguage) window.PERFOTEC_CONFIG.setLanguage(l.code);
+                            document.documentElement.lang = l.code;
+                        }}>
+                        {l.label}
+                    </button>
+                ))}
+            </div>
+        );
+
+        // === Project modal (create / edit) ===
+        // `product` stays the display name (Pipedrive fills it, and older cards
+        // only have it). `productId` is the link into the shared product store —
+        // empty when the name matches nothing yet.
+        const emptyProject = () => ({
+            id: null, title: '', client: '', product: '', productId: '', commercial: '',
+            productManager: '', startDate: '', actions: [], phase: 'intake', image: ''
+        });
+
+        // How a product reads in a list: "Carrot Polished", "Bimi®Broccolini".
+        const productLabel = (p) => [p && p.name, p && p.variety].filter(Boolean).join(' ').trim();
+
+        // People entries may be legacy strings or { name, email, phone } objects.
+        const normPeople = (arr) => (arr || [])
+            .map(p => typeof p === 'string' ? { name: p, email: '', phone: '' } : { name: (p && p.name) || '', email: (p && p.email) || '', phone: (p && p.phone) || '' })
+            .filter(p => p.name);
+
+        // Actions may be a structured list [{id,date,text,auto}], or a legacy
+        // single `nextAction` string. Normalise + sort (dated first, ascending).
+        const getActions = (p) => {
+            let acts = Array.isArray(p.actions) ? p.actions.slice() : [];
+            if (!acts.length && p.nextAction) acts = [{ text: p.nextAction }];
+            return acts.filter(a => a && a.text).sort((a, b) => (a.date || '9999-99-99').localeCompare(b.date || '9999-99-99'));
+        };
+        // Effective completion: a manual override (doneManual) wins over the
+        // auto-detected `done`.
+        const effDone = (a) => (a && a.doneManual != null) ? !!a.doneManual : !!(a && a.done);
+        // Identify the same action across a fresh getActions() copy and the manifest.
+        const sameAction = (a, target) => {
+            if (target.kind === 'measurement') return a.kind === 'measurement' && a.day === target.day;
+            if (target.id) return a.id === target.id;
+            return a.kind !== 'measurement' && a.date === target.date && a.text === target.text;
+        };
+
+        // Downscale an uploaded photo to a small JPEG data URL so the manifest
+        // stays lean (product photos are decorative card backgrounds).
+        const readScaledImage = (file, maxW = 480) => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onerror = reject;
+            reader.onload = () => {
+                const img = new window.Image();
+                img.onerror = reject;
+                img.onload = () => {
+                    const scale = Math.min(1, maxW / img.width);
+                    const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+                    const canvas = document.createElement('canvas');
+                    canvas.width = w; canvas.height = h;
+                    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+                    resolve(canvas.toDataURL('image/jpeg', 0.72));
+                };
+                img.src = reader.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        const Field = ({ label, icon: Icon, children }) => (
+            <label className="block">
+                <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-slate-500 mb-1">
+                    {Icon && <Icon size={13} aria-hidden="true" />}{label}
+                </span>
+                {children}
+            </label>
+        );
+
+        // A field Pipedrive owns: shown, not editable. Keeping these read-only is
+        // what stops the board and the CRM from drifting apart — there is exactly
+        // one place to change a customer detail, and it is Pipedrive.
+        const LockedValue = ({ value, dealUrl, t }) => (
+            <div className="flex items-center gap-2 w-full p-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-slate-600">
+                <Lock size={13} className="shrink-0 text-slate-400" aria-hidden="true" />
+                <span className="flex-1 min-w-0 truncate">{value || '—'}</span>
+                {dealUrl && (
+                    <a href={dealUrl} target="_blank" rel="noopener noreferrer"
+                        className="shrink-0 text-[10px] font-bold uppercase tracking-wide hover:underline"
+                        style={{ color: BRAND.blue }}>{t.crmEditHint}</a>
+                )}
+            </div>
+        );
+
+        // A dropdown of known people with an inline "add new" option, so the same
+        // spelling is reused everywhere (typos would silently break filtering).
+        const PersonSelect = ({ value, options, onChange, onAddNew, inputCls, t }) => {
+            const list = value && !(options || []).includes(value) ? [value, ...(options || [])] : (options || []);
+            return (
+                <select className={inputCls} value={value || ''} onChange={e => {
+                    const v = e.target.value;
+                    if (v === '__add__') {
+                        const name = (window.prompt(t.addPersonPrompt) || '').trim();
+                        if (name) { onAddNew(name); onChange(name); }
+                    } else onChange(v);
+                }}>
+                    <option value="">{t.selectNone}</option>
+                    {list.map(o => <option key={o} value={o}>{o}</option>)}
+                    <option value="__add__">{t.addNewOption}</option>
+                </select>
+            );
+        };
+
+        // Person picker + a manage popover to rename (prompt), delete (confirm) and
+        // edit each person's email/phone. `peopleList` is an array of
+        // { name, email, phone }. Destructive actions are guarded against 1-click.
+        const PeopleField = ({ label, icon, value, peopleList, onChange, onAdd, onRename, onDelete, onUpdate, inputCls, t }) => {
+            const [managing, setManaging] = useState(false);
+            // Always include the current value, even if it isn't (yet) in the saved
+            // registry — otherwise a project's existing person is missing.
+            const list = (peopleList || []).slice();
+            if (value && !list.some(p => p.name === value)) list.push({ name: value, email: '', phone: '' });
+            list.sort((a, b) => a.name.localeCompare(b.name));
+            const names = list.map(p => p.name);
+            return (
+                <Field label={label} icon={icon}>
+                    <div className="relative flex items-center gap-1.5">
+                        <div className="flex-1 min-w-0">
+                            <PersonSelect value={value} options={names} onChange={onChange} onAddNew={onAdd} inputCls={inputCls} t={t} />
+                        </div>
+                        <button type="button" onClick={() => setManaging(m => !m)} title={t.managePeople}
+                            className={`p-2 rounded-lg border shrink-0 ${managing ? 'border-[#084BCD] text-[#084BCD] bg-blue-50' : 'border-slate-200 text-slate-500 hover:bg-slate-100'}`}>
+                            <Settings size={15} />
+                        </button>
+                        {managing && (
+                            <div className="absolute z-30 top-full right-0 mt-1 w-72 bg-white rounded-xl shadow-2xl border border-slate-100 p-1.5 max-h-72 overflow-auto">
+                                {list.length === 0 && <p className="text-xs text-slate-400 p-2">{t.noPeople}</p>}
+                                {list.map(p => (
+                                    <div key={p.name} className="px-2 py-1.5 rounded-lg hover:bg-slate-50 space-y-1">
+                                        <div className="flex items-center gap-1">
+                                            <span className="flex-1 truncate text-sm font-semibold">{p.name}</span>
+                                            <button type="button" aria-label={t.rename}
+                                                onClick={() => { const n = (window.prompt(t.renamePrompt, p.name) || '').trim(); if (n && n !== p.name) { onRename(p.name, n); if (value === p.name) onChange(n); } }}
+                                                className="p-1 text-slate-400 hover:text-slate-700"><Pencil size={13} /></button>
+                                            <button type="button" aria-label={t.delete}
+                                                onClick={() => { if (window.confirm(t.confirmDeletePerson.replace('{name}', p.name))) { onDelete(p.name); if (value === p.name) onChange(''); } }}
+                                                className="p-1 text-slate-400 hover:text-red-600"><Trash2 size={13} /></button>
+                                        </div>
+                                        <input type="email" defaultValue={p.email} placeholder={t.emailPlaceholder}
+                                            onBlur={e => { const v = e.target.value.trim(); if (v !== (p.email || '')) onUpdate(p.name, { email: v }); }}
+                                            className="w-full px-2 py-1 text-xs border border-slate-200 rounded-md outline-none focus:border-[#008837]" />
+                                        <input type="text" defaultValue={p.phone} placeholder={t.phonePlaceholder}
+                                            onBlur={e => { const v = e.target.value.trim(); if (v !== (p.phone || '')) onUpdate(p.name, { phone: v }); }}
+                                            className="w-full px-2 py-1 text-xs border border-slate-200 rounded-md outline-none focus:border-[#008837]" />
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </Field>
+            );
+        };
+
+        const ProjectModal = ({ t, initial, onSave, onClose, people, productIndex, onAddPerson, onUpdatePerson, onRenamePerson, onDeletePerson }) => {
+            const [data, setData] = useState(initial);
+            const [err, setErr] = useState('');
+            // Projects that came from Pipedrive: customer, product and commercial
+            // lead are read-only here (see PIPEDRIVE_INTEGRATION.md §3).
+            const crmOwned = !!initial.crmOwned;
+            // Auto/measurement actions are managed by the tools — shown read-only.
+            const autoActions = (Array.isArray(initial.actions) ? initial.actions : []).filter(a => a.auto || a.kind === 'measurement');
+            const [actions, setActions] = useState(() => {
+                const manual = (Array.isArray(initial.actions) ? initial.actions : []).filter(a => !a.auto && a.kind !== 'measurement');
+                if (!manual.length && initial.nextAction) return [{ date: '', text: initial.nextAction, done: false }];
+                return manual;
+            });
+            const inputCls = "w-full p-2.5 border border-slate-200 rounded-lg outline-none focus:border-[#008837] focus:ring-2 focus:ring-[#008837]/20 text-sm bg-white";
+            const set = (k, v) => setData(d => ({ ...d, [k]: v }));
+            const updateAction = (i, k, v) => setActions(list => list.map((a, idx) => idx === i ? { ...a, [k]: v } : a));
+            const addAction = () => setActions(list => [...list, { id: 'man-' + Date.now() + '-' + list.length, kind: 'manual', date: '', text: '', done: false }]);
+            const removeAction = (i) => setActions(list => list.filter((_, idx) => idx !== i));
+            const submit = () => {
+                if (!(data.client || '').trim() && !(data.product || '').trim()) { setErr(t.requiredClientProduct); return; }
+                const manual = actions.filter(a => (a.text || '').trim());
+                const out = { ...data, actions: [...autoActions, ...manual] };
+                delete out.nextAction;
+                onSave(out);
+            };
+            const onPhoto = async (e) => {
+                const f = e.target.files[0]; e.target.value = null;
+                if (!f) return;
+                try { set('image', await readScaledImage(f)); }
+                catch (_) { setErr(t.photoError); }
+            };
+            return (
+                <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 sticky top-0 bg-white rounded-t-2xl">
+                            <h2 className="text-lg font-bold brand-heading" style={{ color: BRAND.blue }}>{data.id ? t.editProject : t.newProject}</h2>
+                            <button type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100" aria-label={t.cancel}><X size={18} /></button>
+                        </div>
+                        <div className="p-4 sm:p-6 space-y-4">
+                            {crmOwned && (
+                                <p className="flex items-center gap-2 text-xs font-semibold rounded-lg px-3 py-2 border"
+                                    style={{ color: BRAND.blue, borderColor: BRAND.blue + '33', backgroundColor: BRAND.blue + '0d' }}>
+                                    <Lock size={13} className="shrink-0" />{t.crmOwned}
+                                    {data.pipedriveDealUrl && (
+                                        <a href={data.pipedriveDealUrl} target="_blank" rel="noopener noreferrer"
+                                            className="ml-auto inline-flex items-center gap-1 hover:underline shrink-0">
+                                            <ExternalLink size={12} />Pipedrive
+                                        </a>
+                                    )}
+                                </p>
+                            )}
+                            <Field label={t.fPhoto} icon={ImageIcon}>
+                                {data.image ? (
+                                    <div className="flex items-center gap-3">
+                                        <img src={data.image} alt="" className="w-20 h-20 object-cover rounded-lg border border-slate-200" />
+                                        <button type="button" onClick={() => set('image', '')} className="text-xs font-bold text-red-600 hover:underline">{t.removePhoto}</button>
+                                    </div>
+                                ) : (
+                                    <label className="flex items-center justify-center gap-2 cursor-pointer text-sm font-semibold text-slate-500 border border-dashed border-slate-300 rounded-lg px-3 py-3 hover:border-[#008837] hover:text-[#008837] transition-colors">
+                                        <Upload size={15} />{t.uploadPhoto}
+                                        <input type="file" accept="image/*" className="hidden" onChange={onPhoto} />
+                                    </label>
+                                )}
+                            </Field>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <Field label={t.fClient} icon={Building2}>
+                                    {crmOwned
+                                        ? <LockedValue value={data.client} dealUrl={data.pipedriveDealUrl} t={t} />
+                                        : <input className={inputCls} value={data.client} onChange={e => set('client', e.target.value)} autoFocus />}
+                                </Field>
+                                <Field label={t.fProduct} icon={Package}>
+                                    {crmOwned
+                                        ? <LockedValue value={data.product} dealUrl={data.pipedriveDealUrl} t={t} />
+                                        : (
+                                            <>
+                                                {/* Free text with a datalist: pick a product from the shared
+                                                    database to link the project to it, or type a name that
+                                                    does not exist there yet. */}
+                                                <input className={inputCls} list="pt-products" value={data.product}
+                                                    onChange={e => {
+                                                        const name = e.target.value;
+                                                        const hit = (productIndex || []).find(p => productLabel(p) === name);
+                                                        setData(d => ({ ...d, product: name, productId: hit ? hit.id : '' }));
+                                                    }} />
+                                                <datalist id="pt-products">
+                                                    {(productIndex || []).map(p => <option key={p.id} value={productLabel(p)} />)}
+                                                </datalist>
+                                                {(data.product || '').trim() ? (
+                                                    data.productId
+                                                        ? <p className="text-[11px] mt-1 font-bold flex items-center gap-1" style={{ color: BRAND.green }}><Check size={11} />{t.productLinked}</p>
+                                                        : <p className="text-[11px] mt-1 text-slate-400">{t.productUnlinked}</p>
+                                                ) : null}
+                                            </>
+                                        )}
+                                </Field>
+                                {crmOwned ? (
+                                    <Field label={t.fCommercial} icon={Briefcase}>
+                                        <LockedValue value={data.commercial} dealUrl={data.pipedriveDealUrl} t={t} />
+                                    </Field>
+                                ) : (
+                                <PeopleField label={t.fCommercial} icon={Briefcase} value={data.commercial} peopleList={(people && people.commercials) || []}
+                                    onChange={v => set('commercial', v)} onAdd={n => onAddPerson('commercials', n)} onUpdate={(nm, patch) => onUpdatePerson('commercials', nm, patch)}
+                                    onRename={(o, n) => onRenamePerson('commercials', o, n)} onDelete={o => onDeletePerson('commercials', o)} inputCls={inputCls} t={t} />
+                                )}
+                                <PeopleField label={t.fPM} icon={UserCog} value={data.productManager} peopleList={(people && people.productManagers) || []}
+                                    onChange={v => set('productManager', v)} onAdd={n => onAddPerson('productManagers', n)} onUpdate={(nm, patch) => onUpdatePerson('productManagers', nm, patch)}
+                                    onRename={(o, n) => onRenamePerson('productManagers', o, n)} onDelete={o => onDeletePerson('productManagers', o)} inputCls={inputCls} t={t} />
+                                <Field label={t.fStart} icon={Calendar}>
+                                    <input type="date" className={inputCls} value={data.startDate} onChange={e => set('startDate', e.target.value)} />
+                                </Field>
+                                <Field label={t.fPhase}>
+                                    <select className={inputCls} value={data.phase} onChange={e => set('phase', e.target.value)}>
+                                        {Board.PHASES.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+                                    </select>
+                                </Field>
+                            </div>
+                            <Field label={t.fActions} icon={ArrowRight}>
+                                <div className="space-y-2">
+                                    {autoActions.length > 0 && (
+                                        <div className="space-y-1">
+                                            {autoActions.slice().sort((a, b) => (a.date || '9999').localeCompare(b.date || '9999')).map((a, i) => {
+                                                const done = effDone(a);
+                                                return (
+                                                    <div key={'auto' + i} className={`flex items-center gap-2 text-xs border rounded-lg px-2.5 py-1.5 ${done ? 'bg-green-50 border-green-200 text-green-700' : 'bg-slate-50 border-slate-200 text-slate-500'}`}>
+                                                        {done ? <Check size={12} className="shrink-0 text-green-600" /> : <BarChart3 size={12} className="shrink-0" style={{ color: BRAND.blue }} />}
+                                                        <span className="font-bold tabular-nums shrink-0">{a.date ? fmtDate(a.date) : '—'}</span>
+                                                        <span className={`truncate ${done ? 'line-through' : ''}`}>{a.text}</span>
+                                                        <span className="ml-auto text-[9px] font-bold uppercase tracking-wider shrink-0">{a.kind === 'measurement' ? t.autoMeasure : t.autoTag}</span>
+                                                    </div>
+                                                );
+                                            })}
+                                            <p className="text-[10px] text-slate-400 italic">{t.autoActionsHint}</p>
+                                        </div>
+                                    )}
+                                    {actions.map((a, i) => (
+                                        <div key={i} className="flex items-center gap-2">
+                                            <button type="button" title={a.done ? t.markOpen : t.markDone} onClick={() => updateAction(i, 'done', !a.done)}
+                                                className={`shrink-0 w-8 h-[38px] rounded-lg border flex items-center justify-center ${a.done ? 'bg-green-500 border-green-500 text-white' : 'border-slate-200 text-transparent hover:border-green-500'}`}><Check size={15} /></button>
+                                            <input type="date" className={inputCls + ' w-36 shrink-0'} value={a.date || ''} onChange={e => updateAction(i, 'date', e.target.value)} />
+                                            <input className={`${inputCls} flex-1 ${a.done ? 'line-through text-slate-400' : ''}`} placeholder={t.actionPlaceholder} value={a.text || ''} onChange={e => updateAction(i, 'text', e.target.value)} />
+                                            <button type="button" onClick={() => removeAction(i)} className="p-1.5 text-slate-400 hover:text-red-600 shrink-0" aria-label={t.delete}><X size={15} /></button>
+                                        </div>
+                                    ))}
+                                    <button type="button" onClick={addAction} className="inline-flex items-center gap-1 text-xs font-bold" style={{ color: BRAND.green }}><Plus size={14} />{t.addAction}</button>
+                                </div>
+                            </Field>
+                            {err && <p className="text-sm text-red-600 flex items-center gap-1.5"><AlertTriangle size={14} />{err}</p>}
+                        </div>
+                        <div className="flex justify-end gap-3 px-6 py-4 border-t border-slate-100">
+                            <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-100">{t.cancel}</button>
+                            <button type="button" onClick={submit} className="px-4 py-2 rounded-lg text-sm font-bold text-white flex items-center gap-2" style={{ backgroundColor: BRAND.green }}><Check size={16} />{t.save}</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // === Project card ===
+        const fmtDate = (s) => {
+            if (!s) return '';
+            const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+            return m ? `${m[3]}-${m[2]}-${m[1]}` : s;
+        };
+        const TODAY = new Date().toISOString().slice(0, 10);
+        // Short local date+time for the CRM sync stamp (dd-mm HH:MM).
+        const fmtDateTime = (iso) => {
+            const d = new Date(iso);
+            if (isNaN(d)) return iso || '';
+            const p = (n) => String(n).padStart(2, '0');
+            return `${p(d.getDate())}-${p(d.getMonth() + 1)} ${p(d.getHours())}:${p(d.getMinutes())}`;
+        };
+
+        // One labelled info line: distinct icon + value, full label in the tooltip.
+        const MetaRow = ({ icon: Icon, label, value }) => value ? (
+            <div className="flex items-center gap-2 text-xs min-w-0" title={label + ': ' + value}>
+                <Icon size={13} className="shrink-0 text-slate-400" aria-hidden="true" />
+                <span className="truncate font-medium text-slate-700">{value}</span>
+            </div>
+        ) : null;
+
+        const ProjectCard = ({ t, project, lock, onDragStart, onEdit, onDelete, onOpen, onActionOpen, onActionToggle }) => {
+            const color = PHASE_COLORS[project.phase] || BRAND.blue;
+            const isReport = project.phase === 'report';
+            const hasImg = !!project.image;
+            const heading = project.client || project.product || t.untitled;
+            const showProductRow = project.product && project.client;
+            const acts = getActions(project);
+            const open = () => onOpen(project, project.phase);
+            return (
+                <div
+                    draggable
+                    onDragStart={(e) => onDragStart(e, project.id)}
+                    onClick={open}
+                    role="button" tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } }}
+                    title={t.openPhase}
+                    className="group relative rounded-2xl overflow-hidden ring-1 ring-slate-200/80 shadow-sm hover:shadow-lg hover:-translate-y-0.5 transition-all cursor-pointer"
+                >
+                    {/* Background: faded product photo, or a soft phase-tinted gradient. */}
+                    {hasImg ? (
+                        <>
+                            <div className="absolute inset-0 bg-cover bg-center scale-105" style={{ backgroundImage: `url(${project.image})`, filter: 'saturate(1.08)' }} aria-hidden="true" />
+                            {/* Legible scrim: near-opaque behind the text column (left),
+                                fading right so the product photo stays clearly visible. */}
+                            <div className="absolute inset-0" style={{ background: 'linear-gradient(105deg, rgba(255,255,255,0.92) 32%, rgba(255,255,255,0.55) 68%, rgba(255,255,255,0.30) 100%)' }} aria-hidden="true" />
+                        </>
+                    ) : (
+                        <div className="absolute inset-0" style={{ background: `linear-gradient(150deg, ${color}14, #ffffff 62%)` }} aria-hidden="true" />
+                    )}
+                    {/* Phase accent bar */}
+                    <div className="absolute left-0 top-0 bottom-0 w-1.5" style={{ backgroundColor: color }} aria-hidden="true" />
+
+                    {/* Hover actions */}
+                    <div className="absolute top-2 right-2 z-10 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {project.pipedriveDealUrl && (
+                            <a href={project.pipedriveDealUrl} target="_blank" rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()} title={t.openInPipedrive} aria-label={t.openInPipedrive}
+                                className="p-1.5 rounded-lg bg-white/80 backdrop-blur hover:bg-white text-slate-500 shadow-sm"
+                                style={{ color: BRAND.blue }}><ExternalLink size={13} /></a>
+                        )}
+                        <button type="button" onClick={(e) => { e.stopPropagation(); onEdit(project); }} className="p-1.5 rounded-lg bg-white/80 backdrop-blur hover:bg-white text-slate-500 hover:text-slate-800 shadow-sm" aria-label={t.editProject}><Pencil size={13} /></button>
+                        <button type="button" onClick={(e) => { e.stopPropagation(); onDelete(project); }} className="p-1.5 rounded-lg bg-white/80 backdrop-blur hover:bg-white text-slate-500 hover:text-red-600 shadow-sm" aria-label={t.delete}><Trash2 size={13} /></button>
+                    </div>
+
+                    {/* Content */}
+                    <div className="relative p-4 pl-5">
+                        <p className={`font-extrabold text-[15px] leading-tight break-words pr-14 ${project.client ? 'text-slate-900' : 'text-slate-400 italic'}`}>{heading}</p>
+                        {showProductRow && (
+                            <p className="flex items-center gap-1.5 mt-1 text-[13px] font-semibold text-slate-700">
+                                <Package size={13} className="shrink-0" style={{ color }} aria-hidden="true" />
+                                <span className="truncate">{project.product}</span>
+                            </p>
+                        )}
+
+                        {/* A colleague has this project open in a tool right now
+                            (advisory only — it expires by itself after 2 minutes). */}
+                        {lock && (
+                            <div className="mt-2 flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50/90 px-2 py-1 text-[10px] font-bold"
+                                style={{ color: BRAND.blue }} title={fmtDateTime(lock.at)}>
+                                <Lock size={11} className="shrink-0" />
+                                <span className="truncate">{t.lockedBy.replace('{name}', lock.user)}</span>
+                            </div>
+                        )}
+
+                        {/* CRM state that needs attention. The sync never moves or
+                            deletes a card on its own — it flags it and leaves the
+                            decision to a person. */}
+                        {project.crmFlag && (
+                            <div className="mt-2 flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50/90 px-2 py-1 text-[10px] font-bold text-amber-800"
+                                title={project.crmFlagDetail || ''}>
+                                <CloudOff size={11} className="shrink-0" />
+                                <span className="truncate">{project.crmFlag === 'dealLost' ? t.flagDealLost : t.flagGateWithdrawn}</span>
+                            </div>
+                        )}
+
+                        <div className="mt-3 space-y-1.5">
+                            <MetaRow icon={Briefcase} label={t.fCommercial} value={project.commercial} />
+                            <MetaRow icon={UserCog} label={t.fPM} value={project.productManager} />
+                            <MetaRow icon={Calendar} label={t.fStart} value={fmtDate(project.startDate)} />
+                        </div>
+
+                        {acts.length > 0 && (() => {
+                            const openActs = acts.filter(a => !effDone(a));
+                            const primary = openActs[0];
+                            if (!primary) {
+                                return (
+                                    <div className="mt-3 rounded-xl px-2.5 py-1.5 border bg-green-50/80 border-green-200 flex items-center gap-1.5 text-[11px] font-bold text-green-700">
+                                        <Check size={13} />{t.allDone}
+                                    </div>
+                                );
+                            }
+                            const overdue = primary.date && primary.date < TODAY;
+                            const boxCls = overdue ? 'bg-red-50 border-red-200' : (isReport ? 'bg-orange-50/90 border-orange-200' : 'bg-white/70 border-slate-200/80');
+                            const accent = overdue ? '#dc2626' : (isReport ? BRAND.orange : '#64748b');
+                            return (
+                                <div className={`mt-3 rounded-xl px-2.5 py-2 border ${boxCls}`}>
+                                    <div className="flex items-center justify-between gap-1">
+                                        <span className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider" style={{ color: accent }}>
+                                            <ArrowRight size={11} />{overdue ? t.overdue : t.fNext}
+                                        </span>
+                                        <button type="button" title={t.markDone} onClick={(e) => { e.stopPropagation(); onActionToggle(project, primary); }}
+                                            className="p-0.5 rounded hover:bg-black/10 text-slate-400 hover:text-green-600"><Check size={14} /></button>
+                                    </div>
+                                    <button type="button" onClick={(e) => { e.stopPropagation(); onActionOpen(project, primary); }}
+                                        className="mt-0.5 flex items-start gap-1.5 text-left w-full">
+                                        {primary.date && <span className="shrink-0 font-bold tabular-nums text-[11px]" style={{ color: accent }}>{fmtDate(primary.date)}</span>}
+                                        <span className="text-xs text-slate-700 leading-snug hover:underline">{primary.text}</span>
+                                    </button>
+                                    {openActs.length > 1 && <span className="block mt-1 text-[10px] font-bold text-slate-400">+{openActs.length - 1} {t.moreActions}</span>}
+                                </div>
+                            );
+                        })()}
+                    </div>
+                </div>
+            );
+        };
+
+        // === Column ===
+        const Column = ({ t, phase, projects, locks, onDragStart, onDrop, dragOver, onOpen, onEdit, onDelete, onHeaderClick, onActionOpen, onActionToggle }) => {
+            const [over, setOver] = useState(false);
+            const color = PHASE_COLORS[phase.key];
+            const PhaseIcon = PHASE_ICONS[phase.key] || Package;
+            const headerHint = phase.key === 'dashboard' ? t.openDashboard : t.startInPhase.replace('{phase}', phase.label);
+            const countLabel = projects.length === 1 ? t.projOne : t.projMany;
+            return (
+                <div className="flex flex-col w-72 shrink-0">
+                    <button type="button" onClick={() => onHeaderClick(phase.key)} title={headerHint}
+                        className="group sticky top-0 z-20 w-full flex items-center gap-3 px-3.5 py-3 mb-3 rounded-xl shadow-md text-left transition-all hover:shadow-lg hover:brightness-[1.04]"
+                        style={{ background: `linear-gradient(135deg, ${color}, ${darken(color)})` }}>
+                        <span className="flex items-center justify-center w-9 h-9 rounded-lg bg-white/20 text-white shrink-0" aria-hidden="true">
+                            <PhaseIcon size={18} />
+                        </span>
+                        <span className="flex flex-col min-w-0 flex-1">
+                            <span className="font-extrabold text-[15px] uppercase tracking-wide text-white truncate leading-tight">{phase.label}</span>
+                            <span className="text-[10px] font-semibold uppercase tracking-wider text-white/70">{projects.length} {countLabel}</span>
+                        </span>
+                        <span className="flex items-center justify-center w-7 h-7 rounded-lg bg-white/20 text-white shrink-0 opacity-70 group-hover:opacity-100 transition-opacity" title={headerHint}>
+                            <Plus size={16} />
+                        </span>
+                    </button>
+                    <div
+                        onDragOver={(e) => { e.preventDefault(); if (e.dataTransfer) e.dataTransfer.dropEffect = e.dataTransfer.types && [...e.dataTransfer.types].includes('Files') ? 'copy' : 'move'; setOver(true); }}
+                        onDragLeave={() => setOver(false)}
+                        onDrop={(e) => { e.preventDefault(); setOver(false); const dropped = (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) ? [...e.dataTransfer.files] : []; onDrop(phase.key, dropped); }}
+                        className={`flex-1 rounded-xl p-2 space-y-2 min-h-[120px] transition-colors border-2 ${over ? 'border-dashed' : 'border-transparent'}`}
+                        style={{ backgroundColor: over ? color + '10' : '#eef0f2', borderColor: over ? color : 'transparent' }}
+                    >
+                        {projects.length === 0 && (
+                            <p className="text-xs text-slate-400 text-center py-6 select-none">{t.emptyColumn}</p>
+                        )}
+                        {projects.map(p => (
+                            <ProjectCard key={p.id} t={t} project={p} lock={locks && locks[p.id]} onDragStart={onDragStart} onOpen={onOpen} onEdit={onEdit} onDelete={onDelete} onActionOpen={onActionOpen} onActionToggle={onActionToggle} />
+                        ))}
+                    </div>
+                </div>
+            );
+        };
+
+        // === Filter panel ===
+        const FILTER_FIELDS = [
+            { key: 'client', labelKey: 'fClient' },
+            { key: 'product', labelKey: 'fProduct' },
+            { key: 'commercial', labelKey: 'fCommercial' },
+            { key: 'productManager', labelKey: 'fPM' }
+        ];
+        // === Products view ===
+        // An overview of the product side of the same database, and a way into it.
+        // Creating and editing product data stays in the Product Dashboard, where
+        // all of that form logic already lives.
+        const ProductCard = ({ t, product, projectCount, onOpen }) => {
+            const label = productLabel(product) || '—';
+            const stateLabel = product.state === 'processed' ? 'Processed' : product.state === 'whole' ? 'Whole' : (product.state || '');
+            return (
+                <button type="button" onClick={() => onOpen(product)} title={t.productOpen}
+                    className="text-left bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 transition-all overflow-hidden flex flex-col focus:outline-none focus:ring-2 focus:ring-offset-2"
+                    style={{ '--tw-ring-color': BRAND.blue }}>
+                    <div className="h-24 bg-slate-100 relative shrink-0">
+                        {product.imageUrl
+                            ? <img src={product.imageUrl} alt="" className="w-full h-full object-cover" />
+                            : <div className="w-full h-full flex items-center justify-center text-slate-300"><Package size={28} /></div>}
+                        <span className="absolute top-2 right-2 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md bg-white/90 text-slate-600">{stateLabel}</span>
+                    </div>
+                    <div className="p-4 flex flex-col gap-2 flex-1">
+                        <h3 className="font-bold text-sm text-slate-900 leading-snug">{label}</h3>
+                        <div className="flex flex-wrap items-center gap-1.5 mt-auto pt-1">
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md"
+                                style={product.hasSheet
+                                    ? { backgroundColor: BRAND.green + '15', color: BRAND.green }
+                                    : { backgroundColor: '#f1f5f9', color: '#94a3b8' }}>
+                                {product.hasSheet ? t.productSheetYes : t.productSheetNo}
+                            </span>
+                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md"
+                                style={projectCount > 0
+                                    ? { backgroundColor: BRAND.blue + '15', color: BRAND.blue }
+                                    : { backgroundColor: '#f1f5f9', color: '#94a3b8' }}>
+                                {projectCount === 0 ? t.productNoProjects : projectCount === 1 ? t.productProject : t.productProjects.replace('{n}', projectCount)}
+                            </span>
+                        </div>
+                        {product.updatedAt && (
+                            <p className="text-[11px] text-slate-400">{t.productUpdated} {String(product.updatedAt).slice(0, 10)}</p>
+                        )}
+                    </div>
+                </button>
+            );
+        };
+
+        const FilterPanel = ({ t, projects, filters, setFilters, onClose }) => {
+            const distinct = (key) => Array.from(new Set(projects.map(p => (p[key] || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+            const selCls = "w-full p-2 border border-slate-200 rounded-lg text-sm bg-white outline-none focus:border-[#008837]";
+            return (
+                <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border border-slate-100 z-40 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                        <span className="font-bold text-sm" style={{ color: BRAND.blue }}>{t.filter}</span>
+                        <button type="button" onClick={onClose} className="p-1 rounded hover:bg-slate-100" aria-label={t.cancel}><X size={16} /></button>
+                    </div>
+                    <input className={selCls} placeholder={t.search} value={filters.q} onChange={e => setFilters(f => ({ ...f, q: e.target.value }))} />
+                    {FILTER_FIELDS.map(f => (
+                        <label key={f.key} className="block">
+                            <span className="text-xs font-bold uppercase tracking-wide text-slate-500">{t[f.labelKey]}</span>
+                            <select className={selCls + ' mt-1'} value={filters[f.key]} onChange={e => setFilters(prev => ({ ...prev, [f.key]: e.target.value }))}>
+                                <option value="">{t.all}</option>
+                                {distinct(f.key).map(v => <option key={v} value={v}>{v}</option>)}
+                            </select>
+                        </label>
+                    ))}
+                    <button type="button" onClick={() => setFilters({ q: '', client: '', product: '', commercial: '', productManager: '' })}
+                        className="w-full text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-lg py-2">{t.clear}</button>
+                </div>
+            );
+        };
+
+        // === Agenda: all actions across projects, filterable by person, in a
+        // month CALENDAR (today highlighted; done struck-through) or a LIST view
+        // (open tasks only). Clicking an action deep-links to it. ===
+        const AgendaModal = ({ t, lang, projects, people, todayISO, onActionOpen, onActionToggle, onClose }) => {
+            const [person, setPerson] = useState('');
+            const [view, setView] = useState('calendar');
+            const startY = parseInt(todayISO.slice(0, 4), 10), startM = parseInt(todayISO.slice(5, 7), 10) - 1;
+            const [cursor, setCursor] = useState({ y: startY, m: startM });
+            const names = Array.from(new Set([
+                ...people.commercials.map(p => p.name), ...people.productManagers.map(p => p.name),
+                ...projects.flatMap(p => [p.commercial, p.productManager]).filter(Boolean)
+            ])).sort((a, b) => a.localeCompare(b));
+            const allItems = [];
+            projects.forEach(pr => {
+                if (person && pr.commercial !== person && pr.productManager !== person) return;
+                getActions(pr).forEach(a => allItems.push({ ...a, project: pr }));
+            });
+            const selCls = "p-2 border border-slate-200 rounded-lg text-sm bg-white outline-none focus:border-[#008837]";
+
+            // Calendar month grid (Monday-first).
+            const pad = (n) => String(n).padStart(2, '0');
+            const localeMap = { en: 'en-GB', nl: 'nl-NL', es: 'es-ES' };
+            const monthTitle = new Date(cursor.y, cursor.m, 1).toLocaleDateString(localeMap[lang] || 'en-GB', { month: 'long', year: 'numeric' });
+            const daysInMonth = new Date(cursor.y, cursor.m + 1, 0).getDate();
+            const firstWeekday = (new Date(cursor.y, cursor.m, 1).getDay() + 6) % 7;
+            const byDate = {};
+            allItems.forEach(a => { if (a.date) (byDate[a.date] = byDate[a.date] || []).push(a); });
+            const cells = [];
+            for (let i = 0; i < firstWeekday; i++) cells.push(null);
+            for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+            while (cells.length % 7 !== 0) cells.push(null);
+            const prevMonth = () => setCursor(c => c.m === 0 ? { y: c.y - 1, m: 11 } : { y: c.y, m: c.m - 1 });
+            const nextMonth = () => setCursor(c => c.m === 11 ? { y: c.y + 1, m: 0 } : { y: c.y, m: c.m + 1 });
+
+            // List view: only tasks still to do (completed hidden).
+            const listItems = allItems.filter(a => !effDone(a)).sort((a, b) => (a.date || '9999-99-99').localeCompare(b.date || '9999-99-99'));
+
+            const tabCls = (active) => `flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg ${active ? 'bg-white shadow-sm text-[#084BCD]' : 'text-slate-500 hover:text-slate-700'}`;
+
+            return (
+                <div className="fixed inset-0 bg-black/40 z-50 flex items-start justify-center p-4 pt-10 overflow-auto" role="dialog" aria-modal="true" onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl">
+                        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-slate-100 flex-wrap">
+                            <h2 className="text-lg font-bold brand-heading flex items-center gap-2" style={{ color: BRAND.blue }}><Calendar size={18} style={{ color: BRAND.green }} />{t.agenda}</h2>
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <div className="flex items-center bg-slate-100 rounded-lg p-0.5">
+                                    <button type="button" className={tabCls(view === 'calendar')} onClick={() => setView('calendar')}><Calendar size={13} />{t.viewCalendar}</button>
+                                    <button type="button" className={tabCls(view === 'list')} onClick={() => setView('list')}><List size={13} />{t.viewList}</button>
+                                </div>
+                                <select className={selCls} value={person} onChange={e => setPerson(e.target.value)}>
+                                    <option value="">{t.agendaAllPeople}</option>
+                                    {names.map(n => <option key={n} value={n}>{n}</option>)}
+                                </select>
+                                <button type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100" aria-label={t.cancel}><X size={18} /></button>
+                            </div>
+                        </div>
+
+                        <div className="p-4 max-h-[74vh] overflow-auto">
+                            {view === 'calendar' ? (
+                                <>
+                                    <div className="flex items-center justify-between mb-3">
+                                        <div className="flex items-center gap-1">
+                                            <button type="button" onClick={prevMonth} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"><ChevronLeft size={18} /></button>
+                                            <span className="font-bold text-sm capitalize min-w-[150px] text-center">{monthTitle}</span>
+                                            <button type="button" onClick={nextMonth} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"><ChevronRight size={18} /></button>
+                                        </div>
+                                        <button type="button" onClick={() => setCursor({ y: startY, m: startM })} className="text-xs font-bold text-slate-600 border border-slate-200 rounded-lg px-3 py-1.5 hover:bg-slate-100">{t.today}</button>
+                                    </div>
+                                    <div className="grid grid-cols-7 gap-1">
+                                        {t.weekdays.map((w, i) => <div key={i} className="text-[10px] font-bold uppercase text-slate-400 text-center py-1">{w}</div>)}
+                                        {cells.map((d, i) => {
+                                            if (d === null) return <div key={i} className="min-h-[76px] rounded-lg bg-slate-50/40" />;
+                                            const dateISO = `${cursor.y}-${pad(cursor.m + 1)}-${pad(d)}`;
+                                            const isToday = dateISO === todayISO;
+                                            const dayActs = byDate[dateISO] || [];
+                                            return (
+                                                <div key={i} className={`min-h-[76px] rounded-lg border p-1 flex flex-col gap-0.5 ${isToday ? 'border-2 bg-green-50/50' : 'border-slate-100'}`} style={isToday ? { borderColor: BRAND.green } : {}}>
+                                                    <span className={`text-[11px] font-bold px-0.5 ${isToday ? '' : 'text-slate-400'}`} style={isToday ? { color: BRAND.green } : {}}>{d}</span>
+                                                    <div className="flex flex-col gap-0.5 overflow-hidden">
+                                                        {dayActs.slice(0, 3).map((a, j) => {
+                                                            const done = effDone(a);
+                                                            const overdue = !done && dateISO < todayISO;
+                                                            const color = PHASE_COLORS[a.project.phase] || BRAND.blue;
+                                                            const label = a.project.product || a.project.client || a.text;
+                                                            return (
+                                                                <button key={j} type="button" title={`${a.text} — ${[a.project.client, a.project.product].filter(Boolean).join(' · ')}`}
+                                                                    onClick={() => { onActionOpen(a.project, a); onClose(); }}
+                                                                    className={`text-[9px] leading-tight text-left truncate rounded px-1 py-0.5 ${done ? 'line-through text-slate-400 bg-slate-100' : 'text-white'}`}
+                                                                    style={done ? {} : { backgroundColor: overdue ? '#dc2626' : color }}>{label}</button>
+                                                            );
+                                                        })}
+                                                        {dayActs.length > 3 && <span className="text-[9px] text-slate-400 px-1">+{dayActs.length - 3}</span>}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    {listItems.length === 0 && <p className="text-sm text-slate-400 text-center py-10">{t.agendaAllDone}</p>}
+                                    <ul className="space-y-1.5">
+                                        {listItems.map((a, i) => {
+                                            const overdue = a.date && a.date < todayISO;
+                                            const color = PHASE_COLORS[a.project.phase] || BRAND.blue;
+                                            return (
+                                                <li key={i} className={`flex items-center gap-2 px-2 py-1.5 rounded-xl border transition-all ${overdue ? 'border-red-200 bg-red-50/60 hover:shadow-sm' : 'border-slate-100 hover:border-slate-300 hover:shadow-sm'}`}>
+                                                    <button type="button" title={t.markDone} onClick={() => onActionToggle(a.project, a)}
+                                                        className="shrink-0 w-5 h-5 rounded-md border border-slate-300 text-transparent hover:border-green-500 hover:text-green-600 flex items-center justify-center"><Check size={13} /></button>
+                                                    <button type="button" onClick={() => { onActionOpen(a.project, a); onClose(); }} className="flex-1 min-w-0 flex items-center gap-3 text-left">
+                                                        <span className={`shrink-0 w-24 text-xs font-bold tabular-nums ${overdue ? 'text-red-600' : 'text-slate-500'}`}>{a.date ? fmtDate(a.date) : t.agendaNoDate}</span>
+                                                        <span className="flex-1 min-w-0">
+                                                            <span className="block text-sm truncate text-slate-800">{a.text}</span>
+                                                            <span className="block text-xs text-slate-400 truncate">{[a.project.client, a.project.product].filter(Boolean).join(' · ')}</span>
+                                                        </span>
+                                                        <span className="shrink-0 text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: color }}>{Board.phaseByKey[a.project.phase] ? Board.phaseByKey[a.project.phase].label : a.project.phase}</span>
+                                                    </button>
+                                                </li>
+                                            );
+                                        })}
+                                    </ul>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // === Who are you? ===
+        // On a shared database every write is attributed, and the board hides your
+        // own advisory lock. Asked once, kept in localStorage per browser.
+        const NameModal = ({ t, initial, onSave, onClose }) => {
+            const [name, setName] = useState(initial || '');
+            const canSave = !!name.trim();
+            const save = () => { if (canSave) { onSave(name.trim()); onClose(); } };
+            return (
+                <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md p-7">
+                        <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4" style={{ backgroundColor: BRAND.green + '15', color: BRAND.green }}>
+                            <User size={24} />
+                        </div>
+                        <h2 className="text-lg font-bold brand-heading mb-2">{t.whoTitle}</h2>
+                        <p className="text-sm text-slate-500 leading-relaxed mb-5">{t.whoDesc}</p>
+                        <input autoFocus type="text" value={name} onChange={e => setName(e.target.value)}
+                            onKeyDown={e => { if (e.key === 'Enter') save(); }}
+                            placeholder={t.whoPlaceholder}
+                            className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500 mb-5" />
+                        <div className="flex justify-end gap-2">
+                            {initial ? <button type="button" onClick={onClose} className="text-sm font-bold text-slate-500 px-4 py-2 rounded-lg hover:bg-slate-100">{t.backupClose}</button> : null}
+                            <button type="button" onClick={save} disabled={!canSave}
+                                className="text-sm font-bold text-white px-5 py-2 rounded-lg disabled:opacity-40"
+                                style={{ backgroundColor: BRAND.green }}>{t.whoSave}</button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // === Backups ===
+        const BackupsModal = ({ t, state, list, busy, onBackupNow, onRestore, onClose }) => {
+            const groups = [
+                { key: 'daily', label: t.backupDaily, restorable: true },
+                { key: 'weekly', label: t.backupWeekly, restorable: true },
+                { key: 'monthly', label: t.backupMonthly, restorable: false }
+            ];
+            return (
+                <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
+                    <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-2xl max-h-[85vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-slate-200">
+                            <h2 className="text-lg font-bold brand-heading flex items-center gap-2">
+                                <Lock size={18} style={{ color: BRAND.green }} />{t.backupTitle}
+                            </h2>
+                            <div className="flex items-center gap-2">
+                                <button type="button" onClick={onBackupNow} disabled={!!busy}
+                                    className="text-sm font-bold text-white px-4 py-2 rounded-lg disabled:opacity-50"
+                                    style={{ backgroundColor: BRAND.green }}>{busy || t.backupNow}</button>
+                                <button type="button" onClick={onClose} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500"><X size={18} /></button>
+                            </div>
+                        </div>
+                        <div className="overflow-auto px-6 py-5">
+                            <p className="text-xs text-slate-500 leading-relaxed mb-5">{t.backupExplain}</p>
+                            {!list ? <p className="text-sm text-slate-400">…</p> : groups.map(g => (
+                                <div key={g.key} className="mb-5">
+                                    <h3 className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-2">{g.label}</h3>
+                                    {(list[g.key] || []).length === 0 ? (
+                                        <p className="text-sm text-slate-400 italic">{t.backupEmpty}</p>
+                                    ) : (
+                                        <ul className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden">
+                                            {list[g.key].slice().sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || ''))).map(e => (
+                                                <li key={e.name} className="flex items-center justify-between gap-3 px-3 py-2 bg-white">
+                                                    <div className="min-w-0">
+                                                        <span className="font-bold text-sm text-slate-800">{e.name}</span>
+                                                        <span className="ml-2 text-xs text-slate-500">
+                                                            {e.createdAt ? fmtDateTime(e.createdAt) : ''}
+                                                            {e.size ? ' · ' + Math.round(e.size / 1024) + ' kB' : ''}
+                                                            {e.files ? ' · ' + e.files + ' files' : ''}
+                                                            {e.complete === false ? ' · incomplete' : ''}
+                                                        </span>
+                                                    </div>
+                                                    {g.restorable ? (
+                                                        <button type="button" onClick={() => onRestore(e)} disabled={!!busy}
+                                                            className="shrink-0 text-xs font-bold px-3 py-1.5 rounded-lg border border-slate-300 text-slate-700 hover:bg-slate-100 disabled:opacity-50">
+                                                            {t.backupRestore}
+                                                        </button>
+                                                    ) : null}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+                                </div>
+                            ))}
+                            <p className="text-xs text-slate-400 leading-relaxed border-t border-slate-100 pt-4">{t.restoreFullHint}</p>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // A banner that explains itself, for the things that are not errors but do
+        // need a decision or an eyeball: migration, a lost race, sync conflict copies.
+        const Notice = ({ tone, icon: Icon, title, children, action }) => {
+            const tones = {
+                amber: { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-900', icon: '#b45309' },
+                blue: { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-900', icon: BRAND.blue }
+            };
+            const c = tones[tone] || tones.blue;
+            return (
+                <div className="px-4 md:px-6 pt-3">
+                    <div className={`${c.bg} ${c.border} ${c.text} border text-sm rounded-lg px-4 py-3 flex items-start gap-3`}>
+                        <Icon size={18} className="shrink-0 mt-0.5" style={{ color: c.icon }} />
+                        <div className="min-w-0 flex-1">
+                            <p className="font-bold">{title}</p>
+                            <div className="text-xs leading-relaxed mt-0.5">{children}</div>
+                        </div>
+                        {action}
+                    </div>
+                </div>
+            );
+        };
+
+        // === App ===
+        const App = () => {
+            const [lang, setLang] = useState(getInitialLang);
+            const t = T[lang] || T.en;
+
+            const [status, setStatus] = useState('loading'); // loading | unsupported | no-folder | needs-permission | ready
+            const [rootName, setRootName] = useState(null);
+            const [manifest, setManifest] = useState({ schemaVersion: '1.0', isPerfoTecBoard: true, projects: [] });
+            const [error, setError] = useState('');
+            const [editing, setEditing] = useState(null); // project object or null
+            const [showFilter, setShowFilter] = useState(false);
+            const [showAgenda, setShowAgenda] = useState(false);
+            const [filters, setFilters] = useState({ q: '', client: '', product: '', commercial: '', productManager: '' });
+            const [dragId, setDragId] = useState(null);
+            const [syncState, setSyncState] = useState(null); // .sync/pipedrive-state.json
+            // Products live in the same folder as the projects (see board-db.js).
+            // Only the light index is read here — never the full records, which
+            // carry the attached product-sheet HTML.
+            const [productIndex, setProductIndex] = useState([]);
+            const [view, setView] = useState('board'); // 'board' | 'products'
+            const todayISO = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+            // ---- Shared database (schema 2.0) ----
+            // Who is making the changes. Written into every card as `updatedBy`
+            // and used to hide our own advisory lock.
+            const [userLabel, setUserLabel] = useState(() => Board.getUserLabel());
+            const [dbFormat, setDbFormat] = useState(null);   // 'legacy' | 'cards'
+            const [migrating, setMigrating] = useState(false);
+            // Someone else saved the same card first. Distinct from `error`: this
+            // is not a failure, it is a race we handled — so it gets its own
+            // amber banner with what to do next.
+            const [conflictNote, setConflictNote] = useState(null);
+            // OneDrive conflict copies in cards/ — a change may have gone missing.
+            const [artefacts, setArtefacts] = useState([]);
+            // projectId -> { user, at } for projects a colleague has open.
+            const [locks, setLocks] = useState({});
+            const [backupState, setBackupState] = useState(null);
+            const [backupList, setBackupList] = useState(null);
+            const [backupBusy, setBackupBusy] = useState('');
+            const [showBackups, setShowBackups] = useState(false);
+            const [showName, setShowName] = useState(false);
+
+            const loadManifest = useCallback(async () => {
+                try {
+                    const m = await Board.readManifest();
+                    setManifest(m);
+                    setError('');
+                    setArtefacts(Board.lastSyncArtefacts ? Board.lastSyncArtefacts() : []);
+                    // Written by pipedrive-sync.mjs; absent until the sync has run.
+                    Board.readSyncState().then(setSyncState).catch(() => setSyncState(null));
+                    Board.readProductIndex().then(idx => setProductIndex(idx.products || [])).catch(() => setProductIndex([]));
+                    Board.readBackupState().then(setBackupState).catch(() => setBackupState(null));
+                    // Locks are read in one pass per load instead of per card, so a
+                    // board with 50 cards does not fire 50 reads on every render.
+                    Promise.all((m.projects || []).map(p =>
+                        Board.readLock(p.id).then(l => [p.id, l]).catch(() => [p.id, null])
+                    )).then(pairs => {
+                        const next = {};
+                        pairs.forEach(([id, l]) => { if (l) next[id] = l; });
+                        setLocks(next);
+                    });
+                } catch (e) {
+                    if (e.code === 'NEEDS_PERMISSION') setStatus('needs-permission');
+                    else if (e.code === 'NO_FOLDER') setStatus('no-folder');
+                    else setError(e.message || String(e));
+                }
+            }, []);
+
+            // Initial state detection
+            useEffect(() => {
+                if (!Board.isSupported()) { setStatus('unsupported'); return; }
+                Board.getRootName().then(setRootName);
+                Board.permissionState().then(state => {
+                    if (state === 'none') setStatus('no-folder');
+                    else if (state === 'granted') { setStatus('ready'); loadManifest(); }
+                    else setStatus('needs-permission');
+                });
+            }, [loadManifest]);
+
+            // Re-read the manifest when returning to the board (tools may have
+            // created files or updated metadata in another tab). BUT never while the
+            // edit modal is open: window.prompt/confirm blur+refocus the window, and
+            // a reload there would clobber an in-flight people/manifest write with the
+            // stale copy still on disk (the "new person disappears" bug).
+            const editingRef = useRef(false);
+            editingRef.current = !!editing;
+            // A mutation (delete / drag / people edit) optimistically updates state
+            // then writes to disk. window.confirm/prompt blur+refocus the window and
+            // fire 'focus' before that write finishes — a reload there re-reads the
+            // stale file and undoes the change (delete needed 2 clicks; new person
+            // vanished). Suppress the focus-reload for a short window around writes.
+            const suppressReloadUntil = useRef(0);
+            const beginMutation = () => { suppressReloadUntil.current = Date.now() + 2000; };
+            useEffect(() => {
+                const onFocus = () => { if (status === 'ready' && !editingRef.current && Date.now() > suppressReloadUntil.current) loadManifest(); };
+                window.addEventListener('focus', onFocus);
+                return () => window.removeEventListener('focus', onFocus);
+            }, [status, loadManifest]);
+
+            // Which storage format the linked folder uses, and the daily backup.
+            // Both run once per page load — the focus-reload above must not fire
+            // a backup every time you tab back to the board.
+            const startupDone = useRef(false);
+            // Detect the folder's format and run whatever backup is due for it.
+            // Called on load AND after switching folders: another folder can be on
+            // another format and has its own backups. Skipping it there would leave
+            // the migration banner and the backup chip describing the folder you
+            // just left.
+            const runStartup = useCallback(async () => {
+                try {
+                    const mode = await Board.dbMode();
+                    setDbFormat(mode);
+                    if (mode !== 'cards') return;   // nothing to snapshot before migration
+                    const done = await Board.runDueBackups({
+                        onProgress: p => setBackupBusy(t.backupBusy + ' (' + p.copied + ')')
+                    });
+                    setBackupBusy('');
+                    if (done && (done.daily || done.weekly || done.monthly)) {
+                        Board.readBackupState().then(setBackupState).catch(() => {});
+                    }
+                } catch (e) { setBackupBusy(''); }
+            }, [t]);
+            useEffect(() => {
+                if (status !== 'ready' || startupDone.current) return;
+                startupDone.current = true;
+                runStartup();
+            }, [status, runStartup]);
+
+            // Stop the browser from opening/navigating to a JSON file dropped
+            // outside a column (columns handle their own drops). Only guards file
+            // drags so internal card drag/drop is unaffected.
+            useEffect(() => {
+                const guard = (e) => { if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files')) e.preventDefault(); };
+                window.addEventListener('dragover', guard);
+                window.addEventListener('drop', guard);
+                return () => { window.removeEventListener('dragover', guard); window.removeEventListener('drop', guard); };
+            }, []);
+
+            // A write that lost a race is NOT an error — the other person's version
+            // is on disk and ours is not. Re-read so the board stops showing a lie,
+            // and say what happened instead of dropping a red error line.
+            const handleWriteError = useCallback(async (e) => {
+                if (e && e.code === 'CONFLICTS') {
+                    // Compose the sentence here rather than showing board-db's
+                    // internal (English) error text: name the colleague and the
+                    // card the way the user sees them on the board.
+                    setConflictNote((e.conflicts || []).map(c => t.conflictLine
+                        .replace('{name}', (c.theirs && c.theirs.updatedBy) || t.conflictSomeone)
+                        .replace('{card}', (c.theirs && (c.theirs.client || c.theirs.product)) || c.cardId)
+                    ).join(' '));
+                    await loadManifest();
+                    return;
+                }
+                setError(e.message || String(e));
+            }, [loadManifest, t]);
+
+            const persist = useCallback(async (nextProjects) => {
+                beginMutation();
+                const next = { ...manifest, projects: nextProjects };
+                setManifest(next);
+                try { await Board.writeManifest(next); setConflictNote(null); }
+                catch (e) { await handleWriteError(e); }
+            }, [manifest, handleWriteError]);
+
+            // People registry: each entry is { name, email, phone } and lives in the
+            // manifest so the same spelling + contact details are reused everywhere.
+            // Projects still store the person's NAME (filters/cards unchanged);
+            // email/phone are looked up here by name.
+            const people = useMemo(() => ({
+                commercials: normPeople(manifest.people && manifest.people.commercials),
+                productManagers: normPeople(manifest.people && manifest.people.productManagers)
+            }), [manifest.people]);
+
+            const KIND_FIELD = { commercials: 'commercial', productManagers: 'productManager' };
+            const basePeople = () => ({
+                commercials: normPeople(manifest.people && manifest.people.commercials),
+                productManagers: normPeople(manifest.people && manifest.people.productManagers)
+            });
+            const writePeople = useCallback(async (nextPeople, projects) => {
+                beginMutation();
+                const next = { ...manifest, people: nextPeople };
+                if (projects) next.projects = projects;
+                setManifest(next);
+                try { await Board.writeManifest(next); setConflictNote(null); }
+                catch (e) { await handleWriteError(e); }
+            }, [manifest, handleWriteError]);
+
+            const addPerson = useCallback(async (kind, name) => {
+                name = (name || '').trim(); if (!name) return;
+                const np = basePeople();
+                if (np[kind].some(p => p.name === name)) return;
+                np[kind] = [...np[kind], { name, email: '', phone: '' }].sort((a, b) => a.name.localeCompare(b.name));
+                await writePeople(np);
+            }, [manifest, writePeople]);
+
+            // Set email/phone on a person (upserts, so an orphan project value can
+            // be enriched too).
+            const updatePerson = useCallback(async (kind, name, patch) => {
+                const np = basePeople();
+                if (np[kind].some(p => p.name === name)) np[kind] = np[kind].map(p => p.name === name ? { ...p, ...patch } : p);
+                else np[kind] = [...np[kind], { name, email: '', phone: '', ...patch }].sort((a, b) => a.name.localeCompare(b.name));
+                await writePeople(np);
+            }, [manifest, writePeople]);
+
+            // Rename a person everywhere: the registry AND every project that used
+            // the old name, so filtering stays consistent.
+            const renamePerson = useCallback(async (kind, oldName, newName) => {
+                newName = (newName || '').trim();
+                if (!newName || newName === oldName) return;
+                const field = KIND_FIELD[kind];
+                const np = basePeople();
+                np[kind] = np[kind].map(p => p.name === oldName ? { ...p, name: newName } : p).sort((a, b) => a.name.localeCompare(b.name));
+                const projects = manifest.projects.map(p => p[field] === oldName ? { ...p, [field]: newName } : p);
+                await writePeople(np, projects);
+            }, [manifest, writePeople]);
+
+            // Remove a person from the picklist. Existing project values are left
+            // as-is (the value still shows in that project's dropdown).
+            const deletePerson = useCallback(async (kind, name) => {
+                const np = basePeople();
+                np[kind] = np[kind].filter(p => p.name !== name);
+                await writePeople(np);
+            }, [manifest, writePeople]);
+
+            const chooseFolder = async () => {
+                try {
+                    const r = await Board.pickRootFolder();
+                    setRootName(r.name);
+                    setStatus('ready');
+                    // Everything below describes the folder we are leaving.
+                    setDbFormat(null);
+                    setBackupState(null);
+                    setBackupList(null);
+                    setConflictNote(null);
+                    await loadManifest();
+                    startupDone.current = true;
+                    await runStartup();
+                } catch (e) { if (e.name !== 'AbortError') setError(e.message || String(e)); }
+            };
+            // Switching folders swaps the whole database under the board, so it
+            // asks first. Needed to move onto the shared SharePoint folder, and to
+            // recover when someone binds the wrong one — without this the only way
+            // out is clearing site data.
+            const switchFolder = async () => {
+                if (!window.confirm(t.switchFolderConfirm.replace('{name}', rootName || '?'))) return;
+                await chooseFolder();
+            };
+            const grantAccess = async () => {
+                try {
+                    const ok = await Board.requestAccess();
+                    if (ok) { setStatus('ready'); Board.getRootName().then(setRootName); await loadManifest(); }
+                } catch (e) { setError(e.message || String(e)); }
+            };
+
+            const saveProject = async (data) => {
+                // Back-fill the product link for anything typed rather than picked
+                // (and for Pipedrive-owned cards, where the name is read-only).
+                if (!data.productId && (data.product || '').trim()) {
+                    try {
+                        const id = await Board.resolveProductId(data.product, { products: productIndex });
+                        if (id) data = { ...data, productId: id };
+                    } catch (e) { /* no product store yet — leave unlinked */ }
+                }
+                const exists = manifest.projects.some(p => p.id === data.id);
+                let next;
+                if (exists) {
+                    next = manifest.projects.map(p => {
+                        if (p.id !== data.id) return p;
+                        const merged = { ...p, ...data, updatedAt: new Date().toISOString() };
+                        // The sync arbitrates phase changes on both sides by
+                        // timestamp, so every board-side move must be stamped.
+                        if (data.phase !== p.phase) merged.phaseChangedAt = new Date().toISOString();
+                        return merged;
+                    });
+                } else {
+                    const proj = { ...data, id: Board.newId(), files: {}, updatedAt: new Date().toISOString() };
+                    next = [...manifest.projects, proj];
+                }
+                await persist(next);
+                setEditing(null);
+            };
+
+            const deleteProject = async (project) => {
+                // On the shared store the card is tombstoned, not erased, and the
+                // phase files (the actual work) are left alone: destroying them is
+                // unrecoverable for the whole team at once, and a colleague may be
+                // in that document right now. A card can be brought back with
+                // Board.restoreCard(id).
+                const shared = dbFormat === 'cards';
+                if (!window.confirm(shared ? t.confirmDeleteShared : t.confirmDelete)) return;
+                await persist(manifest.projects.filter(p => p.id !== project.id));
+                if (shared) return;
+                try { await Board.deleteProjectFiles(project.id); } catch (e) { /* best effort */ }
+            };
+
+            const openInTool = (project, phaseKey) => {
+                const phase = Board.phaseByKey[phaseKey];
+                let url = phase.tool + '?boardProject=' + encodeURIComponent(project.id);
+                if (phaseKey === 'dashboard') url += '&autoImport=1';
+                // Claim the advisory lock before leaving, so colleagues see the card
+                // is being worked on. Fire-and-forget: navigation must not wait on
+                // it, and a lock we cannot write is not worth blocking the user.
+                if (dbFormat === 'cards') Board.touchLock(project.id);
+                window.location.assign(url); // open in the current tab
+            };
+
+            // ---- Migration to the shared format ----
+            const runMigration = async () => {
+                setMigrating(true);
+                try {
+                    const res = await Board.migrateToCards();
+                    setDbFormat(await Board.dbMode());
+                    await loadManifest();
+                    if (res.migrated) window.alert(t.migrateDone.replace('{n}', res.cards));
+                    // First snapshot right away: the migration is exactly the moment
+                    // you want a restore point for.
+                    await Board.runDueBackups({ force: true }).catch(() => {});
+                    Board.readBackupState().then(setBackupState).catch(() => {});
+                } catch (e) {
+                    setError(e.message || String(e));
+                } finally {
+                    setMigrating(false);
+                }
+            };
+
+            // ---- Backups ----
+            const openBackups = async () => {
+                setShowBackups(true);
+                setBackupList(null);
+                try {
+                    const [list, state] = await Promise.all([Board.listBackups(), Board.readBackupState()]);
+                    setBackupList(list);
+                    setBackupState(state);
+                } catch (e) { setError(e.message || String(e)); }
+            };
+
+            const backupNow = async () => {
+                setBackupBusy(t.backupBusy);
+                try {
+                    await Board.runDueBackups({ force: true, onProgress: p => setBackupBusy(t.backupBusy + ' (' + p.copied + ')') });
+                    const [list, state] = await Promise.all([Board.listBackups(), Board.readBackupState()]);
+                    setBackupList(list);
+                    setBackupState(state);
+                } catch (e) { setError(e.message || String(e)); }
+                finally { setBackupBusy(''); }
+            };
+
+            // Restore is deliberately two-step and never silent: read the bundle,
+            // show what is in it, and only write after an explicit confirm.
+            const restoreBackup = async (entry) => {
+                let bundle;
+                try {
+                    bundle = await Board.readStructureBackup(entry.kind, entry.name);
+                } catch (e) { setError(e.message || String(e)); return; }
+                if (!bundle) { setError('Backup ' + entry.name + ' could not be read'); return; }
+                const msg = t.restoreConfirm
+                    .replace('{name}', entry.kind + '/' + entry.name)
+                    .replace('{date}', fmtDateTime(bundle.createdAt))
+                    .replace('{n}', (bundle.cards || []).length);
+                if (!window.confirm(msg)) return;
+                setBackupBusy(t.backupRestoreBusy);
+                try {
+                    const res = await Board.restoreStructureBackup(bundle);
+                    await loadManifest();
+                    setShowBackups(false);
+                    window.alert(t.restoreDone.replace('{n}', res.cards));
+                } catch (e) { setError(e.message || String(e)); }
+                finally { setBackupBusy(''); }
+            };
+
+            const saveUserLabel = (name) => {
+                const v = Board.setUserLabel(name);
+                setUserLabel(v);
+            };
+
+            // Products open in the dashboard, which owns all product editing.
+            const openProductInDashboard = (product) => {
+                const url = Board.phaseByKey.dashboard.tool + '?product=' + encodeURIComponent(product.id);
+                window.location.assign(url);
+            };
+
+            // Open the tool at a specific action. Measurement actions live in the
+            // report phase and deep-link to that measurement day (&measureDay=).
+            const openAction = (project, action) => {
+                const phaseKey = action.kind === 'measurement' ? 'report' : project.phase;
+                let url = Board.phaseByKey[phaseKey].tool + '?boardProject=' + encodeURIComponent(project.id);
+                if (action.kind === 'measurement' && action.day != null) url += '&measureDay=' + encodeURIComponent(action.day);
+                window.location.assign(url);
+            };
+
+            // Toggle an action's completion. Measurement actions get a manual
+            // override (doneManual) that wins over auto-detection; manual actions
+            // flip their own `done`.
+            const toggleActionDone = async (project, action) => {
+                const cur = effDone(action);
+                const nextActions = (project.actions || []).map(a => {
+                    if (!sameAction(a, action)) return a;
+                    return a.kind === 'measurement' ? { ...a, doneManual: !cur } : { ...a, done: !cur };
+                });
+                await persist(manifest.projects.map(p => p.id === project.id ? { ...p, actions: nextActions, updatedAt: new Date().toISOString() } : p));
+            };
+
+            // Clicking a column header starts a new document in that phase: it
+            // creates a fresh project and opens the matching tool linked to it.
+            // The Dashboard header just opens the product dashboard (it is the
+            // destination view, not a per-project editor).
+            const startNewInPhase = async (phaseKey) => {
+                if (phaseKey === 'dashboard') { window.location.assign(Board.phaseByKey.dashboard.tool); return; }
+                const proj = { ...emptyProject(), id: Board.newId(), phase: phaseKey, files: {}, updatedAt: new Date().toISOString() };
+                await persist([...manifest.projects, proj]);
+                openInTool(proj, phaseKey);
+            };
+
+            const onDragStart = (e, id) => { setDragId(id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', id); };
+            // Derive board metadata from any tool export (intake/proposal/report/BC).
+            const deriveMeta = (d) => {
+                const ci = (d && (d.clientInfo || d.client)) || {};
+                const p = (d && d.project) || {};
+                const product = p.productName || (Array.isArray(d && d.products) && d.products[0] && d.products[0].name) || '';
+                return {
+                    client: ci.companyName || p.company || '',
+                    product: product,
+                    commercial: '',
+                    productManager: p.employee || '',
+                    startDate: p.packingDate || ''
+                };
+            };
+
+            // Import JSON files dropped onto a column from another window (mail,
+            // Explorer, …): each becomes a new project in that phase, with the file
+            // stored as its phase file and metadata derived from the JSON.
+            const importExternalFiles = async (fileList, phaseKey) => {
+                const jsons = fileList.filter(f => /\.json$/i.test(f.name) || f.type === 'application/json');
+                if (!jsons.length) { setError(t.notJson); return; }
+                beginMutation();
+                const added = [];
+                for (const f of jsons) {
+                    try {
+                        const data = JSON.parse(await f.text());
+                        const id = Board.newId();
+                        await Board.writePhaseFile(id, phaseKey, data);
+                        const meta = deriveMeta(data);
+                        let image = '';
+                        const imgSrc = (data.project && (data.project.coverImage || data.project.startImage)) ||
+                            (Array.isArray(data.products) && data.products[0] && data.products[0].photo) || '';
+                        if (imgSrc) { const s = await Board.scaleImage(imgSrc, 480); if (s) image = s; }
+                        added.push({ id, title: '', ...meta, image, phase: phaseKey, files: { [phaseKey]: true }, actions: [], updatedAt: new Date().toISOString() });
+                    } catch (err) { setError(t.importFailed + ' ' + f.name); }
+                }
+                if (added.length) await persist([...manifest.projects, ...added]);
+            };
+
+            const onDrop = async (phaseKey, droppedFiles) => {
+                // External JSON file(s) dropped from another window → new project(s).
+                if (droppedFiles && droppedFiles.length) { setDragId(null); await importExternalFiles(droppedFiles, phaseKey); return; }
+                if (!dragId) return;
+                const project = manifest.projects.find(p => p.id === dragId);
+                setDragId(null);
+                if (!project || project.phase === phaseKey) return;
+                // Carry the project's data forward: copy the file from the phase it is
+                // leaving into the new phase's file, so the tool opens with the existing
+                // content instead of a blank form. Don't overwrite a file the target
+                // phase already has, and skip Dashboard (it imports the report file).
+                const files = { ...(project.files || {}) };
+                // Only ever copy FORWARD. Moving a card back means "revisit that
+                // earlier phase", and writing the downstream payload into the
+                // upstream file would leave e.g. a report export sitting in
+                // intake.json — which that tool then cannot own. Nothing is lost by
+                // skipping it: readProjectData still falls back to the latest file
+                // with content when the tool opens.
+                const phaseOrder = Board.PHASES.map(ph => ph.key);
+                const movingForward = phaseOrder.indexOf(phaseKey) > phaseOrder.indexOf(project.phase);
+                if (phaseKey !== 'dashboard' && movingForward) {
+                    try {
+                        const existing = await Board.readPhaseFile(project.id, phaseKey);
+                        // Copy forward when the target phase has no file, or only a
+                        // blank stub that would otherwise open empty.
+                        if (!existing || !Board.hasContent(existing)) {
+                            // Source = the latest file WITH content (prefers the phase
+                            // we are leaving, else the most-advanced meaningful one).
+                            const src = await Board.readProjectData(project.id, project.phase);
+                            if (src && Board.hasContent(src)) { await Board.writePhaseFile(project.id, phaseKey, src); files[phaseKey] = true; }
+                        } else {
+                            files[phaseKey] = true;
+                        }
+                    } catch (e) { /* best effort — the move still proceeds */ }
+                }
+                const movedAt = new Date().toISOString();
+                // phaseChangedAt is what lets pipedrive-sync.mjs tell which side
+                // moved the phase most recently when both did.
+                const next = manifest.projects.map(p => p.id === project.id
+                    ? { ...p, phase: phaseKey, files, phaseChangedAt: movedAt, updatedAt: movedAt }
+                    : p);
+                await persist(next);
+                // Moving into Dashboard triggers automatic trial import.
+                if (phaseKey === 'dashboard') openInTool({ ...project, phase: phaseKey }, 'dashboard');
+            };
+
+            // A project stores `product` as free text (Pipedrive owns it on CRM
+            // cards) and `productId` as the link into the shared product
+            // database. Show the linked product's name where there is one, so a
+            // card that says "Bimi" reads as "Bimi®Broccolini" once it points at
+            // that product. Resolved once here and used by the cards, the filter
+            // and the agenda, so those cannot disagree with each other.
+            // Whole and Processed of the same produce are different products with
+            // different targets, so the state belongs next to the name wherever a
+            // project is linked. Unlinked projects show the bare name — nothing
+            // knows their state.
+            const projectsView = useMemo(() => {
+                const byId = {};
+                productIndex.forEach(p => { byId[p.id] = p; });
+                return (manifest.projects || []).map(p => {
+                    const prod = p.productId ? byId[p.productId] : null;
+                    if (!prod) return { ...p, product: p.product || '' };
+                    const state = prod.state === 'processed' ? t.stateProcessed : t.stateWhole;
+                    return {
+                        ...p,
+                        product: productLabel(prod) + (state ? ' · ' + state : ''),
+                        productState: prod.state
+                    };
+                });
+            }, [manifest.projects, productIndex, t]);
+
+            const matches = (p) => {
+                if (filters.client && p.client !== filters.client) return false;
+                if (filters.product && p.product !== filters.product) return false;
+                if (filters.commercial && p.commercial !== filters.commercial) return false;
+                if (filters.productManager && p.productManager !== filters.productManager) return false;
+                if (filters.q) {
+                    const actionText = getActions(p).map(a => a.text).join(' ');
+                    const hay = [p.title, p.client, p.product, p.commercial, p.productManager, p.nextAction, actionText].filter(Boolean).join(' ').toLowerCase();
+                    if (!hay.includes(filters.q.toLowerCase())) return false;
+                }
+                return true;
+            };
+            const filtered = useMemo(() => projectsView.filter(matches), [projectsView, filters]);
+
+            // Always edit the STORED record, never the display view: `product`
+            // there may be the resolved product name, and saving that back would
+            // overwrite the value Pipedrive owns on CRM cards.
+            const editProject = (p) => setEditing((manifest.projects || []).find(x => x.id === p.id) || p);
+            const activeFilterCount = (filters.q ? 1 : 0) + FILTER_FIELDS.filter(f => filters[f.key]).length;
+
+            // ---- Render gates ----
+            const Shell = ({ children }) => (
+                <div className="h-screen overflow-hidden flex flex-col brand-body">
+                    <header className="bg-white border-b border-slate-200 py-3 shadow-sm shrink-0 z-30">
+                        <div className="max-w-[1600px] mx-auto px-4 md:px-6 flex items-center justify-between gap-3 flex-wrap">
+                            <div className="flex items-center gap-3 min-w-0">
+                                <img src={BRAND.logo} alt="PerfoTec logo" className="h-8 shrink-0" />
+                                <div className="h-8 border-l border-slate-200" aria-hidden="true"></div>
+                                <div className="flex flex-col min-w-0">
+                                    <h1 className="brand-heading text-lg md:text-xl uppercase tracking-tight truncate flex items-center gap-2" style={{ color: BRAND.blue }}>
+                                        <LayoutDashboard size={20} style={{ color: BRAND.green }} />{t.title}
+                                    </h1>
+                                    <span className="text-[10px] font-bold tracking-widest uppercase" style={{ color: BRAND.green }}>{BRAND.tagline}</span>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                {status === 'ready' && (
+                                    <>
+                                        {/* One folder holds both halves of the database — switch
+                                            between the projects side and the products side. */}
+                                        <div className="flex items-center gap-0.5 bg-slate-100 rounded-lg p-0.5" role="tablist">
+                                            {[{ key: 'board', label: t.viewBoard, icon: LayoutDashboard }, { key: 'products', label: t.viewProducts, icon: Package }].map(v => (
+                                                <button key={v.key} type="button" role="tab" aria-selected={view === v.key} onClick={() => setView(v.key)}
+                                                    className={`flex items-center gap-1.5 text-sm font-bold px-3 py-1.5 rounded-md transition-colors ${view === v.key ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}>
+                                                    <v.icon size={15} style={view === v.key ? { color: BRAND.green } : {}} />
+                                                    <span className="hidden sm:inline">{v.label}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <button type="button" onClick={switchFolder}
+                                            className="hidden md:flex items-center gap-1.5 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 hover:bg-slate-100 hover:text-slate-700 hover:border-slate-300 transition-colors"
+                                            title={(rootName || '') + ' — ' + t.changeFolder}>
+                                            <FolderOpen size={14} style={{ color: BRAND.green }} /><span className="max-w-[140px] truncate">{rootName}</span>
+                                        </button>
+                                        {/* Who is writing, and when the database was last backed up.
+                                            Both only mean something on the shared store. */}
+                                        {dbFormat === 'cards' && (
+                                            <>
+                                                <button type="button" onClick={() => setShowName(true)} title={t.whoChange}
+                                                    className="hidden md:flex items-center gap-1.5 text-xs font-bold text-slate-600 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 hover:bg-slate-100">
+                                                    <User size={14} style={{ color: BRAND.blue }} /><span className="max-w-[110px] truncate">{userLabel || '—'}</span>
+                                                </button>
+                                                <button type="button" onClick={openBackups}
+                                                    title={t.backupTitle + ': ' + (backupState?.runs?.length ? fmtDateTime(backupState.runs[backupState.runs.length - 1].at) : t.backupNever)}
+                                                    className="hidden lg:flex items-center gap-1.5 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 hover:bg-slate-100">
+                                                    <Lock size={13} style={{ color: BRAND.green }} />
+                                                    <span className="truncate">{backupBusy || (backupState?.runs?.length ? fmtDateTime(backupState.runs[backupState.runs.length - 1].at) : t.backupNever)}</span>
+                                                </button>
+                                            </>
+                                        )}
+                                        <span className="hidden lg:flex items-center gap-1.5 text-xs text-slate-500 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5"
+                                            title={t.lastSync + ': ' + (syncState?.lastRunAt || t.neverSynced)}>
+                                            <RefreshCw size={13} style={{ color: BRAND.blue }} />
+                                            <span className="truncate">{syncState?.lastRunAt ? fmtDateTime(syncState.lastRunAt) : t.neverSynced}</span>
+                                        </span>
+                                        <button type="button" onClick={loadManifest} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500" title={t.reload}><RefreshCw size={16} /></button>
+                                        {/* Agenda, filter and "new project" act on projects only. */}
+                                        {view === 'board' && (
+                                            <>
+                                                <button type="button" onClick={() => setShowAgenda(true)}
+                                                    className="flex items-center gap-1.5 text-sm font-bold px-3 py-2 rounded-lg border text-slate-600 border-slate-200 hover:bg-slate-100" title={t.agenda}>
+                                                    <Calendar size={15} /><span className="hidden sm:inline">{t.agenda}</span>
+                                                </button>
+                                                <div className="relative">
+                                                    <button type="button" onClick={() => setShowFilter(v => !v)}
+                                                        className={`flex items-center gap-1.5 text-sm font-bold px-3 py-2 rounded-lg border ${activeFilterCount ? 'text-white' : 'text-slate-600 border-slate-200 hover:bg-slate-100'}`}
+                                                        style={activeFilterCount ? { backgroundColor: BRAND.blue, borderColor: BRAND.blue } : {}}>
+                                                        <Filter size={15} />{t.filter}{activeFilterCount > 0 && <span className="ml-0.5">({activeFilterCount})</span>}
+                                                    </button>
+                                                    {showFilter && <FilterPanel t={t} projects={projectsView} filters={filters} setFilters={setFilters} onClose={() => setShowFilter(false)} />}
+                                                </div>
+                                                <button type="button" onClick={() => setEditing(emptyProject())}
+                                                    className="flex items-center gap-1.5 text-sm font-bold text-white px-3 py-2 rounded-lg" style={{ backgroundColor: BRAND.green }}>
+                                                    <Plus size={16} />{t.newProject}
+                                                </button>
+                                            </>
+                                        )}
+                                    </>
+                                )}
+                                <LangSwitcher lang={lang} setLang={setLang} />
+                            </div>
+                        </div>
+                    </header>
+                    <main id="main-content" className="flex-1 min-h-0 overflow-auto w-full">{children}</main>
+                </div>
+            );
+
+            const CenterCard = ({ icon: Icon, color, title, desc, action }) => (
+                <div className="max-w-md mx-auto mt-20 bg-white rounded-2xl shadow-sm border border-slate-200 p-8 text-center">
+                    <div className="w-16 h-16 rounded-2xl mx-auto flex items-center justify-center mb-5" style={{ backgroundColor: color + '15', color }}>
+                        <Icon size={32} />
+                    </div>
+                    <h2 className="text-xl font-bold brand-heading mb-2">{title}</h2>
+                    <p className="text-slate-500 text-sm leading-relaxed mb-6">{desc}</p>
+                    {action}
+                </div>
+            );
+
+            if (status === 'loading') return <Shell><p className="text-center text-slate-400 mt-20">Loading…</p></Shell>;
+            if (status === 'unsupported') return <Shell><CenterCard icon={AlertTriangle} color={BRAND.orange} title={t.unsupportedTitle} desc={t.unsupportedDesc} /></Shell>;
+            if (status === 'no-folder') return <Shell><CenterCard icon={FolderOpen} color={BRAND.green} title={t.noFolderTitle} desc={t.noFolderDesc}
+                action={<button type="button" onClick={chooseFolder} className="inline-flex items-center gap-2 text-sm font-bold text-white px-5 py-2.5 rounded-lg" style={{ backgroundColor: BRAND.green }}><FolderOpen size={16} />{t.chooseFolder}</button>} /></Shell>;
+            if (status === 'needs-permission') return <Shell><CenterCard icon={FolderOpen} color={BRAND.blue} title={t.needsPermTitle} desc={t.needsPermDesc}
+                action={<div className="flex flex-col gap-2 items-center"><button type="button" onClick={grantAccess} className="inline-flex items-center gap-2 text-sm font-bold text-white px-5 py-2.5 rounded-lg" style={{ backgroundColor: BRAND.blue }}><Check size={16} />{t.grantAccess}</button>
+                    <button type="button" onClick={chooseFolder} className="text-xs font-bold text-slate-500 hover:text-slate-700">{t.changeFolder}</button></div>} /></Shell>;
+
+            return (
+                <Shell>
+                    {error && (
+                        <div className="px-4 md:px-6 pt-3">
+                            <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-2 flex items-center gap-2"><AlertTriangle size={16} />{error}</div>
+                        </div>
+                    )}
+                    {/* Still on the single-user format: offer the conversion, and say
+                        why it matters before someone else joins this folder. */}
+                    {dbFormat === 'legacy' && (
+                        <Notice tone="blue" icon={Settings} title={t.migrateTitle}
+                            action={<button type="button" onClick={runMigration} disabled={migrating}
+                                className="shrink-0 text-xs font-bold text-white px-4 py-2 rounded-lg disabled:opacity-50"
+                                style={{ backgroundColor: BRAND.blue }}>{migrating ? t.migrateBusy : t.migrateBtn}</button>}>
+                            {t.migrateDesc}
+                        </Notice>
+                    )}
+                    {/* Not an error: our write lost a race and the board was re-read. */}
+                    {conflictNote && (
+                        <Notice tone="amber" icon={AlertTriangle} title={t.conflictTitle}
+                            action={<button type="button" onClick={() => setConflictNote(null)}
+                                className="shrink-0 p-1.5 rounded-lg hover:bg-amber-100 text-amber-700"><X size={16} /></button>}>
+                            {conflictNote} {t.conflictReloaded}
+                        </Notice>
+                    )}
+                    {/* OneDrive could not merge: somebody's change may be missing. */}
+                    {artefacts.length > 0 && (
+                        <Notice tone="amber" icon={CloudOff} title={t.artefactTitle}>
+                            {t.artefactDesc.replace('{names}', artefacts.join(', '))}
+                        </Notice>
+                    )}
+                    {/* Phase conflicts the sync had to resolve by timestamp. Only
+                        those since the last run are shown — older ones are history. */}
+                    {(() => {
+                        const recent = (syncState?.conflicts || []).filter(c => syncState.lastRunAt && c.at >= syncState.lastRunAt);
+                        if (!recent.length) return null;
+                        return (
+                            <div className="px-4 md:px-6 pt-3">
+                                <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-lg px-4 py-2 flex items-start gap-2">
+                                    <AlertTriangle size={16} className="shrink-0 mt-0.5" />
+                                    <div className="min-w-0">
+                                        <p className="font-bold">{t.conflictWarn.replace('{n}', recent.length)}</p>
+                                        <ul className="mt-0.5 text-xs space-y-0.5">
+                                            {recent.slice(0, 5).map((c, i) => (
+                                                <li key={i} className="truncate">
+                                                    {c.label}: {c.boardPhase} ⇄ {c.pipedrivePhase} → <strong>{c.resolvedTo}</strong>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })()}
+                    {view === 'products' ? (
+                        <div className="max-w-[1600px] mx-auto px-4 md:px-6 pt-6 pb-8">
+                            {productIndex.length === 0 ? (
+                                <p className="text-sm text-slate-400">{t.noProducts}</p>
+                            ) : (
+                                <div className="grid gap-4 sm:gap-5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
+                                    {productIndex.map(prod => (
+                                        <ProductCard key={prod.id} t={t} product={prod}
+                                            projectCount={manifest.projects.filter(p => p.productId === prod.id).length}
+                                            onOpen={openProductInDashboard} />
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                    <>
+                    {manifest.projects.length === 0 && (
+                        <p className="px-4 md:px-6 pt-4 text-xs text-slate-400">{t.noProjects}</p>
+                    )}
+                    <div className="px-4 md:px-6 pt-4 pb-8">
+                        {/* w-max + mx-auto centres the columns when they fit, and
+                            falls back to left-aligned horizontal scrolling when they
+                            don't (e.g. narrow / mobile screens). */}
+                        <div className="w-max mx-auto flex gap-4 sm:gap-5 items-stretch">
+                            {Board.PHASES.map(phase => (
+                                <Column key={phase.key} t={t} phase={phase} locks={locks}
+                                    projects={filtered.filter(p => p.phase === phase.key)}
+                                    onDragStart={onDragStart} onDrop={onDrop} onHeaderClick={startNewInPhase}
+                                    onOpen={openInTool} onEdit={editProject} onDelete={deleteProject}
+                                    onActionOpen={openAction} onActionToggle={toggleActionDone} />
+                            ))}
+                        </div>
+                    </div>
+                    </>
+                    )}
+                    {editing && <ProjectModal t={t} initial={editing} onSave={saveProject} onClose={() => setEditing(null)} people={people} productIndex={productIndex} onAddPerson={addPerson} onUpdatePerson={updatePerson} onRenamePerson={renamePerson} onDeletePerson={deletePerson} />}
+                    {showAgenda && <AgendaModal t={t} lang={lang} projects={projectsView} people={people} todayISO={todayISO} onActionOpen={openAction} onActionToggle={toggleActionDone} onClose={() => setShowAgenda(false)} />}
+                    {/* Asked once on the shared store: an unattributed change history
+                        is useless to a team. Also reachable from the header chip. */}
+                    {(showName || (dbFormat === 'cards' && !userLabel)) && (
+                        <NameModal t={t} initial={userLabel} onSave={saveUserLabel} onClose={() => setShowName(false)} />
+                    )}
+                    {showBackups && (
+                        <BackupsModal t={t} state={backupState} list={backupList} busy={backupBusy}
+                            onBackupNow={backupNow} onRestore={restoreBackup} onClose={() => setShowBackups(false)} />
+                    )}
+                </Shell>
+            );
+        };
+
+        document.documentElement.lang = getInitialLang();
+        createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
