@@ -14,8 +14,8 @@
     <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
     
     <!-- LOAD CENTRAL STYLING & CONFIGURATION -->
-    <link rel="stylesheet" href="style.css">
-    <script src="config.js"></script>
+    <link rel="stylesheet" href="style.css?v=77634a3c">
+    <script src="config.js?v=37136610"></script>
 
     <!-- Print rules live in style.css so Intake, Proposal and Report share one source. -->
 </head>
@@ -94,11 +94,11 @@
             actNone: "- None -", actPack: "Pack", actUnpack: "Unpack", addStep: "Add Step", addProd: "Add another product",
             validationErr: "Not all mandatory fields have been filled in:", reqField: "is required", reqProd: "Product",
             printTitle: "Intake Summary",
-            successTitle: "Sent successfully!",
-            successDesc: "Your intake has been sent to PerfoTec. You will hear from us shortly.",
-            downloadFileBtn: "Download a copy (optional)",
-            closeBtn: "Close", submitBtn: "Finish & Send",
-            sendingBtn: "Sending...",
+            successTitle: "Your intake file is ready",
+            successDesc: "The file has been downloaded to your computer. Email it to PerfoTec to complete your request — we will get back to you shortly.",
+            downloadFileBtn: "Download again",
+            closeBtn: "Close", submitBtn: "Finish & Download",
+            sendingBtn: "Preparing...",
             sendError: "Something went wrong. Please try again or contact PerfoTec directly.",
             fileSizeError: "File too large. Maximum allowed size is 2MB.",
             gdprText: "I agree that PerfoTec may process the data I submitted to prepare a test proposal.",
@@ -136,11 +136,11 @@
             actNone: "- Geen -", actPack: "Inpakken", actUnpack: "Uitpakken", addStep: "Extra Stap", addProd: "Extra product toevoegen",
             validationErr: "Nog niet alle verplichte velden zijn ingevuld:", reqField: "is verplicht", reqProd: "Product",
             printTitle: "Intake Overzicht",
-            successTitle: "Succesvol verzonden!",
-            successDesc: "Uw intake is verzonden naar PerfoTec. U hoort spoedig van ons.",
-            downloadFileBtn: "Download een kopie (optioneel)",
-            closeBtn: "Sluiten", submitBtn: "Afronden & Verzenden",
-            sendingBtn: "Verzenden...",
+            successTitle: "Uw intakebestand is klaar",
+            successDesc: "Het bestand is naar uw computer gedownload. Mail het naar PerfoTec om uw aanvraag af te ronden — u hoort spoedig van ons.",
+            downloadFileBtn: "Opnieuw downloaden",
+            closeBtn: "Sluiten", submitBtn: "Afronden & Downloaden",
+            sendingBtn: "Voorbereiden...",
             sendError: "Er is iets misgegaan. Probeer het opnieuw of neem direct contact op met PerfoTec.",
             fileSizeError: "Bestand te groot. Maximale bestandsgrootte is 2MB.",
             gdprText: "Ik ga akkoord dat PerfoTec de ingediende gegevens mag verwerken om een testvoorstel voor te bereiden.",
@@ -178,11 +178,11 @@
             actNone: "- Ninguna -", actPack: "Empacar", actUnpack: "Desempacar", addStep: "Añadir Paso", addProd: "Añadir otro producto",
             validationErr: "No se han completado todos los campos obligatorios:", reqField: "es obligatorio", reqProd: "Producto",
             printTitle: "Resumen de Ingreso",
-            successTitle: "¡Enviado con éxito!",
-            successDesc: "Su solicitud ha sido enviada a PerfoTec. Nos pondremos en contacto pronto.",
-            downloadFileBtn: "Descargar una copia (opcional)",
-            closeBtn: "Cerrar", submitBtn: "Terminar y Enviar",
-            sendingBtn: "Enviando...",
+            successTitle: "Su archivo de ingreso está listo",
+            successDesc: "El archivo se ha descargado en su equipo. Envíelo por correo a PerfoTec para completar su solicitud — nos pondremos en contacto pronto.",
+            downloadFileBtn: "Descargar de nuevo",
+            closeBtn: "Cerrar", submitBtn: "Terminar y Descargar",
+            sendingBtn: "Preparando...",
             sendError: "Algo salió mal. Inténtelo de nuevo o contacte a PerfoTec directamente.",
             fileSizeError: "Archivo demasiado grande. El tamaño máximo permitido es 2MB.",
             gdprText: "Acepto que PerfoTec procese los datos enviados para preparar una propuesta de prueba.",
@@ -910,48 +910,14 @@
 
             setIsSending(true);
 
-            const normalizedClient = globalConfig.buildContactsArray
-              ? { ...clientInfo, contacts: globalConfig.buildContactsArray(clientInfo) }
-              : clientInfo;
-
-            const exportData = {
-              isPerfoTecIntake: true,
-              schemaVersion: globalConfig.SCHEMA_VERSION || '2.1',
-              appVersion: globalConfig.APP_VERSION || '',
-              exportDate: new Date().toISOString(),
-              language: lang,
-              unitSystem: unitSystem,
-              client: normalizedClient,
-              products: products
-            };
-
-            const companyPart = (clientInfo.companyName || 'Company').trim();
-            const productPart = products.map(p => (p.name || '').trim()).filter(Boolean).join('_') || 'Products';
-            const rawFilename = `Intake Form_${companyPart}_${productPart}`;
-            const filename = rawFilename.replace(/[^a-zA-Z0-9_ -]/gi, '_').replace(/_+/g, '_') + '.json';
-            const jsonData = JSON.stringify(exportData, null, 2);
-
-            const primaryContact = normalizedClient.contacts?.[0] || {};
-
+            // This form posts nowhere. It hands the filled-in intake back to the
+            // client as a file, and the modal that follows tells them to mail it
+            // to PerfoTec. There is deliberately no endpoint: a page served from
+            // a public URL cannot hold a secret, so any submit target baked in
+            // here would be callable by anyone who views the source.
             try {
-              const webhookUrl = globalConfig.INTAKE_WEBHOOK_URL || 'https://hook.eu1.make.com/xybivi92y6ry2ia8fhc2f4mwxc8i3m7m';
-              const res = await fetch(webhookUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  companyName: clientInfo.companyName || 'Unknown',
-                  contactName: primaryContact.name || '',
-                  contactEmail: primaryContact.email || '',
-                  submittedAt: new Date().toISOString(),
-                  filename: filename,
-                  jsonData: jsonData
-                })
-              });
-              if (res.ok) {
-                setIsSuccessModalOpen(true);
-              } else {
-                alert(t.sendError || 'Something went wrong. Please try again.');
-              }
+              handleExportJSON();
+              setIsSuccessModalOpen(true);
             } catch (err) {
               alert(t.sendError || 'Something went wrong. Please try again.');
             } finally {
