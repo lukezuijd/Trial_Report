@@ -25,8 +25,10 @@
     <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
 
     <!-- LOAD CENTRAL STYLING & CONFIGURATION -->
-    <link rel="stylesheet" href="style.css">
-    <script src="config.js"></script>
+    <link rel="stylesheet" href="style.css?v=77634a3c">
+    <script src="config.js?v=37136610"></script>
+    <script src="board-db.js?v=a2107b12"></script>
+    <script src="product-tools.js?v=eca36103"></script>
 </head>
 <body class="bg-slate-50 text-slate-800 antialiased selection:bg-blue-200 selection:text-blue-900">
     <div id="root">
@@ -48,7 +50,8 @@
           Utensils, Factory, ArrowDown, ArrowUp, ChevronUp, ChevronDown, 
           Bold, Italic, Underline, List, AlertTriangle, Package, PackagePlus,
           X, Edit3, Camera, FileArchive, LineChart, Globe, AlertCircle,
-          Building2, Target, Beaker, Send, Mail, ClipboardList, UserPlus
+          Building2, Target, Beaker, Send, Mail, ClipboardList, UserPlus,
+          Check
         } from 'https://esm.sh/lucide-react@0.292.0';
 
         // --- LINK WITH CONFIG.JS ---
@@ -885,7 +888,9 @@
                                </tr>
                              </thead>
                              <tbody className="divide-y divide-slate-100">
-                               {g.measurements.sort((a,b) => parseFloat(a.day) - parseFloat(b.day)).map((m, idx) => (
+                               {/* Copy before sorting: sorting the state array in place would
+                                   silently re-order the editor's rows behind the user's back. */}
+                               {[...(g.measurements || [])].sort((a,b) => parseFloat(a.day) - parseFloat(b.day)).map((m, idx) => (
                                  <tr key={idx} className="hover:bg-slate-50 transition-colors">
                                    <td className="p-3 print:p-2 text-center font-extrabold text-slate-700 bg-slate-50/50">P+{m.day}</td>
                                    <td className="p-3 print:p-2 text-slate-600 font-medium break-words">{(m.measure||[]).length > 0 ? (m.measure||[]).map(s => `S${s}`).join(', ') : '-'}</td>
@@ -1149,6 +1154,12 @@
               selectCriterion: 'Select standard criterion...', addCriterion: 'Add Criterion',
               globalEvalDays: 'Global Evaluation Days', evalDaysDesc: 'Specify the days on which packs are opened and evaluated.',
               addEvalDay: 'Add Evaluation Day', perfoTecTech: 'PerfoTec Technology',
+              evalDaysAllVariants: 'These days are applied to every variant. Need a different day for one variant? Adjust it in that variant\'s Timeline & Events below.',
+              daysFollowPlan: 'Follows global days', daysCustom: 'Custom days',
+              resetDaysToPlan: 'Reset to global days',
+              dayFromPlan: 'From the global evaluation days — editing this changes only this variant.',
+              dayVariantOnly: 'This day is not in the global evaluation days (variant-specific).',
+              addDayVariant: 'Add day (this variant)', removeDayVariant: 'Remove this day from this variant',
               addVariant: 'Add Variant', variantConfig: 'Variant Configuration',
               variantName: 'Variant Name', packagingType: 'Packaging Type', atmosphereStrategy: 'Atmosphere Strategy', optMAP: 'MAP (Atmosphere buildup)', optMHP: 'MHP (No atmosphere buildup)', optOpen: 'Open (No packaging)',
               packagingSpecs: 'Packaging Specs & Samples',
@@ -1196,11 +1207,27 @@
               o2TargetPlaceholder: 'e.g. 1.0% - 5.0%', co2TargetPlaceholder: 'e.g. 5.0% - 15.0%',
               tempCriticalPlaceholder: 'e.g. 0°C - 4°C', o2AcpPlaceholder: 'e.g. 0.2% - 0.4%',
               co2CriticalPlaceholder: 'e.g. 15%', ethyleneProfilePlaceholder: 'e.g. Climacteric — high ethylene production',
-              productSheetDropTitle: 'Import Product Sheet',
-              productSheetDropDesc: 'Drag a PerfoTec product-sheet HTML file here, or click to upload. The defects matrix and gas/temperature targets will be filled automatically.',
-              productSheetBrowse: 'Choose product-sheet file',
-              productSheetDropActive: 'Drop the file to import…',
-              productSheetParseFail: 'Could not parse this product sheet. Check that it contains a defects matrix and an "Optimal Conditions" section.',
+              dashWithSheet: 'with product sheet',
+              dashUnavailable: 'The dashboard database could not be reached. Open this tool through the PerfoTec server, or select the database file manually.',
+              dashBrowseDb: 'Choose database file',
+              dashLoadFail: 'Could not read this database file.',
+              dashLoadEmpty: 'No products found in this database file.',
+              dashAppliedDefects: '✓ Imported from the product database, including {n} defects.',
+              dashAppliedNoDefects: '✓ Imported the target window. This product has no defects matrix yet.',
+              dashUnavailableShort: 'The product database is not reachable — type a product name.',
+              productNameSelectHint: 'Select or type a product…',
+              productPickHint: 'Choose one of {n} products, or type a new name.',
+              productLinked: 'Linked to the product database — section 5 filled automatically',
+              productNotLinked: 'Not in the product database yet.',
+              productMissing: 'This product is no longer in the product database — the values below are the ones last saved.',
+              productCreate: 'Add as new product',
+              productCreateAs: 'add as',
+              productStateWhole: 'Whole',
+              productStateProcessed: 'Processed',
+              productCreating: 'Adding…',
+              dashCreated: '✓ "{name}" added to the product database — it now appears on the board and in the dashboard.',
+              dashCreateFailed: 'Could not add this product to the database.',
+              dashCreateUnavailable: 'The product database is not reachable — link the folder in the Project Board first.',
               addPackaging: '+ Add Packaging', removePackaging: 'Remove', packaging: 'Packaging'
             },
             nl: {
@@ -1232,6 +1259,12 @@
               selectCriterion: 'Selecteer standaard criterium...', addCriterion: 'Criterium Toevoegen',
               globalEvalDays: 'Globale Evaluatiedagen', evalDaysDesc: 'Geef de dagen op waarop verpakkingen worden geopend en beoordeeld.',
               addEvalDay: 'Evaluatiedag Toevoegen', perfoTecTech: 'PerfoTec Technologie',
+              evalDaysAllVariants: 'Deze dagen worden op alle varianten toegepast. Voor één variant een andere dag nodig? Pas die aan in de Tijdlijn & Gebeurtenissen van die variant hieronder.',
+              daysFollowPlan: 'Volgt globale dagen', daysCustom: 'Afwijkende dagen',
+              resetDaysToPlan: 'Terug naar globale dagen',
+              dayFromPlan: 'Uit de globale evaluatiedagen — hier aanpassen wijzigt alleen deze variant.',
+              dayVariantOnly: 'Deze dag staat niet in de globale evaluatiedagen (variant-specifiek).',
+              addDayVariant: 'Dag toevoegen (deze variant)', removeDayVariant: 'Verwijder deze dag bij deze variant',
               addVariant: 'Variant Toevoegen', variantConfig: 'Variant Configuratie',
               variantName: 'Variant Naam', packagingType: 'Type Verpakking', atmosphereStrategy: 'Atmosfeer Strategie', optMAP: 'MAP (gericht op atmosfeer)', optMHP: 'MHP (geen atmosfeer opbouw)', optOpen: 'Open (geen verpakking)',
               packagingSpecs: 'Verpakkingsspecificaties & Monsters',
@@ -1277,11 +1310,27 @@
               o2TargetPlaceholder: 'bv. 1.0% - 5.0%', co2TargetPlaceholder: 'bv. 5.0% - 15.0%',
               tempCriticalPlaceholder: 'bv. 0°C - 4°C', o2AcpPlaceholder: 'bv. 0.2% - 0.4%',
               co2CriticalPlaceholder: 'bv. 15%', ethyleneProfilePlaceholder: 'bv. Climacterisch — hoge ethyleenproductie',
-              productSheetDropTitle: 'Product Sheet Importeren',
-              productSheetDropDesc: 'Sleep een PerfoTec product-sheet HTML hier, of klik om te uploaden. De defectenmatrix en gas/temperatuur targets worden automatisch ingevuld.',
-              productSheetBrowse: 'Kies product-sheet bestand',
-              productSheetDropActive: 'Laat het bestand los om te importeren…',
-              productSheetParseFail: 'Kon deze product sheet niet inlezen. Controleer of er een defectenmatrix en een "Optimale Condities" sectie in staat.',
+              dashWithSheet: 'met product sheet',
+              dashUnavailable: 'De dashboard-database is niet bereikbaar. Open deze tool via de PerfoTec-server, of kies het databasebestand handmatig.',
+              dashBrowseDb: 'Kies databasebestand',
+              dashLoadFail: 'Kon dit databasebestand niet lezen.',
+              dashLoadEmpty: 'Geen producten gevonden in dit databasebestand.',
+              dashAppliedDefects: '✓ Overgenomen uit de productendatabase, inclusief {n} defecten.',
+              dashAppliedNoDefects: '✓ Doelvenster overgenomen. Dit product heeft nog geen defectenmatrix.',
+              dashUnavailableShort: 'De productendatabase is niet bereikbaar — typ een productnaam.',
+              productNameSelectHint: 'Kies of typ een product…',
+              productPickHint: 'Kies uit {n} producten, of typ een nieuwe naam.',
+              productLinked: 'Gekoppeld aan de productendatabase — hoofdstuk 5 automatisch ingevuld',
+              productNotLinked: 'Nog niet in de productendatabase.',
+              productMissing: 'Dit product staat niet meer in de productendatabase — onderstaande waarden zijn de laatst opgeslagen waarden.',
+              productCreate: 'Als nieuw product toevoegen',
+              productCreateAs: 'toevoegen als',
+              productStateWhole: 'Heel',
+              productStateProcessed: 'Bewerkt',
+              productCreating: 'Toevoegen…',
+              dashCreated: '✓ "{name}" toegevoegd aan de productendatabase — staat nu ook op het board en in het dashboard.',
+              dashCreateFailed: 'Kon dit product niet aan de database toevoegen.',
+              dashCreateUnavailable: 'De productendatabase is niet bereikbaar — koppel eerst de map in het Project Board.',
               addPackaging: '+ Verpakking Toevoegen', removePackaging: 'Verwijderen', packaging: 'Verpakking'
             },
             es: {
@@ -1313,6 +1362,12 @@
               selectCriterion: 'Seleccionar criterio estándar...', addCriterion: 'Añadir Criterio',
               globalEvalDays: 'Días de Evaluación Global', evalDaysDesc: 'Especifique los días en que se abren y evalúan los paquetes.',
               addEvalDay: 'Añadir Día de Evaluación', perfoTecTech: 'Tecnología PerfoTec',
+              evalDaysAllVariants: 'Estos días se aplican a todas las variantes. ¿Necesita un día distinto para una variante? Ajústelo en la Cronología y Eventos de esa variante más abajo.',
+              daysFollowPlan: 'Sigue los días globales', daysCustom: 'Días personalizados',
+              resetDaysToPlan: 'Volver a los días globales',
+              dayFromPlan: 'De los días de evaluación globales — editarlo aquí cambia solo esta variante.',
+              dayVariantOnly: 'Este día no está en los días de evaluación globales (específico de la variante).',
+              addDayVariant: 'Añadir día (esta variante)', removeDayVariant: 'Eliminar este día de esta variante',
               addVariant: 'Añadir Variante', variantConfig: 'Configuración de Variante',
               variantName: 'Nombre de Variante', packagingType: 'Tipo de Empaque', atmosphereStrategy: 'Estrategia de Atmósfera', optMAP: 'MAP (Modificación de atmósfera)', optMHP: 'MHP (Sin modificación de atmósfera)', optOpen: 'Abierto (Sin empaque)',
               packagingSpecs: 'Especificaciones y Muestras',
@@ -1358,11 +1413,27 @@
               o2TargetPlaceholder: 'ej. 1.0% - 5.0%', co2TargetPlaceholder: 'ej. 5.0% - 15.0%',
               tempCriticalPlaceholder: 'ej. 0°C - 4°C', o2AcpPlaceholder: 'ej. 0.2% - 0.4%',
               co2CriticalPlaceholder: 'ej. 15%', ethyleneProfilePlaceholder: 'ej. Climatérico — alta producción de etileno',
-              productSheetDropTitle: 'Importar Ficha de Producto',
-              productSheetDropDesc: 'Arrastre un archivo HTML de ficha de producto PerfoTec aquí, o haga clic para subirlo. La matriz de defectos y los objetivos de gas/temperatura se rellenarán automáticamente.',
-              productSheetBrowse: 'Elegir archivo de ficha',
-              productSheetDropActive: 'Suelte el archivo para importar…',
-              productSheetParseFail: 'No se pudo procesar esta ficha. Verifique que contenga una matriz de defectos y una sección "Condiciones Óptimas".',
+              dashWithSheet: 'con ficha de producto',
+              dashUnavailable: 'No se pudo acceder a la base de datos del panel. Abra esta herramienta a través del servidor PerfoTec, o elija el archivo manualmente.',
+              dashBrowseDb: 'Elegir archivo de base de datos',
+              dashLoadFail: 'No se pudo leer este archivo de base de datos.',
+              dashLoadEmpty: 'No se encontraron productos en este archivo.',
+              dashAppliedDefects: '✓ Importado de la base de datos de productos, incluidos {n} defectos.',
+              dashAppliedNoDefects: '✓ Ventana objetivo importada. Este producto aún no tiene matriz de defectos.',
+              dashUnavailableShort: 'La base de datos de productos no está accesible — escriba un nombre de producto.',
+              productNameSelectHint: 'Seleccione o escriba un producto…',
+              productPickHint: 'Elija entre {n} productos, o escriba un nombre nuevo.',
+              productLinked: 'Vinculado a la base de datos de productos — sección 5 rellenada automáticamente',
+              productNotLinked: 'Aún no está en la base de datos de productos.',
+              productMissing: 'Este producto ya no está en la base de datos — los valores siguientes son los últimos guardados.',
+              productCreate: 'Añadir como producto nuevo',
+              productCreateAs: 'añadir como',
+              productStateWhole: 'Entero',
+              productStateProcessed: 'Procesado',
+              productCreating: 'Añadiendo…',
+              dashCreated: '✓ "{name}" añadido a la base de datos de productos — ahora aparece en el board y en el panel.',
+              dashCreateFailed: 'No se pudo añadir este producto a la base de datos.',
+              dashCreateUnavailable: 'La base de datos de productos no está accesible — vincule primero la carpeta en el Project Board.',
               addPackaging: '+ Añadir Envase', removePackaging: 'Eliminar', packaging: 'Envase'
             }
           };
@@ -1390,7 +1461,10 @@
 
           const [project, setProject] = useState({
             reportTitle: 'Trial Proposal',
-            productName: '', processingType: 'Whole', type: '', origin: '', company: '', contactName: '', contactEmail: '', contactPhone: '', employee: '', employeeEmail: '', employeePhone: '', trialTarget: '', currentChallenge: '',
+            // `productName` is what the proposal prints; `productId` links it to
+            // the shared product database so the board and dashboard agree on
+            // which product this trial is about.
+            productName: '', productId: '', processingType: 'Whole', type: '', origin: '', company: '', contactName: '', contactEmail: '', contactPhone: '', employee: '', employeeEmail: '', employeePhone: '', trialTarget: '', currentChallenge: '',
             rrO2: '', rrCO2: '', rrTemp: '', startWeight: '',
             packagings: [{ id: 1, packagingType: 'Retail', material: '', length: '', width: '', height: '', startWeight: '' }],
             acpO2: '', co2Max: '', co2Shock: '', co2ShockHours: '', tempMin: '',
@@ -1602,10 +1676,12 @@
             setProject(p => ({...p, totalDuration: e.target.value}));
           };
 
-          const exportData = async () => {
+          // Build the canonical proposal export object. Extracted so the Project
+          // Board autosave path can persist the same payload.
+          const buildExportData = () => {
             const exportGroups = groups.map(g => ({
               ...g,
-              specs: { ...g.specs, startWeight: project.startWeight }, 
+              specs: { ...g.specs, startWeight: project.startWeight },
               measurements: (g.measurements || []).map(m => ({
                  day: m.day,
                  samples: Array.from({length: g.specs?.sampleCount || 3}, (_, i) => ({ id: Date.now()+i, o2: '', co2: '', weight: '' })),
@@ -1627,7 +1703,7 @@
               ? { ...clientInfo, contacts: globalConfig.buildContactsArray(clientInfo) }
               : clientInfo;
 
-            const data = {
+            return {
               isPerfoTecProposal: true,
               schemaVersion: globalConfig.SCHEMA_VERSION || '2.1',
               appVersion: globalConfig.APP_VERSION || '',
@@ -1636,6 +1712,10 @@
               unitSystem: unitSystem,
               project, clientInfo: normalizedClientInfo, supplyChain, groups: exportGroups, proposal
             };
+          };
+
+          const exportData = async () => {
+            const data = buildExportData();
             const cleanCompanyName = clientInfo.companyName ? clientInfo.companyName.replace(/[^a-z0-9]/gi, '_').toLowerCase() : 'client';
             const filename = `perfotec_proposal_${cleanCompanyName}.json`; 
             
@@ -1721,16 +1801,20 @@
             setPendingProductSelection(null);
           };
 
-          const importData = (e) => {
-            const file = e.target.files[0]; if(!file) return;
-
+          // Apply a parsed proposal/intake payload to component state. Lifted to
+          // component scope (was nested in importData as processData) so both the
+          // file importer and the Project Board deep-link loader (?boardProject=)
+          // can reuse the exact same logic.
+          const applyProposalData = (raw) => {
+            // A newly loaded document must be re-checked against the product
+            // database, even when it carries the same product id as the last one.
+            setDocLoadSeq(n => n + 1);
             // Canonical contact projection comes from config; fallback to a
             // local no-op in the unlikely event config is missing.
             const extractPrimaryContact = globalConfig.extractPrimaryContact
               ? globalConfig.extractPrimaryContact.bind(globalConfig)
               : (c) => ({ contactName: '', role: '', email: '', phone: '', phoneDirect: '', phoneWork: '', contacts: [] });
-
-            const processData = (raw) => {
+            {
                 // Normalise legacy shapes (flat contacts, targetGoal alias, missing
                 // schemaVersion) before we read from the payload.
                 const d = globalConfig.migrateSchema ? globalConfig.migrateSchema(raw) : raw;
@@ -1851,21 +1935,149 @@
                    }
                    if(d.proposal) setProposal(d.proposal);
                 }
-            };
+            }
+          };
 
+          const importData = (e) => {
+            const file = e.target.files[0]; if(!file) return;
             if (globalConfig.importJSON) {
-                globalConfig.importJSON(file, processData, () => alert("Error loading JSON file."));
+                globalConfig.importJSON(file, applyProposalData, () => alert("Error loading JSON file."));
             } else {
-                const reader = new FileReader(); 
-                reader.onload = (ev) => { 
-                    try { 
-                        processData(JSON.parse(ev.target.result));
-                    } catch(err){ alert("Error loading file."); } 
-                }; 
-                reader.readAsText(file); 
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    try { applyProposalData(JSON.parse(ev.target.result)); }
+                    catch(err){ alert("Error loading file."); }
+                };
+                reader.readAsText(file);
             }
             e.target.value = '';
           };
+
+          // === PROJECT BOARD INTEGRATION ===
+          // When opened as proposal.html?boardProject=<id>, load that project's
+          // proposal.json from the bound folder and autosave edits back to it.
+          const boardProjectId = new URLSearchParams(window.location.search).get('boardProject');
+          const [boardState, setBoardState] = useState(boardProjectId ? 'loading' : 'off');
+          const [boardTitle, setBoardTitle] = useState('');
+          const [boardPeople, setBoardPeople] = useState([]); // product managers from the board registry [{name,email,phone}]
+          const boardLoadedRef = useRef(false);
+          const boardSaveTimer = useRef(null);
+
+          const normBoardPeople = (arr) => (arr || []).map(x => typeof x === 'string' ? { name: x, email: '', phone: '' } : { name: (x && x.name) || '', email: (x && x.email) || '', phone: (x && x.phone) || '' }).filter(x => x.name);
+
+          const loadBoardProject = async () => {
+            const B = window.PerfoTecBoard;
+            const manifest = await B.readManifest();
+            const proj = (manifest.projects || []).find(p => p.id === boardProjectId);
+            if (proj) setBoardTitle(proj.title || '');
+            const pmList = normBoardPeople(manifest.people && manifest.people.productManagers);
+            setBoardPeople(pmList);
+            // Prefer this phase's file, but fall back to the latest available phase
+            // file so a moved/forwarded project always opens with its content.
+            const data = await B.readProjectData(boardProjectId, 'proposal');
+            // Refuse to arm the autosave for a payload we do not recognise: writing
+            // back would replace real data with a blank export. Known shapes only.
+            if (data && !(data.isPerfoTecIntake || data.isPerfoTecProposal || data.isPerfoTecReport)) {
+              setBoardState('unreadable');
+              return;
+            }
+            if (data) applyProposalData(data);
+            // Couple board metadata into the tool: packing date ← board packing date,
+            // PerfoTec employee ← product manager (+ their email/phone), when empty.
+            if (proj) {
+              const pmPerson = proj.productManager ? pmList.find(x => x.name === proj.productManager) : null;
+              setProject(pr => ({
+                ...pr,
+                packingDate: pr.packingDate || proj.startDate || pr.packingDate,
+                employee: pr.employee || proj.productManager || '',
+                employeeEmail: pr.employeeEmail || (pmPerson && pmPerson.email) || '',
+                employeePhone: pr.employeePhone || (pmPerson && pmPerson.phone) || '',
+                // Adopt the board's product link, so a project that was already
+                // linked (on the board, or in an earlier proposal session) opens
+                // with the right product selected.
+                productId: pr.productId || proj.productId || '',
+                productName: pr.productName || proj.product || ''
+              }));
+            }
+            boardLoadedRef.current = true;
+            setBoardState('linked');
+          };
+
+          useEffect(() => {
+            if (!boardProjectId || !window.PerfoTecBoard) { if (boardProjectId) setBoardState('error'); return; }
+            let cancelled = false;
+            (async () => {
+              try {
+                const state = await window.PerfoTecBoard.permissionState();
+                if (state !== 'granted') { if (!cancelled) setBoardState('needs-permission'); return; }
+                if (!cancelled) await loadBoardProject();
+              } catch (err) {
+                if (cancelled) return;
+                setBoardState(err && err.code === 'NEEDS_PERMISSION' ? 'needs-permission' : 'error');
+              }
+            })();
+            return () => { cancelled = true; };
+          }, [boardProjectId]);
+
+          const grantBoardAccess = async () => {
+            try {
+              const ok = await window.PerfoTecBoard.requestAccess();
+              if (ok) { setBoardState('loading'); await loadBoardProject(); }
+            } catch (err) { setBoardState('error'); }
+          };
+
+          // Holds the currently-pending autosave so the shared "Board" button can
+          // flush it before navigating away (see PerfoTecBoard.registerFlush).
+          const pendingBoardSave = useRef(null);
+
+          useEffect(() => {
+            if (boardState !== 'linked' || !boardLoadedRef.current) return;
+            if (boardSaveTimer.current) clearTimeout(boardSaveTimer.current);
+            const doBoardSave = async () => {
+              pendingBoardSave.current = null;
+              try {
+                const B = window.PerfoTecBoard;
+                await B.writePhaseFile(boardProjectId, 'proposal', buildExportData());
+                const manifest = await B.readManifest();
+                const idx = (manifest.projects || []).findIndex(p => p.id === boardProjectId);
+                if (idx >= 0) {
+                  const p = manifest.projects[idx];
+                  const patch = { files: { ...(p.files || {}), proposal: true }, updatedAt: new Date().toISOString() };
+                  if (!p.client && clientInfo.companyName) patch.client = clientInfo.companyName;
+                  if (!p.product && project.productName) patch.product = project.productName;
+                  // The product LINK is board-owned and always mirrored, unlike the
+                  // product NAME, which Pipedrive owns on CRM projects and which is
+                  // therefore only filled when the board has nothing yet. This is
+                  // what makes the board remember the product chosen here.
+                  if (project.productId && p.productId !== project.productId) patch.productId = project.productId;
+                  // Mirror coupled fields tool → board: packing date and PerfoTec
+                  // employee (= product manager on the board).
+                  if (project.packingDate) patch.startDate = project.packingDate;
+                  if (project.employee) patch.productManager = project.employee;
+                  if (!p.image && project.startImage) {
+                    const scaled = await B.scaleImage(project.startImage, 480);
+                    if (scaled) patch.image = scaled;
+                  }
+                  manifest.projects[idx] = { ...p, ...patch };
+                  await B.writeManifest(manifest);
+                }
+              } catch (err) { /* transient — next edit retries */ }
+            };
+            pendingBoardSave.current = doBoardSave;
+            boardSaveTimer.current = setTimeout(doBoardSave, 1200);
+            return () => { if (boardSaveTimer.current) clearTimeout(boardSaveTimer.current); };
+          }, [boardState, clientInfo, project, supplyChain, groups, proposal, lang, unitSystem]);
+
+          // Flush a debounced autosave when the user leaves via the shared
+          // "Board" button, so the last edit is never dropped.
+          useEffect(() => {
+            const B = window.PerfoTecBoard;
+            if (!B || !B.registerFlush) return;
+            return B.registerFlush(() => {
+              if (boardSaveTimer.current) { clearTimeout(boardSaveTimer.current); boardSaveTimer.current = null; }
+              return pendingBoardSave.current ? pendingBoardSave.current() : null;
+            });
+          }, []);
 
           const handleGroupChange = (id, section, field, value) => {
             setGroups(prev => prev.map(g => {
@@ -1919,177 +2131,144 @@
             defectsMatrix: [...(p.defectsMatrix || []), { id: Date.now(), defect: '', cause: '', effectMHP: '', effectMAP: '' }]
           }));
 
-          // === PRODUCT-SHEET IMPORTER ===
-          // Parses a PerfoTec product-sheet HTML (the .htm files under
-          // /OneDrive/.../Product Sheets/) and extracts the Defects matrix +
-          // optimal O₂/CO₂/Temp ranges + ACP value, in the user's selected
-          // language.
+          // === PRODUCTS ===
+          // The sheet parser and the product-database logic live in
+          // product-tools.js, shared with intake.html and report.html so a
+          // product picked in one phase carries into the next when the card is
+          // dragged across the board. Only the React wiring is local.
+          const Products = window.PerfoTecProduct;
+
+          // Product sheets are attached in the Product Dashboard, never here: a
+          // sheet belongs to a product, not to one proposal, and a product that
+          // was only just created has no sheet yet. Selecting a product below
+          // reads whatever sheet the dashboard has attached to it.
+
+          // === PRODUCT PICKER ===
+          const [dashProducts, setDashProducts] = useState([]);
+          // Bumped whenever a document is loaded, so the live-link effect below
+          // re-checks it against the product database even when the product id is
+          // unchanged from the previous document.
+          const [docLoadSeq, setDocLoadSeq] = useState(0);
+          const [dashState, setDashState] = useState('loading'); // loading | ready | unavailable
+          const [dashMsg, setDashMsg] = useState('');
+          const [creatingProduct, setCreatingProduct] = useState(null); // null | 'whole' | 'processed'
+
+          useEffect(() => {
+            let cancelled = false;
+            Products.loadProducts().then(list => {
+              if (cancelled) return;
+              setDashProducts(list);
+              setDashState(list.length > 0 ? 'ready' : 'unavailable');
+            });
+            return () => { cancelled = true; };
+          }, []);
+
+          // Manual fallback: when this page is opened straight from disk (file://)
+          // the folder and the fetch are both out of reach, so let the user point
+          // at a database export by hand.
+          const handleDashDbFile = (file) => {
+            if (!file) return;
+            Products.readBackupFile(file).then(list => {
+              setDashProducts(list);
+              setDashState(list.length > 0 ? 'ready' : 'unavailable');
+              setDashMsg(list.length > 0 ? '' : (pt.dashLoadEmpty || 'No products found in this database file.'));
+            }).catch(() => {
+              setDashState('unavailable');
+              setDashMsg(pt.dashLoadFail || 'Could not read this database file.');
+            });
+          };
+
+          // Selecting a product fills both the identity fields and the operating
+          // window in section 5.
+          // Selecting a product REPLACES the product characteristics wholesale —
+          // never merges. What the product has no data for comes back empty, so
+          // section 5 always matches the product named above it.
+          const applyDashProduct = (prod) => {
+            if (!prod) return;
+            const { patch, defectCount } = Products.targetPatch(prod, lang);
+            setProject(p => ({ ...p, ...Products.identityPatch(prod), ...patch }));
+            // Defects may come from the dashboard's own matrix or from an attached
+            // sheet; what matters to the user is whether any came across at all.
+            setDashMsg(
+              defectCount > 0
+                ? (pt.dashAppliedDefects || 'Imported from the product database, including {n} defects.').replace('{n}', defectCount)
+                : (pt.dashAppliedNoDefects || 'Imported the target window. This product has no defects matrix yet.')
+            );
+          };
+
+          // Typing in the product field. A name that matches a product in the
+          // shared database selects it; anything else is kept as free text until
+          // the user chooses to add it as a new product.
+          // === LIVE LINK TO THE PRODUCT DATABASE ===
+          // A linked project must always show the product's CURRENT data, not a
+          // snapshot from when it was first picked. Renaming a product or editing
+          // its targets in the dashboard therefore reaches every project that
+          // points at it, the next time that project is opened.
           //
-          // Robust by design: every selector is wrapped so a missing section
-          // is silently skipped instead of crashing the import. Returns a
-          // partial-update object that the caller merges into project state.
+          // Runs once per product id: after a project is loaded (from the board or
+          // a file) and the product list has arrived. A product that no longer
+          // exists leaves the document untouched — better a stale document than a
+          // silently emptied one — and says so.
+          useEffect(() => {
+            const id = project.productId;
+            if (!id || dashProducts.length === 0) return;
+            const prod = dashProducts.find(p => p.id === id);
+            if (!prod) { setDashMsg(pt.productMissing || ''); return; }
+            applyDashProduct(prod);
+          }, [project.productId, dashProducts, docLoadSeq]);
 
-          // Extract the inline `const translations = { nl: {}, en: {...}, es: {...} };`
-          // object literal from the product-sheet script. Uses balanced-brace
-          // walking so we don't trip over nested objects, and skips over
-          // string literals so braces inside translation text don't mismatch.
-          const extractProductSheetTranslations = (htmlText) => {
-            const startMarker = 'const translations';
-            const startIdx = htmlText.indexOf(startMarker);
-            if (startIdx === -1) return null;
-            const eqIdx = htmlText.indexOf('=', startIdx);
-            if (eqIdx === -1) return null;
-            const braceStart = htmlText.indexOf('{', eqIdx);
-            if (braceStart === -1) return null;
-            let depth = 0, i = braceStart, inStr = null, escaped = false;
-            while (i < htmlText.length) {
-              const c = htmlText[i];
-              if (escaped) { escaped = false; i++; continue; }
-              if (inStr) {
-                if (c === '\\') { escaped = true; i++; continue; }
-                if (c === inStr) inStr = null;
-                i++; continue;
-              }
-              if (c === '"' || c === "'" || c === '`') { inStr = c; i++; continue; }
-              if (c === '{') depth++;
-              else if (c === '}') { depth--; if (depth === 0) { i++; break; } }
-              i++;
-            }
-            const objLit = htmlText.substring(braceStart, i);
-            try {
-              // Object literal evaluation — the source is user-supplied but
-              // local to their machine; same trust level as the imported file.
-              return new Function('return ' + objLit)();
-            } catch (e) {
-              return null;
-            }
-          };
-
-          // Strip HTML tags (translation values may contain inline <strong>,
-          // <span>, <br>, …). Returns plain text with whitespace collapsed.
-          const stripHtml = (html) => {
-            if (!html) return '';
-            const tmp = document.createElement('div');
-            tmp.innerHTML = String(html);
-            return tmp.textContent.replace(/\s+/g, ' ').trim();
-          };
-
-          const parseProductSheet = (htmlText, targetLang) => {
-            const result = { defects: [], o2Target: '', co2Target: '', tempCritical: '', o2Acp: '' };
-            if (!htmlText || typeof htmlText !== 'string') return result;
-            try {
-              const doc = new DOMParser().parseFromString(htmlText, 'text/html');
-
-              // Pull the per-language translation dictionary so we can resolve
-              // each cell's `data-translate` key in the user's active language.
-              // Falls back to whatever is already in the DOM (typically Dutch)
-              // when a language entry is absent or empty.
-              const allTrans = extractProductSheetTranslations(htmlText);
-              const wanted = targetLang || 'nl';
-              const langDict = (allTrans && allTrans[wanted] && Object.keys(allTrans[wanted]).length > 0)
-                ? allTrans[wanted]
-                : null;
-
-              // Resolve a single <td> via its `data-translate` key.
-              const cellText = (td) => {
-                const key = td.getAttribute && td.getAttribute('data-translate');
-                if (key && langDict && langDict[key]) return stripHtml(langDict[key]);
-                return td.textContent.replace(/\s+/g, ' ').trim();
-              };
-
-              // Defects matrix — #common-defects table.data-table tbody tr
-              const rows = doc.querySelectorAll('#common-defects table.data-table tbody tr, table.data-table tbody tr');
-              const seen = new Set();
-              rows.forEach((tr, i) => {
-                const tds = tr.querySelectorAll('td');
-                if (tds.length < 4) return;
-                const defect = cellText(tds[0]);
-                const cause = cellText(tds[1]);
-                const effectMHP = cellText(tds[2]);
-                const effectMAP = cellText(tds[3]);
-                // Drop empty / duplicate rows (some sheets reuse the table
-                // markup with placeholders).
-                if (!defect && !cause) return;
-                const key = defect + '|' + cause;
-                if (seen.has(key)) return;
-                seen.add(key);
-                result.defects.push({
-                  id: Date.now() + i,
-                  defect, cause, effectMHP, effectMAP
-                });
-              });
-
-              // Optimal conditions — section#optimal-conditions .condition-block
-              // The numeric values (e.g. "1.0% - 5.0%") are language-independent
-              // and sit in `.condition-value`; only category-matching is needed.
-              const blocks = doc.querySelectorAll('#optimal-conditions .condition-block, .condition-block');
-              blocks.forEach(block => {
-                const title = (block.querySelector('.condition-title')?.textContent || '').trim();
-                const value = (block.querySelector('.condition-value')?.textContent || '').replace(/\s+/g, ' ').trim();
-                if (!value) return;
-                if (/O₂|O2/i.test(title) && !/CO/i.test(title)) result.o2Target = value;
-                else if (/CO₂|CO2/i.test(title)) result.co2Target = value;
-                else if (/Temp/i.test(title)) result.tempCritical = value;
-              });
-
-              // ACP — pick numeric range from the res_box_text paragraph in
-              // the user's language if available, else from the DOM. Numbers
-              // themselves are language-independent.
-              let acpText = '';
-              if (langDict && langDict.res_box_text) {
-                acpText = stripHtml(langDict.res_box_text);
-              } else {
-                const acpHost = doc.querySelector('[data-translate="res_box_text"]') ||
-                                doc.querySelector('#anaerobic-respiration p') ||
-                                doc.querySelector('section .text-xs.text-gray-700');
-                acpText = acpHost?.textContent || '';
-              }
-              const acpMatch = acpText.match(/(\d+(?:[.,]\d+)?)\s*[-–]\s*(\d+(?:[.,]\d+)?)\s*%/);
-              if (acpMatch) result.o2Acp = `${acpMatch[1].replace(',', '.')}% - ${acpMatch[2].replace(',', '.')}%`;
-            } catch (e) {
-              // Parsing failed — return whatever we got. Caller will alert user.
-            }
-            return result;
-          };
-
-          // Apply parsed product-sheet data to project state. Only overwrites
-          // fields that the parser actually populated, so any manually-typed
-          // values for fields the sheet doesn't carry are preserved.
-          const applyProductSheet = (parsed) => {
-            if (!parsed) return;
+          const handleProductNameChange = (name) => {
+            const hit = Products.matchProduct(name, dashProducts);
+            if (hit) { applyDashProduct(hit); return; }
+            setDashMsg('');
             setProject(p => ({
               ...p,
-              ...(parsed.o2Target ? { o2Target: parsed.o2Target } : {}),
-              ...(parsed.co2Target ? { co2Target: parsed.co2Target } : {}),
-              ...(parsed.tempCritical ? { tempMin: parsed.tempCritical } : {}),
-              ...(parsed.o2Acp ? { acpO2: parsed.o2Acp } : {}),
-              defectsMatrix: parsed.defects && parsed.defects.length > 0 ? parsed.defects : (p.defectsMatrix || [])
+              productName: name,
+              productId: '',
+              // Leaving a linked product: clear what came from it. A brand-new
+              // product has no data yet, and showing the previous product's
+              // window under this name would be plainly wrong. Values typed by
+              // hand while nothing was linked are the user's own and stay.
+              ...(p.productId ? Products.emptyTargetPatch() : {})
             }));
           };
 
-          // File / drag-drop handlers for product sheets.
-          const handleProductSheetFile = (file) => {
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (ev) => {
-              // Use the currently-active UI language so the matrix is
-              // imported in the same language the user is working in.
-              const parsed = parseProductSheet(ev.target?.result || '', lang);
-              if (parsed.defects.length === 0 && !parsed.o2Target && !parsed.co2Target && !parsed.tempCritical) {
-                alert(pt.productSheetParseFail || 'Could not parse this product sheet.');
-                return;
+          // Add the typed name to the shared product database. Deliberately an
+          // explicit action rather than something that happens while typing —
+          // creating on every keystroke would fill the database with fragments
+          // ("B", "Bi", "Bim"). Once created, the board, the dashboard and this
+          // proposal all point at the same record.
+          // `state` is passed in explicitly rather than read from the form's
+          // processing-type toggle: that toggle silently defaults to Whole, and a
+          // product's state decides which dashboard entry every later trial lands
+          // in. It has to be a deliberate choice, so the user picks it here.
+          const createProductFromName = async (state) => {
+            const name = (project.productName || '').trim();
+            if (!name || creatingProduct) return;
+            setCreatingProduct(state === 'processed' ? 'processed' : 'whole');
+            try {
+              const prod = await Products.createProduct({
+                name,
+                variety: project.type || '',
+                state: state === 'processed' ? 'processed' : 'whole'
+              });
+              setDashProducts(prev => Products.usableProducts([]).concat(prev, [prod])
+                .sort((a, b) => (a.hasSheet !== b.hasSheet) ? (a.hasSheet ? -1 : 1) : a.label.localeCompare(b.label)));
+              setDashState('ready');
+              // Adopt the created product wholesale, so the form's processing
+              // type cannot disagree with the state just chosen for it.
+              setProject(p => ({ ...p, ...Products.identityPatch(prod) }));
+              setDashMsg((pt.dashCreated || '✓ "{name}" added to the product database.').replace('{name}', name));
+            } catch (err) {
+              if (err && err.code === 'NO_STORE') {
+                setDashMsg(pt.dashCreateUnavailable || 'The product database is not reachable.');
+              } else {
+                console.error('Creating the product failed:', err);
+                setDashMsg(pt.dashCreateFailed || 'Could not add this product to the database.');
               }
-              applyProductSheet(parsed);
-            };
-            reader.onerror = () => alert(pt.productSheetParseFail || 'Could not read this product sheet.');
-            reader.readAsText(file);
-          };
-          const [productSheetDragOver, setProductSheetDragOver] = useState(false);
-          const handleProductSheetDrop = (e) => {
-            e.preventDefault();
-            setProductSheetDragOver(false);
-            const file = e.dataTransfer?.files?.[0];
-            if (file) handleProductSheetFile(file);
+            } finally {
+              setCreatingProduct(null);
+            }
           };
 
           const removeDefectRow = (rowId) => setProject(p => ({
@@ -2123,7 +2302,8 @@
                     height: (project.packagings?.[0]?.height || project.height || ''),
                     startWeight: (project.packagings?.[0]?.startWeight || project.startWeight || groups[0]?.specs?.startWeight || '')
                 }, 
-                measurements: groups[0].measurements.map(m => ({ day: m.day, measure: [], open: [], evaluate: [] })),
+                // A new variant starts on the global evaluation plan.
+                measurements: globalEvalDays.map(d => ({ day: d, measure: [], open: [], evaluate: [] })),
                 predictedImage: null
             }]);
             setActiveGroupId(newId);
@@ -2177,63 +2357,168 @@
           //      [0, 2, 14] and the input the user is in now displays "14".
           // Sorting happens only on commit (add) and at consumption sites
           // (preview / report), never during typing.
-          const addEvaluationDay = (groupId) => {
-              setGroups(prev => prev.map(g => {
-                  if (g.id !== groupId) return g;
-                  const numericDays = (g.measurements || [])
-                      .map(m => parseFloat(m.day))
-                      .filter(d => !isNaN(d));
-                  const lastDay = numericDays.length > 0 ? Math.max(...numericDays) : 0;
+          //
+          // === GLOBAL EVALUATION DAYS ===
+          // The evaluation plan is project-level: ONE list of days that every
+          // variant inherits. Each variant still owns its own measurement rows
+          // (so its timeline can deviate — different film, different sampling),
+          // but every edit in the global card is pushed to ALL variants.
+          // Legacy files carry no project.evalDays; fall back to the first
+          // variant's days so the card keeps showing the plan until the first
+          // edit materialises the field.
+          const globalEvalDays = (Array.isArray(project.evalDays) && project.evalDays.length)
+            ? project.evalDays
+            : (groups[0]?.measurements || []).map(m => m.day);
 
+          const sortDays = (a, b) => parseFloat(a) - parseFloat(b);
+          const dayFingerprint = (list) => (list || [])
+            .map(d => parseFloat(d)).filter(d => !isNaN(d)).sort((a, b) => a - b).join('|');
+          // Does this variant still follow the global plan exactly?
+          const variantFollowsPlan = (g) =>
+            dayFingerprint((g.measurements || []).map(m => m.day)) === dayFingerprint(globalEvalDays);
+
+          // Which row of each variant does global day `index` map onto? Normally
+          // the same index — variants stay aligned because day edits never
+          // re-sort. A variant that was adjusted by hand can be off, so fall
+          // back to the row carrying that day value; variants that dropped the
+          // day are left untouched.
+          const resolveVariantRows = (dayValue, index) => {
+            const target = parseFloat(dayValue);
+            const anchors = {};
+            groups.forEach(g => {
+              const rows = g.measurements || [];
+              if (rows[index] && parseFloat(rows[index].day) === target) { anchors[g.id] = index; return; }
+              const found = rows.findIndex(m => parseFloat(m.day) === target);
+              if (found >= 0) anchors[g.id] = found;
+            });
+            return anchors;
+          };
+
+          // Rows are resolved once when a global day input takes focus and reused
+          // for the whole typing session: after the first keystroke the old value
+          // is gone, so re-resolving by value would match the wrong row.
+          const globalDayEditRef = useRef(null);
+          const beginGlobalDayEdit = (index) => {
+            globalDayEditRef.current = { index, anchors: resolveVariantRows(globalEvalDays[index], index) };
+          };
+
+          const addEvaluationDay = () => {
+              const numericDays = globalEvalDays.map(d => parseFloat(d)).filter(d => !isNaN(d));
+              const newDay = (numericDays.length > 0 ? Math.max(...numericDays) : 0) + 1;
+              globalDayEditRef.current = null;
+              // Sort once after appending so the freshly added card sits
+              // chronologically at first; subsequent edits do NOT re-sort.
+              setProject(p => ({ ...p, evalDays: [...globalEvalDays, newDay].sort(sortDays) }));
+              setGroups(prev => prev.map(g => {
+                  const rows = g.measurements || [];
+                  // A variant that already has this day (added by hand) keeps its own row.
+                  if (rows.some(m => parseFloat(m.day) === newDay)) return g;
                   return {
                       ...g,
-                      // Sort once after appending so the freshly added card sits
-                      // chronologically at first; subsequent edits do NOT re-sort.
-                      measurements: [...(g.measurements || []), {
-                          day: lastDay + 1,
-                          measure: [],
-                          open: [],
-                          evaluate: []
-                      }].sort((a,b) => parseFloat(a.day) - parseFloat(b.day))
+                      measurements: [...rows, { day: newDay, measure: [], open: [], evaluate: [] }]
+                          .sort((a, b) => parseFloat(a.day) - parseFloat(b.day))
                   };
               }));
           };
 
-          const removeEvaluationDay = (groupId, indexToRemove) => {
+          const removeEvaluationDay = (indexToRemove) => {
+              const anchors = resolveVariantRows(globalEvalDays[indexToRemove], indexToRemove);
+              globalDayEditRef.current = null;
+              setProject(p => ({ ...p, evalDays: globalEvalDays.filter((_, i) => i !== indexToRemove) }));
               setGroups(prev => prev.map(g => {
-                  if (g.id !== groupId) return g;
-                  return {
-                      ...g,
-                      measurements: (g.measurements || []).filter((_, i) => i !== indexToRemove)
-                  };
+                  const at = anchors[g.id];
+                  if (at == null) return g;
+                  return { ...g, measurements: (g.measurements || []).filter((_, i) => i !== at) };
               }));
           };
 
-          const updateEvaluationDay = (groupId, indexToUpdate, newDayValue) => {
+          const updateEvaluationDay = (indexToUpdate, newDayValue) => {
+              const session = globalDayEditRef.current;
+              const anchors = (session && session.index === indexToUpdate)
+                ? session.anchors
+                : resolveVariantRows(globalEvalDays[indexToUpdate], indexToUpdate);
+              globalDayEditRef.current = { index: indexToUpdate, anchors };
+              // Keep the raw input string in state so empty / partial values
+              // (e.g. "" while clearing the field) round-trip without being
+              // coerced to 0. Consumers parseFloat().
+              setProject(p => ({ ...p, evalDays: globalEvalDays.map((d, i) => i === indexToUpdate ? newDayValue : d) }));
               setGroups(prev => prev.map(g => {
-                  if (g.id !== groupId) return g;
+                  const at = anchors[g.id];
+                  if (at == null) return g;
                   return {
                       ...g,
-                      // Keep the raw input string in state so empty / partial
-                      // values (e.g. "" while clearing the field) round-trip
-                      // without being coerced to 0. Consumers parseFloat().
                       measurements: (g.measurements || []).map((m, i) =>
-                          i === indexToUpdate ? { ...m, day: newDayValue } : m
+                          i === at ? { ...m, day: newDayValue } : m
                       )
                   };
               }));
           };
 
-          const toggleEvent = (groupId, day, field, sampleNum) => {
+          // === PER-VARIANT OVERRIDES ===
+          // Same index-identity rules, but scoped to one variant so a single
+          // variant can deviate from the global plan without touching the rest.
+          const updateVariantDay = (groupId, index, newDayValue) => {
+              setGroups(prev => prev.map(g => g.id !== groupId ? g : {
+                  ...g,
+                  measurements: (g.measurements || []).map((m, i) => i === index ? { ...m, day: newDayValue } : m)
+              }));
+          };
+
+          const addVariantDay = (groupId) => {
               setGroups(prev => prev.map(g => {
                   if (g.id !== groupId) return g;
-                  const newM = g.measurements.map(m => {
-                      if (parseFloat(m.day) === parseFloat(day)) {
-                          const arr = m[field] || [];
-                          const newArr = arr.includes(sampleNum) ? arr.filter(x => x !== sampleNum) : [...arr, sampleNum].sort((a,b)=>a-b);
-                          return { ...m, [field]: newArr };
-                      }
-                      return m;
+                  const rows = g.measurements || [];
+                  const numericDays = rows.map(m => parseFloat(m.day)).filter(d => !isNaN(d));
+                  const newDay = (numericDays.length > 0 ? Math.max(...numericDays) : 0) + 1;
+                  return {
+                      ...g,
+                      measurements: [...rows, { day: newDay, measure: [], open: [], evaluate: [] }]
+                          .sort((a, b) => parseFloat(a.day) - parseFloat(b.day))
+                  };
+              }));
+          };
+
+          const removeVariantDay = (groupId, index) => {
+              setGroups(prev => prev.map(g => g.id !== groupId ? g : {
+                  ...g,
+                  measurements: (g.measurements || []).filter((_, i) => i !== index)
+              }));
+          };
+
+          // Rebuild a variant's timeline from the global plan without throwing
+          // away the sample toggles: a day the variant already has keeps its own
+          // row, and the rows the plan does not cover hand their toggles over in
+          // order — so a variant that only shifted a DATE (P+5 → P+20) keeps its
+          // sampling selection when it is reset.
+          const syncVariantToPlan = (groupId) => {
+              setGroups(prev => prev.map(g => {
+                  if (g.id !== groupId) return g;
+                  const rows = g.measurements || [];
+                  const planned = globalEvalDays.map(d => parseFloat(d));
+                  const byDay = {};
+                  rows.forEach(m => { const k = String(parseFloat(m.day)); if (!(k in byDay)) byDay[k] = m; });
+                  const spare = rows.filter(m => !planned.includes(parseFloat(m.day)));
+                  let next = 0;
+                  return {
+                      ...g,
+                      measurements: globalEvalDays.map(d => {
+                          const exact = byDay[String(parseFloat(d))];
+                          if (exact) return { ...exact, day: d };
+                          const donor = spare[next++];
+                          return donor ? { ...donor, day: d } : { day: d, measure: [], open: [], evaluate: [] };
+                      })
+                  };
+              }));
+          };
+
+          const toggleEvent = (groupId, index, field, sampleNum) => {
+              setGroups(prev => prev.map(g => {
+                  if (g.id !== groupId) return g;
+                  const newM = (g.measurements || []).map((m, i) => {
+                      if (i !== index) return m;
+                      const arr = m[field] || [];
+                      const newArr = arr.includes(sampleNum) ? arr.filter(x => x !== sampleNum) : [...arr, sampleNum].sort((a,b)=>a-b);
+                      return { ...m, [field]: newArr };
                   });
                   return { ...g, measurements: newM };
               }));
@@ -2246,7 +2531,25 @@
           // --- EDITOR VIEW ---
           return (
             <div className="min-h-screen pb-20 font-sans text-slate-800">
-              
+
+              {/* PROJECT BOARD LINK BANNER */}
+              {boardProjectId && boardState !== 'off' && (
+                <div className="w-full text-white text-sm px-4 py-2 flex items-center justify-center gap-3 print:hidden" style={{ backgroundColor: (boardState === 'unreadable' || boardState === 'error') ? '#ea580c' : '#084BCD' }}>
+                  <span className="flex items-center gap-2">
+                    <FolderOpen size={16} />
+                    {boardState === 'linked' && <span>Linked to Project Board{boardTitle ? `: ${boardTitle}` : ''} — changes autosave to the project folder.</span>}
+                    {boardState === 'loading' && <span>Loading project from the board…</span>}
+                    {boardState === 'needs-permission' && <span>Grant access to the project folder to load this project.</span>}
+                    {boardState === 'error' && <span>Could not reach the project folder. Open this from the Project Board.</span>}
+                    {boardState === 'unreadable' && <span>This project's file is not a recognised intake/proposal/report — nothing was changed and autosave is off, so the file stays intact.</span>}
+                  </span>
+                  {boardState === 'needs-permission' && (
+                    <button onClick={grantBoardAccess} className="bg-white/20 hover:bg-white/30 rounded-md px-3 py-1 font-bold">Grant access</button>
+                  )}
+                  <a href="board.html" className="hover:underline opacity-80 hover:opacity-100">← Board</a>
+                </div>
+              )}
+
               {pendingImageReplace && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4">
                   <div className="bg-white p-8 rounded-3xl shadow-2xl max-w-sm w-full border-t-8 border-orange-500 transform transition-all">
@@ -2579,7 +2882,17 @@
                          </div>
                          <p className="text-sm text-slate-600 mb-4">Contact details of the PerfoTec employee leading this trial.</p>
                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-                           <div><label className={labelClass}>{pt.perfoTecEmployee}</label><input type="text" className={inputClass} value={project.employee || ''} onChange={e => handleProjectChange('employee', e.target.value)} /></div>
+                           <div><label className={labelClass}>{pt.perfoTecEmployee}</label>
+                             {boardPeople.length > 0 ? (
+                               <select className={inputClass} value={project.employee || ''} onChange={e => { const nm = e.target.value; const person = boardPeople.find(x => x.name === nm); handleProjectChange('employee', nm); if (person) { handleProjectChange('employeeEmail', person.email || ''); handleProjectChange('employeePhone', person.phone || ''); } }}>
+                                 <option value="">—</option>
+                                 {(project.employee && !boardPeople.some(x => x.name === project.employee)) && <option value={project.employee}>{project.employee}</option>}
+                                 {boardPeople.map(x => <option key={x.name} value={x.name}>{x.name}</option>)}
+                               </select>
+                             ) : (
+                               <input type="text" className={inputClass} value={project.employee || ''} onChange={e => handleProjectChange('employee', e.target.value)} />
+                             )}
+                           </div>
                            <div><label className={labelClass}>{pt.employeeEmail}</label><input type="email" className={inputClass} value={project.employeeEmail || ''} onChange={e => handleProjectChange('employeeEmail', e.target.value)} /></div>
                            <div><label className={labelClass}>{pt.employeePhone}</label><input type="text" className={inputClass} value={project.employeePhone || ''} onChange={e => handleProjectChange('employeePhone', e.target.value)} /></div>
                          </div>
@@ -2628,7 +2941,60 @@
                          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                            <div className="md:col-span-2">
                              <label className={labelClass}>{pt.productName} <span className="text-red-500">*</span></label>
-                             <input type="text" className={`${inputClass} text-xl font-bold py-4`} value={project.productName || ''} onChange={e => handleProjectChange('productName', e.target.value)} />
+                             {/* Pick from the shared product database, or type a name
+                                 that is not in it yet. Picking one fills the product
+                                 characteristics in section 5 automatically. */}
+                             <input
+                               type="text"
+                               list="pt-proposal-products"
+                               className={`${inputClass} text-xl font-bold py-4`}
+                               placeholder={pt.productNameSelectHint}
+                               value={project.productName || ''}
+                               onChange={e => handleProductNameChange(e.target.value)}
+                             />
+                             <datalist id="pt-proposal-products">
+                               {dashProducts.map(p => (
+                                 <option key={p.id} value={p.label}>{p.state}{p.hasSheet ? ' · ' + pt.dashWithSheet : ''}</option>
+                               ))}
+                             </datalist>
+
+                             {/* Link status, and the one-click way to add a product
+                                 that does not exist in the database yet. */}
+                             <div className="mt-2 min-h-[24px]">
+                               {project.productId ? (
+                                 <span className="text-xs font-bold text-green-700 flex items-center gap-1.5">
+                                   <Check size={13} />{pt.productLinked}
+                                 </span>
+                               ) : (project.productName || '').trim() ? (
+                                 /* The state is chosen here, not taken from the toggle
+                                    below: it decides which dashboard entry every later
+                                    trial for this product lands in, so it must never be
+                                    a silent default. */
+                                 <div className="flex flex-wrap items-center gap-2">
+                                   <span className="text-xs text-amber-700">{pt.productNotLinked}</span>
+                                   <span className="text-xs text-slate-500">{pt.productCreateAs}</span>
+                                   {[['whole', pt.productStateWhole], ['processed', pt.productStateProcessed]].map(([st, label]) => (
+                                     <button
+                                       key={st}
+                                       type="button"
+                                       onClick={() => createProductFromName(st)}
+                                       disabled={!!creatingProduct}
+                                       className="text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-60 hover:bg-green-50"
+                                       style={{ borderColor: BRAND.colors.green, color: BRAND.colors.green }}
+                                     >
+                                       {creatingProduct === st ? (pt.productCreating || '…') : `+ ${label}`}
+                                     </button>
+                                   ))}
+                                 </div>
+                               ) : (
+                                 <span className="text-xs text-slate-400">
+                                   {dashState === 'ready'
+                                     ? (pt.productPickHint || '').replace('{n}', dashProducts.length)
+                                     : pt.dashUnavailableShort}
+                                 </span>
+                               )}
+                             </div>
+                             {dashMsg && <div className="text-xs font-bold text-green-700 mt-2">{dashMsg}</div>}
                            </div>
                            
                            <div className="md:col-span-1 md:row-span-4 flex flex-col">
@@ -2894,32 +3260,25 @@
                          </div>
                        </div>
 
-                       {/* === PRODUCT-SHEET DROP ZONE === */}
-                       <div
-                         onDragOver={e => { e.preventDefault(); if (!productSheetDragOver) setProductSheetDragOver(true); }}
-                         onDragLeave={() => setProductSheetDragOver(false)}
-                         onDrop={handleProductSheetDrop}
-                         className={`mb-8 border-2 border-dashed rounded-2xl p-6 transition-all flex flex-col sm:flex-row items-center gap-5 ${productSheetDragOver ? 'border-green-500 bg-green-50' : 'border-slate-300 bg-slate-50/60 hover:border-green-300 hover:bg-green-50/30'}`}
-                       >
-                         <div className={`shrink-0 w-14 h-14 rounded-xl flex items-center justify-center shadow-sm ${productSheetDragOver ? 'bg-green-100' : 'bg-white border border-slate-200'}`}>
-                           <FileArchive size={28} color={BRAND.colors.green} />
+                       {/* The product is chosen in section 3; selecting one there fills
+                           the fields below. This drop zone stays for product sheets
+                           that are not attached to a dashboard product yet. */}
+                       {dashState === 'unavailable' && (
+                         <div className="mb-5 flex flex-col sm:flex-row sm:items-center gap-3 border border-amber-200 bg-amber-50/60 rounded-2xl p-4">
+                           <div className="text-sm text-amber-800 flex-1">{pt.dashUnavailable}</div>
+                           <label className="cursor-pointer bg-white border border-slate-300 text-slate-700 px-5 py-3 rounded-xl font-bold text-sm hover:bg-slate-50 hover:border-blue-400 transition-all shrink-0 whitespace-nowrap shadow-sm flex items-center gap-2">
+                             <Upload size={16} className="text-blue-700"/>
+                             {pt.dashBrowseDb}
+                             <input
+                               type="file"
+                               accept=".json,application/json"
+                               className="hidden"
+                               onClick={e => { e.target.value = null; }}
+                               onChange={e => handleDashDbFile(e.target.files?.[0])}
+                             />
+                           </label>
                          </div>
-                         <div className="flex-1 text-center sm:text-left">
-                           <div className="font-extrabold text-slate-800 text-base">{productSheetDragOver ? pt.productSheetDropActive : pt.productSheetDropTitle}</div>
-                           <div className="text-sm text-slate-500 mt-1 leading-relaxed">{pt.productSheetDropDesc}</div>
-                         </div>
-                         <label className="cursor-pointer bg-white border border-slate-300 text-slate-700 px-5 py-3 rounded-xl font-bold text-sm hover:bg-slate-50 hover:border-green-400 transition-all shrink-0 whitespace-nowrap shadow-sm flex items-center gap-2">
-                           <Upload size={16} className="text-green-700"/>
-                           {pt.productSheetBrowse}
-                           <input
-                             type="file"
-                             accept=".htm,.html,text/html"
-                             className="hidden"
-                             onClick={e => { e.target.value = null; }}
-                             onChange={e => handleProductSheetFile(e.target.files?.[0])}
-                           />
-                         </label>
-                       </div>
+                       )}
 
                        {/* === PRODUCT PROPERTIES GRID === */}
                        <div className="mb-8 bg-slate-50 p-6 rounded-2xl border border-slate-200">
@@ -3030,22 +3389,25 @@
                               </div>
                            </div>
 
-                           {/* Evaluation Days */}
+                           {/* Evaluation Days — the plan for EVERY variant */}
                            <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col h-full">
                               <label className="block mb-2 font-extrabold text-slate-800 text-lg">{pt.globalEvalDays}</label>
-                              <p className="text-sm text-slate-500 mb-6">{pt.evalDaysDesc}</p>
-                              
+                              <p className="text-sm text-slate-500 mb-3">{pt.evalDaysDesc}</p>
+                              <p className="text-xs font-bold text-blue-800 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5 mb-5 flex items-start gap-2">
+                                 <AlertCircle size={14} className="shrink-0 mt-0.5"/> {pt.evalDaysAllVariants}
+                              </p>
+
                               <div className="flex flex-wrap gap-3 mb-6 flex-1 items-start">
-                                  {(groups[0]?.measurements || []).map((m, i) => (
+                                  {globalEvalDays.map((d, i) => (
                                       <div key={i} className="flex gap-2 items-center bg-slate-50 p-2 rounded-xl border border-slate-200 shadow-sm">
                                           <span className="text-sm font-extrabold text-slate-600 ml-2">{pt.day}</span>
-                                          <input type="number" className="w-16 bg-white border border-slate-300 text-blue-700 text-center text-lg font-bold rounded-lg py-1 focus:ring-2 focus:ring-blue-500 outline-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" value={m.day ?? ''} onChange={e => updateEvaluationDay(groups[0].id, i, e.target.value)} />
-                                          {i > 0 && <button onClick={() => removeEvaluationDay(groups[0].id, i)} className="text-red-400 hover:text-red-600 p-1.5 bg-white rounded-lg border shadow-sm"><X size={16}/></button>}
+                                          <input type="number" className="w-16 bg-white border border-slate-300 text-blue-700 text-center text-lg font-bold rounded-lg py-1 focus:ring-2 focus:ring-blue-500 outline-none [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield]" value={d ?? ''} onFocus={() => beginGlobalDayEdit(i)} onChange={e => updateEvaluationDay(i, e.target.value)} />
+                                          {i > 0 && <button onClick={() => removeEvaluationDay(i)} className="text-red-400 hover:text-red-600 p-1.5 bg-white rounded-lg border shadow-sm"><X size={16}/></button>}
                                       </div>
                                   ))}
                               </div>
                               <div className="mt-auto">
-                                  <button onClick={() => addEvaluationDay(groups[0].id)} className="w-full sm:w-auto text-sm bg-blue-50 text-blue-700 px-5 py-3 rounded-xl font-bold border border-blue-200 hover:bg-blue-100 transition-colors inline-flex justify-center items-center gap-2"><Plus size={18}/> {pt.addEvalDay}</button>
+                                  <button onClick={addEvaluationDay} className="w-full sm:w-auto text-sm bg-blue-50 text-blue-700 px-5 py-3 rounded-xl font-bold border border-blue-200 hover:bg-blue-100 transition-colors inline-flex justify-center items-center gap-2"><Plus size={18}/> {pt.addEvalDay}</button>
                               </div>
                            </div>
                         </div>
@@ -3137,20 +3499,42 @@
                                </div>
 
                                <div className="bg-slate-50 p-6 sm:p-8 rounded-2xl border border-slate-200 shadow-sm mb-10">
-                                    <div className="flex flex-col mb-6">
-                                      <h4 className="font-extrabold text-xl text-slate-800 mb-1">{pt.timelineEvents}</h4>
-                                      <p className="text-sm text-slate-500">{pt.timelineDesc}</p>
+                                    <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
+                                      <div>
+                                        <h4 className="font-extrabold text-xl text-slate-800 mb-1">{pt.timelineEvents}</h4>
+                                        <p className="text-sm text-slate-500">{pt.timelineDesc}</p>
+                                      </div>
+                                      {/* The days below come from the global plan; edits here stay
+                                          inside this variant. Flag it when it no longer matches. */}
+                                      {(() => {
+                                        const activeG = groups.find(g => g.id === activeGroupId);
+                                        return variantFollowsPlan(activeG) ? (
+                                          <span className="text-[11px] font-extrabold uppercase tracking-wider px-3 py-2 rounded-xl bg-green-50 text-green-700 border border-green-200 flex items-center gap-2 shrink-0">
+                                            <CheckCircle size={14}/> {pt.daysFollowPlan}
+                                          </span>
+                                        ) : (
+                                          <div className="flex items-center gap-2 shrink-0">
+                                            <span className="text-[11px] font-extrabold uppercase tracking-wider px-3 py-2 rounded-xl bg-orange-50 text-orange-700 border border-orange-200 flex items-center gap-2">
+                                              <AlertCircle size={14}/> {pt.daysCustom}
+                                            </span>
+                                            <button type="button" onClick={() => syncVariantToPlan(activeGroupId)} className="text-[11px] font-extrabold uppercase tracking-wider px-3 py-2 rounded-xl bg-white text-blue-700 border border-blue-200 hover:bg-blue-50 transition-colors shadow-sm">
+                                              {pt.resetDaysToPlan}
+                                            </button>
+                                          </div>
+                                        );
+                                      })()}
                                     </div>
                                     <div className="overflow-x-auto rounded-xl border border-slate-200">
                                       <table className="w-full text-sm bg-white">
                                         <thead className="bg-slate-100 border-b border-slate-200">
                                           <tr className="text-left text-slate-600 uppercase tracking-wider text-[10px] font-bold">
-                                            <th className="p-4 w-20 text-center">{pt.thDay}</th>
+                                            <th className="p-4 w-28 text-center">{pt.thDay}</th>
                                             <th className="p-4 border-l border-slate-200">
                                               {(groups.find(g => g.id === activeGroupId).specs.atmosphereStrategy || 'MAP') === 'MAP' ? pt.thMeasure : pt.thMeasureWeight}
                                             </th>
                                             <th className="p-4 border-l border-slate-200 text-orange-700">{pt.thOpen}</th>
                                             <th className="p-4 border-l border-slate-200 text-green-700">{pt.thEvaluate}</th>
+                                            <th className="p-4 border-l border-slate-200 w-12"></th>
                                           </tr>
                                         </thead>
                                         <tbody className="divide-y divide-slate-100">
@@ -3160,20 +3544,34 @@
                                               disabledForMeasure.push(...(prev.open || []));
                                             });
                                             const sCount = groups.find(g => g.id === activeGroupId).specs.sampleCount || 3;
+                                            const inPlan = globalEvalDays.some(d => parseFloat(d) === parseFloat(m.day));
 
                                             return (
                                               <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                                                <td className="p-4 text-center font-extrabold text-slate-700 bg-slate-50/50">
-                                                  P+{m.day}
+                                                {/* Editable per variant: overrides the global day for THIS variant only */}
+                                                <td className="p-3 text-center bg-slate-50/50">
+                                                  <div className="inline-flex items-center gap-1">
+                                                    <span className="text-xs font-extrabold text-slate-400">P+</span>
+                                                    <input
+                                                      type="number"
+                                                      title={inPlan ? pt.dayFromPlan : pt.dayVariantOnly}
+                                                      className={`w-14 bg-white border text-center font-extrabold rounded-lg py-1.5 outline-none focus:ring-2 focus:ring-blue-500 shadow-sm [&::-webkit-inner-spin-button]:appearance-none [-moz-appearance:textfield] ${inPlan ? 'border-slate-300 text-slate-700' : 'border-orange-300 text-orange-700 bg-orange-50/60'}`}
+                                                      value={m.day ?? ''}
+                                                      onChange={e => updateVariantDay(activeGroupId, idx, e.target.value)}
+                                                    />
+                                                  </div>
                                                 </td>
                                                 <td className="p-4 border-l border-slate-100">
-                                                  <SampleToggles max={sCount} selected={m.measure||[]} disabled={disabledForMeasure} activeClass="bg-blue-500 border-blue-600 text-white shadow-sm transform scale-105" onChange={s => toggleEvent(activeGroupId, m.day, 'measure', s)} />
+                                                  <SampleToggles max={sCount} selected={m.measure||[]} disabled={disabledForMeasure} activeClass="bg-blue-500 border-blue-600 text-white shadow-sm transform scale-105" onChange={s => toggleEvent(activeGroupId, idx, 'measure', s)} />
                                                 </td>
                                                 <td className="p-4 border-l border-slate-100">
-                                                  <SampleToggles max={sCount} selected={m.open||[]} disabled={[]} activeClass="bg-orange-500 border-orange-600 text-white shadow-sm transform scale-105" onChange={s => toggleEvent(activeGroupId, m.day, 'open', s)} />
+                                                  <SampleToggles max={sCount} selected={m.open||[]} disabled={[]} activeClass="bg-orange-500 border-orange-600 text-white shadow-sm transform scale-105" onChange={s => toggleEvent(activeGroupId, idx, 'open', s)} />
                                                 </td>
                                                 <td className="p-4 border-l border-slate-100">
-                                                  <SampleToggles max={sCount} selected={m.evaluate||[]} disabled={[]} activeClass="bg-green-500 border-green-600 text-white shadow-sm transform scale-105" onChange={s => toggleEvent(activeGroupId, m.day, 'evaluate', s)} />
+                                                  <SampleToggles max={sCount} selected={m.evaluate||[]} disabled={[]} activeClass="bg-green-500 border-green-600 text-white shadow-sm transform scale-105" onChange={s => toggleEvent(activeGroupId, idx, 'evaluate', s)} />
+                                                </td>
+                                                <td className="p-3 border-l border-slate-100 text-center">
+                                                  <button type="button" onClick={() => removeVariantDay(activeGroupId, idx)} title={pt.removeDayVariant} className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"><X size={16}/></button>
                                                 </td>
                                               </tr>
                                             )
@@ -3181,9 +3579,14 @@
                                         </tbody>
                                       </table>
                                     </div>
-                                    <div className="mt-4 text-sm font-medium text-slate-500 bg-white p-4 rounded-lg border border-slate-100 inline-flex items-start gap-3">
-                                       <AlertCircle size={18} className="text-blue-400 shrink-0 mt-0.5" />
-                                       <span>{pt.timelineNote}</span>
+                                    <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
+                                      <div className="text-sm font-medium text-slate-500 bg-white p-4 rounded-lg border border-slate-100 inline-flex items-start gap-3 flex-1 min-w-[260px]">
+                                         <AlertCircle size={18} className="text-blue-400 shrink-0 mt-0.5" />
+                                         <span>{pt.timelineNote}</span>
+                                      </div>
+                                      <button type="button" onClick={() => addVariantDay(activeGroupId)} className="text-sm bg-white text-slate-700 px-5 py-3 rounded-xl font-bold border border-slate-300 hover:bg-slate-50 hover:border-slate-400 transition-colors inline-flex items-center gap-2 shadow-sm shrink-0">
+                                        <Plus size={16}/> {pt.addDayVariant}
+                                      </button>
                                     </div>
                                  </div>
 
