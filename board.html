@@ -12,9 +12,9 @@
     <!-- Pinned to Babel 7 (v8 breaks the ESM importmap integration). -->
     <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
 
-    <link rel="stylesheet" href="style.css?v=77634a3c">
-    <script src="config.js?v=37136610"></script>
-    <script src="board-db.js?v=a2107b12"></script>
+    <link rel="stylesheet" href="style.css?v=1f03e7ae">
+    <script src="config.js?v=5d5003a6"></script>
+    <script src="board-db.js?v=cfe58db6"></script>
 </head>
 <body class="bg-[var(--brand-light-gray)] text-[var(--brand-black)]">
     <a href="#main-content" class="skip-to-content">Skip to content</a>
@@ -368,25 +368,18 @@
         };
 
         // Downscale an uploaded photo to a small JPEG data URL so the manifest
-        // stays lean (product photos are decorative card backgrounds).
-        const readScaledImage = (file, maxW = 480) => new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onerror = reject;
-            reader.onload = () => {
-                const img = new window.Image();
-                img.onerror = reject;
-                img.onload = () => {
-                    const scale = Math.min(1, maxW / img.width);
-                    const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
-                    const canvas = document.createElement('canvas');
-                    canvas.width = w; canvas.height = h;
-                    canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-                    resolve(canvas.toDataURL('image/jpeg', 0.72));
-                };
-                img.src = reader.result;
-            };
-            reader.readAsDataURL(file);
-        });
+        // stays lean (product photos are decorative card backgrounds). Delegates
+        // to config.js §7c, which also applies EXIF orientation — this page had
+        // its own canvas copy, and a portrait phone photo came out sideways.
+        // This page has no `globalConfig` alias and reads window.PERFOTEC_CONFIG
+        // directly; guard so an older cached config.js degrades instead of
+        // throwing and swallowing the drop.
+        const readScaledImage = (file, maxW = 480) => {
+            const cfg = window.PERFOTEC_CONFIG;
+            if (!cfg || !cfg.readImageFile) return Promise.reject(new Error('readImageFile unavailable'));
+            return cfg.readImageFile(file, { maxEdge: maxW, quality: 0.72, skipBelowBytes: 0 })
+                .then(r => r.dataUrl);
+        };
 
         const Field = ({ label, icon: Icon, children }) => (
             <label className="block">
