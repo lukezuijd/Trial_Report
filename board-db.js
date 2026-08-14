@@ -34,8 +34,11 @@
     var SEED_FILE = 'pipedrive.json';
 
     // Our own <script> URL. board.html sits next to this file, so every page can
-    // resolve the board from here regardless of its own folder — the dashboard
-    // lives in a sibling directory and would otherwise need a hardcoded '../'.
+    // resolve the board from here regardless of the URL it was itself opened on.
+    // Every tool including the dashboard now lives in this one folder, so a plain
+    // relative link would work too; resolving from the script URL is kept because
+    // it does not care where the page sits, which is what let the dashboard move
+    // into this folder without touching anything here.
     var _scriptUrl = (document.currentScript && document.currentScript.src) || '';
 
     // Workflow phases, in board order. `file` is the JSON filename written by
@@ -51,7 +54,7 @@
         { key: 'proposal',     label: 'Proposal',      file: 'proposal.json',      tool: 'proposal.html' },
         { key: 'report',       label: 'Report',        file: 'report.json',        tool: 'report.html' },
         { key: 'dashboard',    label: 'Dashboard',     file: 'dashboard.json',
-          tool: '../Product%20Dashboard%20-%20PerfoTec/Product%20Dashboard%20-%20PerfoTec.htm' }
+          tool: 'dashboard.html' }
     ];
     var LEGACY_PHASE_MAP = { businessCase: 'intake' };
     var PHASE_BY_KEY = {};
