@@ -1223,6 +1223,172 @@
                 return { min: "", max: "" };
             };
 
+            /* ══ 2026 product-sheet template — shared readers ═══════════════════════
+             * A sheet from the perfotec-product-sheet skill reaches this dashboard by two
+             * routes: dropped on the importer as a document (extractProductDataFromText,
+             * which creates or merges a product) or attached in the "Product sheet & data
+             * sync" panel (handlePullFromSheet, which seeds an existing one). Those routes
+             * used to read different subsets of the same file, so the answer depended on
+             * how the file arrived — the attach route pulled eight numbers and ignored the
+             * defect grid and the entire respiration table sitting in the same document.
+             * These readers are the single implementation both call.
+             * ==================================================================== */
+
+            // A sheet cell is trilingual: <span data-lang="nl">…</span><span data-lang="en">…
+            // Reading textContent concatenates all three ("Optimale bewaringOptimal storage…"),
+            // and <br> contributes nothing, so a three-line <h1> collapses into
+            // "Green BeansWholeFlowpack Guide". Return the English rendering as real lines.
+            const psEnLines = (el) => {
+                if (!el) return [];
+                const clone = el.cloneNode(true);
+                clone.querySelectorAll('[data-lang]').forEach(s => { if (s.getAttribute('data-lang') !== 'en') s.remove(); });
+                clone.querySelectorAll('br').forEach(br => br.parentNode.replaceChild(br.ownerDocument.createTextNode('\n'), br));
+                return clone.textContent.split('\n').map(s => s.trim().replace(/\s+/g, ' ')).filter(Boolean);
+            };
+            const psEnText = (el) => psEnLines(el).join(' ');
+
+            const psIsNewFormat = (doc) =>
+                doc.querySelectorAll('.card-eyebrow').length > 0 ||
+                doc.querySelectorAll('.t-target').length > 0 ||
+                doc.querySelectorAll('.resp-row').length > 0;
+
+            // Respiration is quoted per HOUR, and the unit is not fixed across sheets:
+            // "CO₂ ml/kg·hr" (Green Beans) but "CO₂ mg/kg·hr" + "O₂ mg/kg·hr" (Cape
+            // Gooseberry). The dashboard's matrix is mL/kg/24h. Assuming ml and multiplying
+            // by 24 made every mg sheet come out ~2x too high, so the unit and the gas are
+            // read from the column header instead of assumed from the column position.
+            // mg → mL uses the ideal-gas molar volume at 0 °C / 1 atm (22.414 L/mol).
+            const PS_MG_PER_ML = { CO2: 44.01 / 22.414, O2: 32.00 / 22.414 };
+
+            // "12,0 – 15,0" → 13.5 · "25" → 25 · "—" → null
+            const psAvgNumber = (txt) => {
+                const s = String(txt || '').replace(/,/g, '.');
+                const range = s.match(/(-?[\d.]+)\s*(?:–|-|to)\s*(-?[\d.]+)/);
+                if (range) return (parseFloat(range[1]) + parseFloat(range[2])) / 2;
+                const one = s.match(/-?[\d.]+/);
+                return one ? parseFloat(one[0]) : null;
+            };
+
+            // Classify a respiration column from its header: which gas, and which unit.
+            // Returns null for the columns that are not a respiration rate (W/kg, W/ton,
+            // kcal, Factor, Status) so they can never be mistaken for one.
+            const psRespColumn = (header) => {
+                const h = String(header || '').toLowerCase();
+                if (/w\/kg|w\/ton|kcal|factor|status|temp/.test(h)) return null;
+                if (!/\/\s*kg/.test(h)) return null;                 // must be a per-kg rate
+                const gas = /co\s*₂|co\s*2/.test(h) ? 'CO2' : (/o\s*₂|o\s*2/.test(h) ? 'O2' : null);
+                if (!gas) return null;
+                const unit = /\bmg\b/.test(h) ? 'mg' : (/\bm+l\b|µl|ul/.test(h) ? 'ml' : null);
+                if (!unit) return null;
+                return { gas, unit };
+            };
+
+            const psToMlPerKgPerDay = (value, gas, unit) => {
+                if (value == null || !(value > 0)) return null;
+                const mlPerHour = unit === 'mg' ? value / PS_MG_PER_ML[gas] : value;
+                return (mlPerHour * 24).toFixed(1);
+            };
+
+            /* Sheet section 2 (Respiration & Temperature) → target_temp{T}_O2 / _CO2.
+             * The table is preferred over the .resp-row bar visual because it can carry
+             * both gases; the bars only ever carry one and are used to fill gaps. */
+            const psExtractRespiration = (doc) => {
+                const out = {};
+                const seen = new Set();
+
+                doc.querySelectorAll('table').forEach(table => {
+                    const headers = [...table.querySelectorAll('tr')][0]
+                        ? [...[...table.querySelectorAll('tr')][0].children].map(c => psEnText(c) || c.textContent)
+                        : [];
+                    if (!headers.length) return;
+                    const tempCol = headers.findIndex(h => /temp/i.test(h));
+                    if (tempCol < 0) return;
+                    const gasCols = headers.map((h, i) => (i === tempCol ? null : psRespColumn(h)));
+                    if (!gasCols.some(Boolean)) return;
+
+                    table.querySelectorAll('tr').forEach(row => {
+                        const cells = [...row.querySelectorAll('td')];
+                        if (!cells.length || !cells[tempCol]) return;
+                        // "5,0 – 7,5 °C ★" → 5 : the row's lower bound is its identity in the matrix.
+                        const tM = psEnText(cells[tempCol]).replace(/,/g, '.').match(/-?[\d.]+/);
+                        if (!tM) return;
+                        const temp = parseFloat(tM[0]);
+                        gasCols.forEach((col, i) => {
+                            if (!col || !cells[i]) return;
+                            const rr = psToMlPerKgPerDay(psAvgNumber(psEnText(cells[i])), col.gas, col.unit);
+                            if (!rr) return;
+                            out[`target_temp${temp}_${col.gas}`] = rr;
+                            seen.add(temp);
+                        });
+                    });
+                });
+
+                // Bar visual: "15,0 ml/kg·h" or "25 mg CO₂/kg·h" — the unit and gas live in
+                // the value text here rather than in a header.
+                doc.querySelectorAll('.resp-row').forEach(row => {
+                    const tTxt = psEnText(row.querySelector('.resp-temp'));
+                    const vTxt = psEnText(row.querySelector('.resp-val'));
+                    if (!tTxt || !vTxt) return;
+                    const tM = tTxt.replace(/,/g, '.').match(/-?[\d.]+/);
+                    if (!tM) return;
+                    const temp = parseFloat(tM[0]);
+                    if (seen.has(temp)) return;                      // table already covered it
+                    const unit = /\bmg\b/i.test(vTxt) ? 'mg' : 'ml';
+                    const gas = /o\s*₂|o\s*2/i.test(vTxt) && !/co\s*₂|co\s*2/i.test(vTxt) ? 'O2' : 'CO2';
+                    const rr = psToMlPerKgPerDay(psAvgNumber(vTxt), gas, unit);
+                    if (rr) out[`target_temp${temp}_${gas}`] = rr;
+                });
+
+                // The matrix charts O₂ and CO₂ separately, but most sheets publish only one
+                // gas. Mirror it rather than leave half the curve blank — an RQ of 1 is the
+                // dashboard's own default assumption (p1-core-1.rq).
+                //
+                // Only when the other gas is absent EVERYWHERE, though. Cape Gooseberry
+                // quotes O₂ at two of its four temperatures and "—" at the rest; filling
+                // those gaps from CO₂ would hand calculateQ10 an O₂ curve made of two
+                // measured points and two invented ones, and it regresses O₂ in preference
+                // to CO₂ — so the headline Q₁₀ would be derived from numbers the sheet never
+                // stated. A short honest curve beats a long fabricated one.
+                const gasesPresent = { O2: false, CO2: false };
+                Object.keys(out).forEach(k => {
+                    const m = k.match(/^target_temp(-?[\d.]+)_(O2|CO2)$/);
+                    if (m) gasesPresent[m[2]] = true;
+                });
+                if (gasesPresent.O2 !== gasesPresent.CO2) {
+                    Object.keys(out).forEach(k => {
+                        const m = k.match(/^target_temp(-?[\d.]+)_(O2|CO2)$/);
+                        if (!m) return;
+                        out[`target_temp${m[1]}_${m[2] === 'O2' ? 'CO2' : 'O2'}`] = out[k];
+                    });
+                }
+                return out;
+            };
+
+            /* Sheet section 5 (Defects & PerfoTec prevention) → the p1-core-4 defect matrix.
+             * Each .defect-card carries a name, a cause, and prevention rows tagged MHP or
+             * MAP; the matrix keeps them as flat defect_{i}_* keys. */
+            const psExtractDefects = (doc) => {
+                const cards = doc.querySelectorAll('.defect-card');
+                const data = {};
+                cards.forEach((card, idx) => {
+                    data[`defect_${idx}_name`] = psEnText(card.querySelector('.defect-name'));
+                    data[`defect_${idx}_cause`] = psEnText(card.querySelector('.defect-cause'));
+                    const mhp = [], map = [];
+                    card.querySelectorAll('.prev-row').forEach(row => {
+                        const tag = row.querySelector('.prev-tag');
+                        const txt = psEnText(row.querySelector('.prev-text'));
+                        if (!tag || !txt) return;
+                        // The tag class is the reliable signal; its text is styled/localised.
+                        const cls = tag.className || '';
+                        if (/mhp/i.test(cls) || /mhp/i.test(tag.textContent)) mhp.push(txt);
+                        else if (/map/i.test(cls) || /map/i.test(tag.textContent)) map.push(txt);
+                    });
+                    data[`defect_${idx}_mhp`] = mhp.join(' | ');
+                    data[`defect_${idx}_map`] = map.join(' | ');
+                });
+                return { data, count: cards.length };
+            };
+
             const extractProductDataFromText = (text, fileName) => {
                 const getEnTranslation = (key, fallbackDOM) => {
                     if (!key) return fallbackDOM ? (fallbackDOM.innerText || fallbackDOM.textContent).trim() : "";
@@ -1260,6 +1426,20 @@
                 const titleMatch = baseNameString.match(/(.*?)\s*\((.*?)\)/);
                 if (titleMatch) { cleanName = titleMatch[1].trim(); extractedVariety = titleMatch[2]; } 
                 else { cleanName = baseNameString.replace(/\(.*?\)/g, '').trim(); }
+                // 2026 template: the <h1> is three <br>-separated lines inside one English
+                // span — product / state / descriptor. textContent runs them together, and
+                // the result ("Green BeansWholeFlowpack Guide", "Cape GooseberryWithout
+                // Calyx") is under the 30-character soup threshold below, so it used to sail
+                // through as the product name and then failed to match the existing product.
+                // Read the lines and keep the first.
+                const psH1Lines = psEnLines(doc.querySelector('h1'));
+                if (psH1Lines.length > 1) {
+                    const first = psH1Lines[0]
+                        .replace(/Fresh.?Cut\s*/gi, '').replace(/Packaging Guide/gi, '')
+                        .replace(/Product Guide/gi, '').replace(/Specification/gi, '').trim();
+                    if (first.length >= 2 && first.length < 40) cleanName = first;
+                }
+
                 // New-format: if cleanName looks like multilingual soup (mixed langs / too long),
                 // extract from the English data-lang span of h1 or from the <title> tag
                 if (cleanName.length > 30 || cleanName.match(/bleekselderij|apio\b|frais|gesneden|procesado/i)) {
