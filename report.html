@@ -6,8 +6,8 @@
     <title>PerfoTec Official Report Tool</title>
     <meta name="description" content="PerfoTec Official Report Tool — Process trial data into professional reports with charts and conclusions.">
     <meta name="author" content="PerfoTec B.V.">
-    <meta name="theme-color" content="#007C27">
-    
+    <meta name="theme-color" content="#008837">
+
     <!-- Preconnect speeds up the Google Fonts waterfall so Montserrat is
          ready before the user clicks Download PDF. -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -17,6 +17,9 @@
 
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- PerfoTec Brand 2.0 palette, type and radii for Tailwind. Must load
+         AFTER the Play CDN, which is what defines the global `tailwind`. -->
+    <script src="brand.js?v=e549b527"></script>
 
     <!-- Babel compiler for in-browser React (JSX) -->
     <!-- Pinned to Babel 7. v8 (released 2026-05) changed React preset's default
@@ -25,15 +28,20 @@
     <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
 
     <!-- LOAD CENTRAL STYLING & CONFIGURATION -->
-    <link rel="stylesheet" href="style.css?v=77634a3c">
-    <script src="config.js?v=37136610"></script>
-    <script src="board-db.js?v=a2107b12"></script>
+    <link rel="stylesheet" href="style.css?v=e8637b4c">
+    <script src="config.js?v=8d659a19"></script>
+    <!-- This page renders its own Board button in the header, so the shared
+         floating bar that board-db.js injects would be a second, redundant way
+         back. Pages WITHOUT a header button (the Product Dashboard) still get it. -->
+    <script>window.PERFOTEC_NO_BACK_BUTTON = true;</script>
+    <script src="board-db.js?v=2371f8df"></script>
     <script src="product-tools.js?v=eca36103"></script>
 </head>
-<body class="bg-slate-50 text-slate-800 antialiased selection:bg-blue-200 selection:text-blue-900">
+<body class="bg-slate-50 text-slate-700 antialiased selection:bg-blue-200 selection:text-blue-900">
     <div id="root">
-        <div style="padding: 2rem; text-align: center; font-family: sans-serif; color: #666;">
-            Loading Report Tool... Please ensure 'style.css' and 'config.js' are in the same folder.
+        <div class="pf-loading" role="status">
+            Loading the report tool…
+            <span class="pf-loading-note">If this stays put, check that style.css and config.js sit in the same folder.</span>
         </div>
     </div>
 
@@ -63,9 +71,9 @@
 
         const BRAND = {
           colors: { 
-            green: globalConfig.BRAND?.colors?.primary?.green || '#007C27', 
-            blue: globalConfig.BRAND?.colors?.primary?.blue || '#054E9A', 
-            black: globalConfig.BRAND?.colors?.neutral?.black || '#211A1A' 
+            green: globalConfig.BRAND?.colors?.primary?.green || '#008837', 
+            blue: globalConfig.BRAND?.colors?.primary?.blue || '#084BCD', 
+            black: globalConfig.BRAND?.colors?.neutral?.black || '#1A1B1F' 
           },
           logos: {
             default: globalConfig.BRAND?.logos?.default || 'https://cdn.prod.website-files.com/68b594c756c22085ddc6c1ea/68b59ba2f027bfeecd25261b_PerfoTec%20logo.png'
@@ -77,11 +85,11 @@
         };
 
         const CHART_COLORS = globalConfig.CHART_COLORS || [
-          { stroke: '#054E9A', fill: '#dbeafe', name: 'Electric Blue' },    
-          { stroke: '#007C27', fill: '#dcfce7', name: 'La Salle Green' },     
-          { stroke: '#211A1A', fill: '#f3f4f6', name: 'Eerie Black' },   
+          { stroke: '#084BCD', fill: '#F1F6FF', name: 'PerfoTec Blue' },    
+          { stroke: '#008837', fill: '#EDF8F2', name: 'PerfoTec Green' },     
+          { stroke: '#1A1B1F', fill: '#F2F5F9', name: 'PerfoTec Ink' },   
           { stroke: '#ea580c', fill: '#ffedd5', name: 'Orange' },  
-          { stroke: '#9333ea', fill: '#f3e8ff', name: 'Purple' }   
+          { stroke: '#5A85E7', fill: '#E0EAFF', name: 'Light Blue Accent' }   
         ];
 
         // i18n arrays are the single source; flat arrays are derived from them
@@ -395,7 +403,7 @@
 
           const borders = (visible) => {
             const s = visible
-              ? { style: BorderStyle.SINGLE, size: 4, color: 'CBD5E1' }
+              ? { style: BorderStyle.SINGLE, size: 4, color: 'E4EBF3' }
               : { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' };
             return { top: s, bottom: s, left: s, right: s };
           };
@@ -471,7 +479,7 @@
           // the Heading 1/2 outline when it refreshes fields on open.
           const buildToc = (out) => {
             out.push(mkPara({
-              children: [mkRun('CONTENTS', { bold: true, color: '007C27', size: 56 })],
+              children: [mkRun('Contents', { bold: true, color: '1A1B1F', size: 56 })],
               spacing: { after: 300 },
             }));
             out.push(new TableOfContents('Contents', { hyperlink: true, headingStyleRange: '1-2' }));
@@ -484,7 +492,7 @@
             if (!bs || as === bs) return `${as}${unit}`;
             return `${as} - ${bs}${unit}`;
           };
-          const txtCell = (text, { bold, color = '334155', fill, size = 18, align = AlignmentType.CENTER, pct } = {}) => new TableCell({
+          const txtCell = (text, { bold, color = '333333', fill, size = 18, align = AlignmentType.CENTER, pct } = {}) => new TableCell({
             children: [new Paragraph({ alignment: align, spacing: { after: 0 }, children: [mkRun(text, { bold, color, size })] })],
             shading: fill ? { fill } : undefined,
             width: pct ? { size: pct, type: WidthType.PERCENTAGE } : undefined,
@@ -499,7 +507,7 @@
             const widths = [6, 28, 17, 15, 17, 17]; // percent per column
             const header = ['#', 'Stage', 'Temperature', 'Duration', 'Total Elapsed', 'Action'];
             const rows = [new TableRow({
-              children: header.map((h, i) => txtCell(h, { bold: true, color: 'FFFFFF', fill: '007C27', size: 16, pct: widths[i], align: i === 1 ? AlignmentType.LEFT : AlignmentType.CENTER })),
+              children: header.map((h, i) => txtCell(h, { bold: true, color: 'FFFFFF', fill: '084BCD', size: 16, pct: widths[i], align: i === 1 ? AlignmentType.LEFT : AlignmentType.CENTER })),
               cantSplit: true, tableHeader: true,
             })];
             let cMin = 0, cMax = 0;
@@ -507,17 +515,17 @@
               const dMin = parseFloat(s.daysStart) || 0;
               const dMax = s.daysEnd ? (parseFloat(s.daysEnd) || dMin) : dMin;
               cMin += dMin; cMax += dMax;
-              const fill = i % 2 ? 'F1F5F9' : undefined;
+              const fill = i % 2 ? 'F7F7F7' : undefined;
               const action = s.action === 'pack' ? 'PACKED' : s.action === 'unpack' ? 'OPENED' : '';
               rows.push(new TableRow({
                 cantSplit: true,
                 children: [
-                  txtCell(String(i + 1), { bold: true, color: '64748B', fill, pct: widths[0] }),
+                  txtCell(String(i + 1), { bold: true, color: '8A97AD', fill, pct: widths[0] }),
                   txtCell(s.stage || '-', { bold: true, fill, pct: widths[1], align: AlignmentType.LEFT }),
                   txtCell(fmtRange(s.tempStart, s.tempEnd, '°C'), { fill, pct: widths[2] }),
                   txtCell(fmtRange(s.daysStart, s.daysEnd, ' d'), { fill, pct: widths[3] }),
-                  txtCell(cMin === cMax ? `${cMin} d` : `${cMin} - ${cMax} d`, { color: '054E9A', fill, pct: widths[4] }),
-                  txtCell(action, { bold: true, color: s.action === 'pack' ? '007C27' : 'DC2626', fill, pct: widths[5] }),
+                  txtCell(cMin === cMax ? `${cMin} d` : `${cMin} - ${cMax} d`, { color: '084BCD', fill, pct: widths[4] }),
+                  txtCell(action, { bold: true, color: s.action === 'pack' ? '008837' : 'DC2626', fill, pct: widths[5] }),
                 ],
               }));
             });
@@ -535,11 +543,11 @@
             const rows = [];
             for (let i = 0; i < scores.length; i += 2) {
               const cells = scores.slice(i, i + 2).map(([num, desc]) => {
-                const col = num >= 7 ? '16A34A' : num >= 5 ? 'EA580C' : 'DC2626';
+                const col = num >= 7 ? '008837' : num >= 5 ? 'EA580C' : 'DC2626';
                 return new TableCell({
                   children: [new Paragraph({
                     spacing: { after: 20 },
-                    children: [mkRun(String(num), { bold: true, color: col, size: 20 }), mkRun('   ' + desc, { color: '334155', size: 16 })],
+                    children: [mkRun(String(num), { bold: true, color: col, size: 20 }), mkRun('   ' + desc, { color: '333333', size: 16 })],
                   })],
                   width: { size: 50, type: WidthType.PERCENTAGE },
                   borders: borders(false),
@@ -574,8 +582,8 @@
                   alignment: AlignmentType.CENTER,
                   spacing: { before: li === 0 ? 60 : 0, after: 0 },
                   children: [
-                    mkRun(line, li === 0 ? { bold: true, color: '1E293B', size: 16 } : { color: '475569', size: 15 }),
-                    ...((li === 0 && badge) ? [mkRun('  (' + badge + ')', { color: '64748B', size: 14 })] : []),
+                    mkRun(line, li === 0 ? { bold: true, color: '1A1B1F', size: 16 } : { color: '4A4F59', size: 15 }),
+                    ...((li === 0 && badge) ? [mkRun('  (' + badge + ')', { color: '8A97AD', size: 14 })] : []),
                   ],
                 })));
                 if (!kids.length) kids.push(new Paragraph({ children: [] }));
@@ -832,14 +840,14 @@
               <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
                 {[0, 5, 10, 15, 20, 25].map(val => (
                   <g key={val}>
-                    <line x1={padding} y1={getY(val)} x2={width-padding} y2={getY(val)} stroke="#f1f5f9" strokeWidth="1.5" />
-                    <text x={padding - 5} y={getY(val) + 3} textAnchor="end" fontSize="9" fill="#94a3b8" fontWeight="600">{val}%</text>
+                    <line x1={padding} y1={getY(val)} x2={width-padding} y2={getY(val)} stroke="#F2F5F9" strokeWidth="1.5" />
+                    <text x={padding - 5} y={getY(val) + 3} textAnchor="end" fontSize="9" fill="#8A97AD" fontWeight="600">{val}%</text>
                   </g>
                 ))}
                 {xTicks.map(t => (
                   <g key={`tick-${t}`}>
-                    <line x1={getX(t)} y1={height - padding} x2={getX(t)} y2={height - padding + 4} stroke="#cbd5e1" strokeWidth="1.5" />
-                    <text x={getX(t)} y={height - 10} textAnchor="middle" fontSize="10" fill="#64748b" fontWeight="bold">{formatDay(t)}</text>
+                    <line x1={getX(t)} y1={height - padding} x2={getX(t)} y2={height - padding + 4} stroke="#CFD9E6" strokeWidth="1.5" />
+                    <text x={getX(t)} y={height - 10} textAnchor="middle" fontSize="10" fill="#66707F" fontWeight="bold">{formatDay(t)}</text>
                   </g>
                 ))}
                 <polyline points={pointsO2} fill="none" stroke={BRAND.colors.blue} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
@@ -885,13 +893,13 @@
               <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto mt-2">
                 {[0, Math.max(yAxisMax/2, 0.1), Math.max(yAxisMax, 0.2)].map(val => (
                    <g key={val}>
-                     <line x1={padding} y1={getY(val)} x2={width-padding} y2={getY(val)} stroke="#f1f5f9" strokeWidth="2" strokeDasharray="4"/>
-                     <text x={padding - 10} y={getY(val) + 4} textAnchor="end" fontSize="11" fill="#94a3b8" fontWeight="600">{val.toFixed(1)}%</text>
+                     <line x1={padding} y1={getY(val)} x2={width-padding} y2={getY(val)} stroke="#F2F5F9" strokeWidth="2" strokeDasharray="4"/>
+                     <text x={padding - 10} y={getY(val) + 4} textAnchor="end" fontSize="11" fill="#8A97AD" fontWeight="600">{val.toFixed(1)}%</text>
                    </g>
                 ))}
                 {days.map((day, dayIdx) => (
                   <g key={day}>
-                    <text x={getX(dayIdx) + (slotWidth / 2)} y={height - 10} textAnchor="middle" fontSize="12" fill="#475569" fontWeight="bold">{formatDay(day)}</text>
+                    <text x={getX(dayIdx) + (slotWidth / 2)} y={height - 10} textAnchor="middle" fontSize="12" fill="#4A4F59" fontWeight="bold">{formatDay(day)}</text>
                     {groups.map((g, grpIdx) => {
                        const meas = (g.measurements || []).find(m => parseFloat(m.day) === day);
                        const day0 = (g.measurements || []).find(m => parseFloat(m.day) === 0);
@@ -958,8 +966,8 @@
               <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto mt-2">
                 {[0, 2, 4, 6, 8, 10].map(val => (
                   <g key={val}>
-                    <line x1={padding} y1={getY(val)} x2={width - padding} y2={getY(val)} stroke="#f1f5f9" strokeWidth="2" strokeDasharray="4" />
-                    <text x={padding - 10} y={getY(val) + 4} textAnchor="end" fontSize="11" fill="#94a3b8" fontWeight="600">{val}</text>
+                    <line x1={padding} y1={getY(val)} x2={width - padding} y2={getY(val)} stroke="#F2F5F9" strokeWidth="2" strokeDasharray="4" />
+                    <text x={padding - 10} y={getY(val) + 4} textAnchor="end" fontSize="11" fill="#8A97AD" fontWeight="600">{val}</text>
                   </g>
                 ))}
                 {/* Acceptance limit: scores >= 7 are within specification */}
@@ -967,8 +975,8 @@
                 <text x={width - padding} y={getY(7) - 5} textAnchor="end" fontSize="9" fill="#f97316" fontWeight="700">Acceptance limit (7)</text>
                 {xTicks.map(t => (
                   <g key={`tick-${t}`}>
-                    <line x1={getX(t)} y1={height - padding} x2={getX(t)} y2={height - padding + 4} stroke="#cbd5e1" strokeWidth="1.5" />
-                    <text x={getX(t)} y={height - 14} textAnchor="middle" fontSize="10" fill="#64748b" fontWeight="bold">{formatDay(t)}</text>
+                    <line x1={getX(t)} y1={height - padding} x2={getX(t)} y2={height - padding + 4} stroke="#CFD9E6" strokeWidth="1.5" />
+                    <text x={getX(t)} y={height - 14} textAnchor="middle" fontSize="10" fill="#66707F" fontWeight="bold">{formatDay(t)}</text>
                   </g>
                 ))}
                 {series.map(s => (
@@ -1018,7 +1026,16 @@
           };
 
           const handleSave = () => { onSave({ ...data, day: parseFloat(day)||0, notes, samples, qualityParams, evaluateQuality }); onClose(); };
-          
+
+          // Pick the layout in JS, not with `hidden md:block` / `md:hidden`.
+          // Those utilities are generated at runtime by the Tailwind CDN, and the
+          // two halves of the switch are complementary: if `md:block` fails to
+          // generate while `hidden` does, the table stays display:none AND the
+          // cards are hidden — the only way to enter a measurement disappears with
+          // nothing on screen to explain it. Rendering one branch cannot fail that
+          // way, and it does not depend on the CDN at all.
+          const isPhone = usePhoneLayout();
+
           const avgWeight = getAverage(samples, 'weight');
           // Per-sample loss: uses each sample's own initial weight when filled,
           // falling back to the index-matched day-0 sample (see getWeightLoss).
@@ -1027,32 +1044,123 @@
           const isOpened = projectTotalDuration && parseFloat(day) > parseFloat(projectTotalDuration);
 
           return (
-            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 font-sans print:hidden">
-              <div className="bg-white rounded-3xl shadow-2xl w-full max-w-5xl overflow-hidden flex flex-col max-h-[90vh]">
-                <div className="p-6 flex justify-between items-center text-white" style={{ background: `linear-gradient(90deg, ${BRAND.colors.black} 0%, #423B3B 50%, ${BRAND.colors.black} 100%)` }}>
-                  <h3 className="font-extrabold text-xl flex items-center gap-3" style={{ fontFamily: BRAND.fonts.heading }}><Edit3 size={20}/> Edit Measurement Data ({formatDay(day)})</h3>
-                  <button onClick={onClose} className="hover:text-red-300 transition bg-white/10 p-2 rounded-full"><X size={20}/></button>
+            /* Full-bleed on a phone: a centred dialog with a margin and rounded
+               corners wastes the little width there is, and max-h-[90vh] put the
+               Save button below the fold with a keyboard open. On a phone this is
+               a screen, not a dialog — header and footer stay put, the middle
+               scrolls. From md up it is the dialog it always was. */
+            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-stretch md:items-center justify-center z-50 p-0 md:p-4 font-sans print:hidden">
+              <div className="bg-white rounded-none md:rounded-3xl shadow-2xl w-full max-w-5xl overflow-hidden flex flex-col h-full md:h-auto md:max-h-[90vh]">
+                <div className="px-4 py-3 md:p-6 flex justify-between items-center text-white shrink-0" style={{ background: `linear-gradient(90deg, ${BRAND.colors.black} 0%, #423B3B 50%, ${BRAND.colors.black} 100%)` }}>
+                  <h3 className="font-extrabold text-base md:text-xl flex items-center gap-2 md:gap-3 min-w-0" style={{ fontFamily: BRAND.fonts.heading }}>
+                    <Edit3 size={18} className="shrink-0"/>
+                    <span className="truncate">{rt?.measDay || 'Day'} {formatDay(day)}</span>
+                  </h3>
+                  <button onClick={onClose} aria-label={rt?.cancel || 'Close'} className="hover:text-red-300 transition bg-white/10 p-2.5 rounded-full shrink-0"><X size={20}/></button>
                 </div>
-                
-                <div className="p-8 overflow-y-auto grid grid-cols-1 lg:grid-cols-2 gap-10">
+
+                <div className="p-4 md:p-8 overflow-y-auto grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-10 flex-1">
                   <div>
-                    <h4 className="font-extrabold text-lg text-slate-800 border-b-2 border-slate-100 pb-3 mb-6">{isMAP ? 'Atmosphere & Weight' : 'Weight Only (Ambient)'}</h4>
-                    <div className="flex flex-wrap justify-between items-center mb-6 bg-slate-50 p-4 rounded-xl border border-slate-200 text-sm gap-4 shadow-sm">
+                    <h4 className="hidden md:block font-extrabold text-lg text-slate-800 border-b-2 border-slate-100 pb-3 mb-6">{isMAP ? 'Atmosphere & Weight' : 'Weight Only (Ambient)'}</h4>
+                    {/* Running averages first on a phone: it is the sanity check you
+                        glance at while typing, so it belongs above the fields. */}
+                    <div className="flex flex-wrap justify-between items-center mb-5 md:mb-6 bg-slate-50 p-3 md:p-4 rounded-xl border border-slate-200 text-sm gap-3 md:gap-4 shadow-sm">
                       <div className="flex items-center gap-3">
-                         <label className="font-extrabold text-slate-600 uppercase tracking-wider text-xs">Day:</label>
+                         <label className="font-extrabold text-slate-600 uppercase tracking-wider text-xs">{rt?.measDay || 'Day'}:</label>
                          <input
                            type="number"
+                           inputMode="numeric"
                            value={day || ''}
                            disabled={!isDayEditable}
                            onChange={e => setDay(e.target.value)}
                            className={`w-20 p-2 border border-slate-300 rounded-lg text-center font-bold shadow-sm outline-none focus:ring-2 focus:ring-blue-500 ${!isDayEditable ? 'bg-slate-200 cursor-not-allowed text-slate-500' : 'bg-white'}`}
                          />
                       </div>
-                      <div className="text-right flex gap-6">
-                         {parseFloat(day) > 0 && <div className="bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm" style={{ color: weightLoss > 3 ? '#dc2626' : BRAND.colors.green, fontWeight: 'bold' }}>Avg Loss: {weightLoss}%</div>}
-                         <div className="bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm text-slate-700">Avg Weight: <strong className="text-blue-900">{avgWeight}g</strong></div>
+                      <div className="flex flex-wrap gap-2 md:gap-6 md:text-right">
+                         {parseFloat(day) > 0 && <div className="bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm" style={{ color: weightLoss > 3 ? '#dc2626' : BRAND.colors.green, fontWeight: 'bold' }}>Ø {rt?.lossLabel || 'Loss'} {weightLoss}%</div>}
+                         <div className="bg-white px-3 py-1.5 rounded-lg border border-slate-200 shadow-sm text-slate-700">Ø <strong className="text-blue-900">{avgWeight}g</strong></div>
                       </div>
                     </div>
+                    {/* ---- PHONE: one card per sample -------------------------------
+                     * The table below is 600px wide and on a 375px screen 359px of
+                     * it sat behind a horizontal scroll — you saw 40% of your own
+                     * data. Its narrowest number box measured 27px, which you
+                     * cannot type "20.9" into standing at a pallet. So the phone
+                     * gets a different shape rather than a squeezed table: one card
+                     * per sample, two fields per row, and the weight loss computed
+                     * next to the field so an implausible entry shows up on the
+                     * spot instead of back at the desk.
+                     * -------------------------------------------------------------- */}
+                    {isPhone && (
+                    <div className="space-y-3 mb-5">
+                      {samples.map((s, i) => {
+                        const ownStart = parseFloat(s.initialWeight);
+                        const fallbackStart = day0Samples && day0Samples[i] ? parseFloat(day0Samples[i].weight) : NaN;
+                        const startW = !isNaN(ownStart) && ownStart > 0 ? ownStart : fallbackStart;
+                        const nowW = parseFloat(s.weight);
+                        const loss = (startW > 0 && !isNaN(nowW)) ? ((startW - nowW) / startW) * 100 : null;
+                        return (
+                          <div key={i} className="rounded-2xl border-2 border-slate-200 bg-white p-4 shadow-sm">
+                            <div className="flex items-center justify-between mb-3">
+                              <span className="flex items-center gap-2.5 font-extrabold text-slate-800">
+                                <span className="w-9 h-9 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-sm">{i + 1}</span>
+                                {rt?.sampleLabel || 'Sample'} {i + 1}
+                              </span>
+                              <button onClick={() => removeSample(i)} aria-label={rt?.removeSample || 'Remove sample'}
+                                className="text-red-500 bg-red-50 border border-red-100 p-3 rounded-xl active:bg-red-100"><Trash2 size={18}/></button>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                              {isMAP && (
+                                <label className="block">
+                                  <span className="block text-[11px] font-extrabold uppercase tracking-wider mb-1" style={{color: BRAND.colors.blue}}>O₂ (%)</span>
+                                  {isOpened
+                                    ? <div className="h-12 flex items-center justify-center rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-300">—</div>
+                                    : <input type="number" inputMode="decimal" step="0.1" className="w-full h-12 px-3 border-2 border-slate-300 rounded-xl text-center text-lg font-bold text-blue-900 outline-none focus:border-blue-500"
+                                        value={s.o2 === 0 ? 0 : (s.o2 || '')} onChange={e => updateSample(i, 'o2', e.target.value)} />}
+                                </label>
+                              )}
+                              {isMAP && (
+                                <label className="block">
+                                  <span className="block text-[11px] font-extrabold uppercase tracking-wider mb-1" style={{color: BRAND.colors.green}}>CO₂ (%)</span>
+                                  {isOpened
+                                    ? <div className="h-12 flex items-center justify-center rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-300">—</div>
+                                    : <input type="number" inputMode="decimal" step="0.1" className="w-full h-12 px-3 border-2 border-slate-300 rounded-xl text-center text-lg font-bold text-green-900 outline-none focus:border-green-500"
+                                        value={s.co2 === 0 ? 0 : (s.co2 || '')} onChange={e => updateSample(i, 'co2', e.target.value)} />}
+                                </label>
+                              )}
+                              {parseFloat(day) > 0 && (
+                                <label className="block">
+                                  <span className="block text-[11px] font-extrabold uppercase tracking-wider mb-1 text-amber-700">{rt?.thInitialWeight || 'Initial Wt.'}</span>
+                                  <input type="number" inputMode="decimal" className="w-full h-12 px-3 border-2 border-amber-300 bg-amber-50/50 rounded-xl text-center text-lg font-bold text-amber-900 outline-none focus:border-amber-500"
+                                    value={s.initialWeight === 0 ? 0 : (s.initialWeight || '')} onChange={e => updateSample(i, 'initialWeight', e.target.value)}
+                                    placeholder={day0Samples?.[i]?.weight ? String(day0Samples[i].weight) : 'g'} />
+                                </label>
+                              )}
+                              <label className="block">
+                                <span className="block text-[11px] font-extrabold uppercase tracking-wider mb-1 text-slate-600">
+                                  {rt?.thWeightPlain || 'Weight'} {parseFloat(day) === 0 && '(start)'}
+                                </span>
+                                <input type="number" inputMode="decimal" className="w-full h-12 px-3 border-2 border-slate-300 rounded-xl text-center text-lg font-bold outline-none focus:border-slate-500"
+                                  value={s.weight === 0 ? 0 : (s.weight || '')} onChange={e => updateSample(i, 'weight', e.target.value)} placeholder="g" />
+                              </label>
+                            </div>
+                            {/* Not on P+0: there the weight IS the start weight, so a
+                                loss row would always read 0.0% and mean nothing. */}
+                            {loss !== null && parseFloat(day) > 0 && (
+                              <div className="mt-3 text-xs font-bold flex items-center gap-1.5" style={{ color: loss > 3 ? '#dc2626' : BRAND.colors.green }}>
+                                <Scale size={13}/> {rt?.lossLabel || 'Loss'}: {loss.toFixed(1)}%
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                    )}
+
+                    {/* Unconditional, same reasoning as the day table: these are the
+                        O₂ / CO₂ / weight inputs, so if they can vanish the tool is
+                        unusable. On a phone the cards above are the nicer way in and
+                        this stays below as the guaranteed one. */}
                     <div className="overflow-x-auto w-full rounded-xl border border-slate-200 shadow-sm mb-6">
                       <table className="w-full text-sm">
                         <thead className="bg-slate-100 border-b border-slate-200">
@@ -1089,23 +1197,50 @@
                         </tbody>
                       </table>
                     </div>
-                    <button onClick={addSample} className="text-sm flex items-center gap-2 font-bold px-4 py-2 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 transition-colors mb-6 border border-green-200"><Plus size={16}/> Add Sample</button>
-                    
-                    <label className="block mb-2 text-xs font-bold tracking-wide text-slate-500 uppercase">General Observations</label>
-                    <textarea className="w-full p-4 border border-slate-300 rounded-xl text-sm h-28 outline-none focus:ring-2 focus:ring-blue-500 shadow-sm resize-y" value={notes || ''} onChange={e => setNotes(e.target.value)} placeholder="Enter any general notes for this day..." />
+                    <button onClick={addSample} className="w-full md:w-auto text-sm flex items-center justify-center gap-2 font-bold px-4 py-3.5 md:py-2 bg-green-50 text-green-700 rounded-xl md:rounded-lg hover:bg-green-100 active:bg-green-100 transition-colors mb-5 md:mb-6 border-2 md:border border-green-200"><Plus size={18}/> {rt?.addSampleBtn || 'Add Sample'}</button>
+
+                    <label className="block mb-2 text-xs font-bold tracking-wide text-slate-500 uppercase">{rt?.generalObs || 'General Observations'}</label>
+                    <textarea className="w-full p-4 border border-slate-300 rounded-xl text-sm h-24 md:h-28 outline-none focus:ring-2 focus:ring-blue-500 shadow-sm resize-y" value={notes || ''} onChange={e => setNotes(e.target.value)} placeholder="..." />
                   </div>
 
-                  <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 shadow-inner flex flex-col h-full overflow-hidden">
-                     <div className="flex justify-between items-center border-b border-slate-200 pb-4 mb-6">
-                       <h4 className="font-extrabold text-lg text-slate-800">Quality Evaluation</h4>
-                       <label className="flex items-center gap-3 text-sm bg-white border border-slate-300 px-4 py-2 rounded-lg cursor-pointer shadow-sm hover:bg-slate-50 transition-colors">
-                         <input type="checkbox" checked={evaluateQuality} onChange={e => setEvaluateQuality(e.target.checked)} className="accent-green-600 w-4 h-4" />
-                         <span className="font-bold text-slate-700">Enable Evaluation</span>
+                  <div className="bg-slate-50 p-4 md:p-6 rounded-2xl md:rounded-3xl border border-slate-200 shadow-inner flex flex-col h-full overflow-hidden">
+                     <div className="flex flex-wrap justify-between items-center gap-3 border-b border-slate-200 pb-4 mb-5 md:mb-6">
+                       <h4 className="font-extrabold text-base md:text-lg text-slate-800">{rt?.qualityEval || 'Quality Evaluation'}</h4>
+                       <label className="flex items-center gap-3 text-sm bg-white border border-slate-300 px-4 py-3 md:py-2 rounded-xl md:rounded-lg cursor-pointer shadow-sm hover:bg-slate-50 transition-colors">
+                         <input type="checkbox" checked={evaluateQuality} onChange={e => setEvaluateQuality(e.target.checked)} className="accent-green-600 w-5 h-5" />
+                         <span className="font-bold text-slate-700">{rt?.enableEval || 'Enable Evaluation'}</span>
                        </label>
                      </div>
-                     
+
                      {evaluateQuality ? (
                        <div className="flex-1 flex flex-col overflow-hidden">
+                         {/* ---- PHONE: one card per criterion ----------------------
+                          * Criterion / score / notes as three table columns leaves a
+                          * score box too narrow to tap and a notes field too narrow
+                          * to read. Stacked, the score sits next to its name where
+                          * you can hit it, and the note gets the full width.
+                          * -------------------------------------------------------- */}
+                         {isPhone && (
+                         <div className="space-y-2.5">
+                           {qualityParams.length === 0 && (
+                             <p className="text-center italic text-slate-400 py-6 text-sm">{rt?.noCriteriaModal || 'No criteria selected in Global Settings.'}</p>
+                           )}
+                           {qualityParams.map((param, i) => (
+                             <div key={i} className="bg-white rounded-xl border border-slate-200 p-3">
+                               <div className="flex items-center gap-3">
+                                 <span className="flex-1 font-bold text-slate-800 text-sm leading-tight">{param.name}</span>
+                                 <input type="number" inputMode="numeric" min="1" max="10"
+                                   className="w-16 h-12 border-2 border-slate-300 rounded-xl text-center text-lg font-extrabold text-blue-900 outline-none focus:border-blue-500 shrink-0"
+                                   value={param.score || ''} onChange={e => updateParam(i, 'score', e.target.value)} placeholder="–" />
+                               </div>
+                               <input type="text"
+                                 className="mt-2 w-full h-11 px-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-blue-500"
+                                 value={param.notes || ''} onChange={e => updateParam(i, 'notes', e.target.value)} placeholder={rt?.thNotes || 'Notes'} />
+                             </div>
+                           ))}
+                         </div>
+                         )}
+
                          <div className="flex-1 overflow-y-auto pr-2 rounded-xl border border-slate-200 bg-white">
                            <table className="w-full text-sm">
                              <thead className="text-left text-slate-500 sticky top-0 bg-slate-100 border-b border-slate-200 shadow-sm">
@@ -1131,7 +1266,7 @@
                              </tbody>
                            </table>
                          </div>
-                         
+
                          {/* Legend */}
                          <div className="mt-6 pt-6 border-t border-slate-200 shrink-0">
                            <p className="text-[10px] font-extrabold text-slate-400 mb-3 uppercase tracking-widest">{rt?.scoreScale || 'Score Scale (1-10)'}</p>
@@ -1151,12 +1286,138 @@
                   </div>
                 </div>
 
-                <div className="bg-slate-100 p-6 border-t border-slate-200 flex justify-end gap-4">
-                  <button onClick={onClose} className="px-6 py-3 text-slate-600 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl font-bold transition-all shadow-sm">{rt?.cancel || 'Cancel'}</button>
-                  <button onClick={handleSave} className="px-8 py-3 text-white font-bold rounded-xl shadow-lg shadow-green-500/30 hover:shadow-green-500/50 hover:-translate-y-0.5 transition-all flex items-center gap-2" style={{ backgroundColor: BRAND.colors.green }}><Save size={18}/> {rt?.saveData || 'Save Data'}</button>
+                {/* Save must be reachable with one thumb and never scroll away:
+                    shrink-0 keeps it pinned while the middle scrolls, and on a
+                    phone it takes the full width because that is the one action
+                    you came here for. */}
+                <div className="bg-slate-100 p-4 md:p-6 border-t border-slate-200 flex gap-3 md:gap-4 md:justify-end shrink-0"
+                     style={{ paddingBottom: 'max(1rem, env(safe-area-inset-bottom))' }}>
+                  <button onClick={onClose} className="px-5 md:px-6 py-3.5 md:py-3 text-slate-600 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl font-bold transition-all shadow-sm shrink-0">{rt?.cancel || 'Cancel'}</button>
+                  <button onClick={handleSave} className="flex-1 md:flex-none px-8 py-3.5 md:py-3 text-white font-bold rounded-xl shadow-lg shadow-green-500/30 hover:shadow-green-500/50 md:hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2" style={{ backgroundColor: BRAND.colors.green }}><Save size={18}/> {rt?.saveData || 'Save Data'}</button>
                 </div>
               </div>
             </div>
+          );
+        };
+
+        /* ==========================================================================
+         * Panel — a form section that is collapsed on a phone and always open on a
+         * desktop.
+         *
+         * The Setup tab is five full-height panels. On a 375px screen that is a lot
+         * of scrolling to reach one field, and you cannot see what else exists.
+         * Collapsed, the whole form fits on one screen as a list of headings you
+         * tap into.
+         *
+         * Desktop is deliberately left exactly as it was: there the fields sit two
+         * and three across and collapsing them would only add clicks. So the phone
+         * gets the accordion and the desktop keeps the plain heading — same markup,
+         * one branch.
+         *
+         * The `open` state is kept even while the desktop branch renders, so
+         * rotating a tablet does not reset which panels you had unfolded.
+         * ========================================================================== */
+        const usePhoneLayout = () => {
+          // Width alone is the wrong test. A laptop with DevTools docked to the
+          // right, or a half-screen window, is under 768px and would get the phone
+          // layout — panels collapsed, the day table reflowed somewhere else — which
+          // is not what a desktop user asked for and made the measurement inputs
+          // look lost. `pointer: coarse` is what actually separates a touch device
+          // from a narrow mouse window, so both must hold.
+          const query = '(max-width: 767px) and (pointer: coarse)';
+          const [isPhone, setIsPhone] = useState(() =>
+            typeof window.matchMedia === 'function' ? window.matchMedia(query).matches : false);
+          useEffect(() => {
+            if (typeof window.matchMedia !== 'function') return;
+            const mq = window.matchMedia(query);
+            // Both signals: the media-query change event is the right one, but it
+            // does not fire in every environment (it did not under viewport
+            // emulation), and being wrong here means the whole measurement layout
+            // is wrong. `resize` re-reads mq.matches, so the two cannot disagree.
+            const sync = () => setIsPhone(mq.matches);
+            mq.addEventListener('change', sync);
+            window.addEventListener('resize', sync);
+            sync();
+            return () => {
+              mq.removeEventListener('change', sync);
+              window.removeEventListener('resize', sync);
+            };
+          }, []);
+          return isPhone;
+        };
+
+        /* `chip` is the smaller variant used by the panels inside the Variant tab:
+         * a plain white box with a label-sized heading and a coloured icon square,
+         * instead of a full section with an accent bar. Same collapse behaviour. */
+        const Panel = ({ title, icon: Icon, accent, iconBg, badge, children, bodyClass = '', defaultOpen = false, chip = false, chipClass = '', fill = false }) => {
+          const isPhone = usePhoneLayout();
+          const [open, setOpen] = useState(defaultOpen);
+          const showBody = !isPhone || open;
+
+          if (chip) {
+            return (
+              // `fill` (height:100%) is OPT-IN, and must stay that way. It is right
+              // for panels that sit side by side in a grid and should match heights,
+              // and catastrophic for one stacked above a sibling: height:100% of a
+              // STRETCHED grid item resolves against a height that already includes
+              // that sibling, so the panel grows to fill the whole column and pushes
+              // the sibling past the bottom edge — where the column's overflow-hidden
+              // deletes it. That is what made the whole Measurements panel disappear
+              // on screens wide enough for the lg: grid to apply, while everything
+              // above it rendered normally.
+              <div className={`bg-white p-4 sm:p-8 rounded-2xl sm:rounded-3xl border border-slate-200 shadow-sm flex flex-col ${fill ? 'h-full' : ''}`}>
+                {isPhone ? (
+                  <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
+                    className={`w-full flex items-center gap-2.5 text-left ${open ? 'border-b border-slate-100 pb-3 mb-3' : ''}`}>
+                    {Icon && <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${chipClass}`}><Icon size={18}/></div>}
+                    <span className="flex-1 min-w-0 font-extrabold text-slate-800 leading-tight">{title}</span>
+                    <ChevronDown size={20} className="shrink-0 text-slate-400 transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'none' }} />
+                  </button>
+                ) : (
+                  <label className="block mb-2 font-extrabold text-slate-800 text-lg border-b border-slate-100 pb-3 flex items-center gap-2">
+                    {Icon && <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${chipClass}`}><Icon size={16}/></div>}
+                    {title}
+                  </label>
+                )}
+                {showBody && (bodyClass ? <div className={bodyClass}>{children}</div> : children)}
+              </div>
+            );
+          }
+
+          return (
+            <section className="bg-white p-4 sm:p-8 md:p-10 rounded-2xl sm:rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-1" style={{ backgroundColor: accent }}></div>
+              {isPhone ? (
+                <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
+                  className={`w-full flex items-center gap-3 text-left ${open ? 'border-b-2 border-slate-100 pb-4 mb-5' : ''}`}>
+                  {Icon && (
+                    <div className="p-2.5 rounded-xl shrink-0" style={{ backgroundColor: iconBg || (accent + '1a') }}>
+                      <Icon size={22} color={accent} />
+                    </div>
+                  )}
+                  <span className="flex-1 min-w-0 font-extrabold text-base text-slate-800 leading-tight">{title}</span>
+                  <ChevronDown size={22} className="shrink-0 text-slate-400 transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'none' }} />
+                </button>
+              ) : (
+                <div className="flex flex-wrap items-center justify-between gap-4 border-b-2 border-slate-100 pb-6 mb-8">
+                  <div className="flex items-center gap-4">
+                    {Icon && (
+                      <div className="p-3 rounded-xl" style={{ backgroundColor: iconBg || (accent + '1a') }}>
+                        <Icon size={28} color={accent} />
+                      </div>
+                    )}
+                    <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">{title}</h2>
+                  </div>
+                  {badge}
+                </div>
+              )}
+              {/* A badge (e.g. the metric/imperial switch) sits beside the title on a
+                  desktop. On a phone there is no room next to a title and a chevron,
+                  so it drops into the body as its own row — visible once you open the
+                  panel, which is also when it is relevant. */}
+              {isPhone && badge && open && <div className="mb-4 flex">{badge}</div>}
+              {showBody && (bodyClass ? <div className={bodyClass}>{children}</div> : children)}
+            </section>
           );
         };
 
@@ -1165,13 +1426,38 @@
           const initialImages = (data.images || []).map(img => typeof img === 'string' ? {url: img, caption: '', category: 'External Quality'} : { ...img, category: img.category || 'External Quality' });
           const [images, setImages] = useState(initialImages);
 
-          const handleImageUpload = (e) => {
+          // Measurement photos are where a report's weight comes from: one real
+          // trial measured 62.5 MB for 21 photos, 100% of the file. Downscale on
+          // the way in (see readImageFile) instead of storing the camera original,
+          // and keep the pixel size so the print layout does not have to decode
+          // the image to know its aspect.
+          const [imgBusy, setImgBusy] = useState(0);
+          // Same signal the touch CSS uses: a coarse pointer means a phone or
+          // tablet, which has a camera worth offering. Deliberately not UA
+          // sniffing, and not `navigator.mediaDevices` — a desktop webcam exists
+          // but nobody photographs a pallet with it.
+          const hasCamera = typeof window.matchMedia === 'function'
+            && window.matchMedia('(pointer: coarse)').matches;
+          const handleImageUpload = async (e) => {
             const files = Array.from(e.target.files);
-            files.forEach(file => {
-              const reader = new FileReader();
-              reader.onloadend = () => setImages(prev => [...prev, { url: reader.result, caption: '', category: 'External Quality' }]);
-              reader.readAsDataURL(file);
-            });
+            e.target.value = null;                 // allow re-picking the same file
+            setImgBusy(n => n + files.length);
+            for (const file of files) {
+              try {
+                const r = await globalConfig.readImageFile(file);
+                setImages(prev => [...prev, {
+                  url: r.dataUrl, caption: '', category: 'External Quality',
+                  w: r.width, h: r.height, bytes: r.bytes
+                }]);
+              } catch (err) {
+                // Losing the photo is worse than storing it big.
+                const reader = new FileReader();
+                reader.onloadend = () => setImages(prev => [...prev, { url: reader.result, caption: '', category: 'External Quality' }]);
+                reader.readAsDataURL(file);
+              } finally {
+                setImgBusy(n => Math.max(0, n - 1));
+              }
+            }
           };
 
           const removeImage = (idx) => setImages(images.filter((_, i) => i !== idx));
@@ -1215,12 +1501,37 @@
                         </div>
                       </div>
                     ))}
+                    {/* Two separate inputs on a phone, not one. `capture` opens the
+                        camera directly, which is what you want standing in front of
+                        the pallet — but it also takes the gallery away, so a photo
+                        shot earlier could no longer be attached. Shown on coarse
+                        pointers only: on a desktop "Take photo" would just open the
+                        same file dialog and read as a bug. */}
+                    {hasCamera && (
+                      <label className="border-4 border-dashed rounded-2xl flex flex-col items-center justify-center cursor-pointer transition-all aspect-square min-h-[200px] shadow-sm group"
+                             style={{ borderColor: BRAND.colors.green, backgroundColor: BRAND.colors.green + '0d' }}>
+                         <div className="w-16 h-16 bg-white rounded-full shadow-sm flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                            {imgBusy > 0
+                              ? <svg className="animate-spin h-7 w-7" style={{ color: BRAND.colors.green }} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+                              : <Camera size={28} style={{ color: BRAND.colors.green }}/>}
+                         </div>
+                         <span className="text-sm font-extrabold" style={{ color: BRAND.colors.green }}>
+                           {imgBusy > 0 ? (rt?.photoProcessing || 'Processing…') + ' (' + imgBusy + ')' : (rt?.takePhoto || 'Take photo')}
+                         </span>
+                         <span className="text-xs text-slate-400 mt-1">{rt?.photoResizeHint || 'Resized automatically'}</span>
+                         <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handleImageUpload} />
+                      </label>
+                    )}
                     <label className="border-4 border-dashed border-slate-300 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-blue-50 hover:border-blue-300 transition-all aspect-square min-h-[200px] shadow-sm group">
                        <div className="w-16 h-16 bg-white rounded-full shadow-sm flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                          <Upload size={28} className="text-blue-500"/>
+                          {imgBusy > 0
+                            ? <svg className="animate-spin h-7 w-7 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+                            : <Upload size={28} className="text-blue-500"/>}
                        </div>
-                       <span className="text-sm text-slate-600 font-extrabold">{rt?.uploadPhotos || 'Upload Photos'}</span>
-                       <span className="text-xs text-slate-400 mt-1">PNG, JPG</span>
+                       <span className="text-sm text-slate-600 font-extrabold">
+                         {imgBusy > 0 ? (rt?.photoProcessing || 'Processing…') + ' (' + imgBusy + ')' : (hasCamera ? (rt?.chooseExisting || 'Choose existing') : (rt?.uploadPhotos || 'Upload Photos'))}
+                       </span>
+                       <span className="text-xs text-slate-400 mt-1">{rt?.photoResizeHint || 'Resized automatically'}</span>
                        <input type="file" multiple accept="image/*" className="hidden" onChange={handleImageUpload} />
                     </label>
                   </div>
@@ -1338,8 +1649,8 @@
                               // Brand heading styles: without these Word's own
                               // Heading 1/2 (blue Calibri Light) would restyle
                               // the section titles used for the TOC outline.
-                              heading1: { run: { font: 'Montserrat', color: '007C27', bold: true } },
-                              heading2: { run: { font: 'Montserrat', color: '334155', bold: true } },
+                              heading1: { run: { font: 'Montserrat', color: '1A1B1F', bold: true } },
+                              heading2: { run: { font: 'Montserrat', color: '333333', bold: true } },
                           },
                       },
                       // Refresh fields on open so the TOC gets page numbers
@@ -1356,7 +1667,7 @@
                               default: new docx.Footer({
                                   children: [new docx.Paragraph({
                                       alignment: docx.AlignmentType.CENTER,
-                                      children: [new docx.TextRun({ children: [docx.PageNumber.CURRENT], size: 16, color: '94A3B8', font: 'Montserrat' })],
+                                      children: [new docx.TextRun({ children: [docx.PageNumber.CURRENT], size: 16, color: '8A97AD', font: 'Montserrat' })],
                                   })],
                               }),
                           },
@@ -1535,12 +1846,12 @@
                          defined in the trial setup. */}
                      {(analysis.targetAchieved || analysis.targetEvaluation) && (() => {
                         const status = {
-                          achieved:    { label: 'Achieved',           bg: '#f0fdf4', border: '#bbf7d0', color: '#15803d' },
+                          achieved:    { label: 'Achieved',           bg: '#f0fdf4', border: '#bbf7d0', color: '#006E2C' },
                           partial:     { label: 'Partially Achieved', bg: '#fff7ed', border: '#fed7aa', color: '#c2410c' },
                           notAchieved: { label: 'Not Achieved',       bg: '#fef2f2', border: '#fecaca', color: '#b91c1c' }
                         }[analysis.targetAchieved] || null;
                         return (
-                          <div className="mb-8 break-inside-avoid p-6 rounded-2xl border" style={{ backgroundColor: status?.bg || '#f8fafc', borderColor: status?.border || '#e2e8f0' }}>
+                          <div className="mb-8 break-inside-avoid p-6 rounded-2xl border" style={{ backgroundColor: status?.bg || '#F7F9FC', borderColor: status?.border || '#E4EBF3' }}>
                             <div className="flex items-center justify-between gap-4 mb-3 flex-wrap">
                               <h4 className="font-bold text-xl" style={{color: BRAND.colors.black}}>Trial Target:</h4>
                               {status && <span className="text-xs font-extrabold uppercase tracking-wider px-3 py-1.5 rounded-lg border" style={{ color: status.color, borderColor: status.border, backgroundColor: '#ffffff' }}>{status.label}</span>}
@@ -2008,7 +2319,8 @@
                 {/* --- PAGE 5: PHOTOS --- */}
                 <div className="page-break pt-4" id="sec-5">
                   <h2 className="text-3xl font-extrabold uppercase mb-8 print:mb-4 brand-heading" style={{ color: BRAND.colors.green, borderBottom: `3px solid ${BRAND.colors.gray}`, paddingBottom: '0.75rem', marginTop: '2rem' }}>5. Photos</h2>
-                  <div className="grid grid-cols-2 gap-10 print:gap-4">
+                  {/* print:block — see the photo-flow note below. */}
+                  <div className="grid grid-cols-2 gap-10 print:block print:gap-0">
                      {/* Reference Start Photo */}
                      {project.startImage && (
                        <div className="col-span-2 mb-12 print:mb-6 break-inside-avoid border-b border-slate-200 pb-8 print:pb-4 flex flex-col items-center">
@@ -2025,14 +2337,26 @@
                          const groupsInCat = Array.from(new Set(catPhotos.map(p => p.groupName)));
 
                          return (
-                             <div key={category} className="col-span-2 mb-12 print:mb-4 break-inside-avoid">
+                             /* No break-inside-avoid here, and none on the variant
+                                block below. Both used to demand that a whole
+                                category — heading plus every variant, plus every
+                                photo — sat on one page. It never fitted, so the
+                                browser pushed the entire block to a fresh page and
+                                left the rest of the current one blank: a new page
+                                per heading. Photos now flow on until the page is
+                                actually full. What still holds a page together is
+                                the individual photo card (break-inside-avoid, so no
+                                picture is ever sliced in two) and style.css's
+                                `h3, h4 { break-after: avoid }`, which stops a
+                                heading being stranded at the foot of a page. */
+                             <div key={category} className="col-span-2 mb-12 print:mb-4">
                                  <h3 className="font-extrabold text-2xl print:text-lg mb-8 print:mb-3 brand-heading text-slate-800 border-b-2 border-slate-200 pb-3 print:pb-2 flex items-center gap-3">
                                     <Camera size={24} color={BRAND.colors.green} /> {category}
                                  </h3>
                                  {groupsInCat.map(gName => {
                                      const variantPhotos = catPhotos.filter(p => p.groupName === gName).sort((a,b) => parseFloat(a.day) - parseFloat(b.day));
                                      return (
-                                         <div key={gName} className="mb-10 print:mb-3 block bg-slate-50 p-6 print:p-3 rounded-3xl border border-slate-200" style={{ pageBreakInside: 'avoid', breakInside: 'avoid' }}>
+                                         <div key={gName} className="mb-10 print:mb-3 block bg-slate-50 p-6 print:p-3 rounded-3xl border border-slate-200">
                                              <h4 className="font-extrabold text-xl print:text-base text-slate-700 mb-6 print:mb-2 flex items-center gap-2 border-b border-slate-200 pb-2 print:pb-1">
                                                 <Package size={20} className="text-blue-500" /> {gName}
                                              </h4>
@@ -2399,10 +2723,10 @@
           const RT = {
             en: {
               tabSetup: 'Project & Client', tabGroups: 'Variant Results', tabAnalysis: 'Analysis & Concl.',
-              loadJson: 'Load JSON', saveAs: 'Save As...', previewReport: 'Preview Report', home: 'Home',
+              loadJson: 'Load JSON', saveAs: 'Save As...', previewReport: 'Preview Report', boardBtn: 'Board', boardBtnTitle: 'Back to the Project Board',
               warningFillCompany: 'Warning: Fill in company details!',
               // Setup tab
-              secProject: '1. Project Details', reportTitle: 'Report Title', productName: 'Product Name',
+              secProject: 'Project Details', reportTitle: 'Report Title', productName: 'Product Name',
               reportDate: 'Report Date', packingDate: 'Packing Date', totalDays: 'Total Days Packed',
               retailSim: 'Retail Simulation (after opening)', processingType: 'Processing Type',
               whole: 'Whole', processed: 'Processed / Fresh-cut',
@@ -2412,15 +2736,15 @@
               uploadPerfoTecLogo: 'Upload PerfoTec Logo (PNG)', uploadClientLogo: 'Upload Client Logo',
               coverPhoto: 'Cover Photo (Page 1)', refPhoto: 'Ref Photo (P+0)',
               clickUpload: 'Click to upload',
-              secCompany: '2. Company & Contact', companyName: 'Company Name', perfoTecEmployee: 'PerfoTec Employee',
+              secCompany: 'Company & Contact', companyName: 'Company Name', perfoTecEmployee: 'PerfoTec Employee',
               employeeEmail: 'Employee Email', employeePhone: 'Employee Phone',
               street: 'Street', houseNo: 'House No.', addressExtra: 'Additional Info (floor, building, etc.)', zipCode: 'Zip Code', city: 'City', country: 'Country',
               contactPerson: 'Contact Person', role: 'Role', email: 'Email', phone: 'Phone',
               phoneDirect: 'Phone (Direct)', phoneWork: 'Phone (Work)', addContactBtn: 'Add Contact',
-              secProduct: '3. Product Details',
+              secProduct: 'Product Details',
               secA: 'A. Product & Packaging', secB: 'B. Challenge & Objectives', secC: 'C. Current Supply Chain',
               metric: 'Metric', imperial: 'Imperial',
-              secGoals: '3. Goals & Challenges', currentChallenge: 'Current Challenge', trialTarget: 'Trial Target / Goal',
+              secGoals: 'Goals & Challenges', currentChallenge: 'Current Challenge', trialTarget: 'Trial Target / Goal',
               secSupplyChain: 'Product Supply Chain', transportMode: 'Transport Mode',
               supplyChainFlow: 'Supply Chain Flow',
               step: 'Step', phase: 'Phase (Activity)', temp: 'Temp (°C)', days: 'Time (Days)', action: 'Action',
@@ -2432,7 +2756,7 @@
               // Quality Criteria (Setup-tab toggle grid, mirrors Proposal/Intake)
               qualityCrit: 'Quality Criteria', qualityCritDesc: 'Click a criterion to toggle it.',
               // DEEL 6 — Product Characteristics & Defect Prevention
-              secDefects: '5. Product Characteristics & Defect Prevention',
+              secDefects: 'Product Characteristics & Defect Prevention',
               defectsMatrixSubtitle: 'Defects & Prevention Matrix',
               defectsMatrixDesc: 'List the typical defects for this product. For each defect, describe the physiological cause and how MHP (moisture) and MAP (gas) treatments influence it.',
               defectColLabel: 'Defect', causeColLabel: 'Physiological Cause',
@@ -2489,7 +2813,7 @@
               predictedGraph: 'Predicted Gas Graph', predictedGraphDesc: 'Upload a screenshot of the prediction for this specific variant',
               uploadImage: 'Upload Image', addDay: '+ Add Day',
               // Analysis tab
-              secSummary: '2. Summary and Conclusions', mainConclusion: 'Main Conclusion',
+              secSummary: 'Summary and Conclusions', mainConclusion: 'Main Conclusion',
               conclusionFor: 'Conclusion:', detailedConclusions: 'Detailed Conclusions (Points)',
               noConclusions: 'No detailed conclusions added yet.',
               addActionPoint: 'Add action point or detailed conclusion...', general: 'General',
@@ -2527,6 +2851,13 @@
               managePhotos: 'Manage Photos',
               captionPlaceholder: 'Caption / Description...',
               uploadPhotos: 'Upload Photos',
+              photoProcessing: 'Processing', photoResizeHint: 'Resized automatically',
+              takePhoto: 'Take photo', chooseExisting: 'Choose existing',
+              sampleLabel: 'Sample', removeSample: 'Remove sample', thWeightPlain: 'Weight', lossLabel: 'Loss',
+              addSampleBtn: 'Add sample', generalObs: 'General observations', qualityEval: 'Quality evaluation', enableEval: 'Score quality',
+              measDay: 'Day', measSamples: 'samples',
+              noMeasurementDays: 'This variant has no measurement days yet.',
+              fileProtocolWarning: 'Opened directly from disk (file://) — nothing can be saved. Start the local server and open http://localhost:8000/GitHub/report.html instead.', measEnter: 'Enter data', measPhotos: 'Photos', measAvg: 'Average',
               done: 'Done', savePhotos: 'Save Photos',
               catExternalQuality: 'External Quality', catInternalQuality: 'Internal Quality',
               catLooseProduce: 'Loose Produce', catBoxCrate: 'Box/Crate',
@@ -2582,9 +2913,9 @@
             },
             nl: {
               tabSetup: 'Project & Klant', tabGroups: 'Variant Resultaten', tabAnalysis: 'Analyse & Concl.',
-              loadJson: 'Laden JSON', saveAs: 'Opslaan als...', previewReport: 'Preview Rapport', home: 'Home',
+              loadJson: 'Laden JSON', saveAs: 'Opslaan als...', previewReport: 'Preview Rapport', boardBtn: 'Board', boardBtnTitle: 'Terug naar het Project Board',
               warningFillCompany: 'Waarschuwing: Vul bedrijfsgegevens in!',
-              secProject: '1. Project Details', reportTitle: 'Rapporttitel', productName: 'Productnaam',
+              secProject: 'Project Details', reportTitle: 'Rapporttitel', productName: 'Productnaam',
               reportDate: 'Rapportdatum', packingDate: 'Verpakdatum', totalDays: 'Totaal Dagen Verpakt',
               retailSim: 'Retail Simulatie (na opening)', processingType: 'Verwerkingstype',
               whole: 'Heel', processed: 'Verwerkt / Gesneden',
@@ -2594,15 +2925,15 @@
               uploadPerfoTecLogo: 'Upload PerfoTec Logo (PNG)', uploadClientLogo: 'Upload Klant Logo',
               coverPhoto: 'Omslagfoto (Pagina 1)', refPhoto: 'Ref Foto (P+0)',
               clickUpload: 'Klik om te uploaden',
-              secCompany: '2. Bedrijf & Contact', companyName: 'Bedrijfsnaam', perfoTecEmployee: 'PerfoTec Medewerker',
+              secCompany: 'Bedrijf & Contact', companyName: 'Bedrijfsnaam', perfoTecEmployee: 'PerfoTec Medewerker',
               employeeEmail: 'E-mail Medewerker', employeePhone: 'Telefoon Medewerker',
               street: 'Straat', houseNo: 'Huisnr.', addressExtra: 'Extra (verdieping, gebouw, etc.)', zipCode: 'Postcode', city: 'Plaats', country: 'Land',
               contactPerson: 'Contactpersoon', role: 'Functie', email: 'E-mail', phone: 'Telefoon',
               phoneDirect: 'Telefoon (Direct)', phoneWork: 'Telefoon (Werk)', addContactBtn: 'Contact Toevoegen',
-              secProduct: '3. Productgegevens',
+              secProduct: 'Productgegevens',
               secA: 'A. Product & Verpakking', secB: 'B. Uitdaging & Doelstelling', secC: 'C. Huidige Supply Chain',
               metric: 'Metrisch', imperial: 'Imperiaal',
-              secGoals: '3. Doelen & Uitdagingen', currentChallenge: 'Huidige Uitdaging', trialTarget: 'Testdoel',
+              secGoals: 'Doelen & Uitdagingen', currentChallenge: 'Huidige Uitdaging', trialTarget: 'Testdoel',
               secSupplyChain: 'Product Supply Chain', transportMode: 'Transportmodus',
               supplyChainFlow: 'Supply Chain Overzicht',
               step: 'Stap', phase: 'Fase (Activiteit)', temp: 'Temp (°C)', days: 'Tijd (Dagen)', action: 'Actie',
@@ -2611,7 +2942,7 @@
               dimens: 'Afmetingen verpakking (Binnenmaat)', len: 'Lengte', wid: 'Breedte', widSeal: 'Seal Breedte', hei: 'Hoogte',
               addPackaging: '+ Verpakking Toevoegen', removePackaging: 'Verwijderen', packaging: 'Verpakking', netWeight: 'Netto Gewicht',
               qualityCrit: 'Kwaliteitscriteria', qualityCritDesc: 'Klik op een criterium om deze in of uit te schakelen.',
-              secDefects: '5. Producteigenschappen & Defectpreventie',
+              secDefects: 'Producteigenschappen & Defectpreventie',
               defectsMatrixSubtitle: 'Defecten & Preventiematrix',
               defectsMatrixDesc: 'Voer de typische defecten voor dit product op. Beschrijf per defect de fysiologische oorzaak en hoe MHP (vocht) en MAP (gas) behandeling deze beïnvloeden.',
               defectColLabel: 'Defect', causeColLabel: 'Fysiologische Oorzaak',
@@ -2665,7 +2996,7 @@
               holeSize: 'Gatgrootte (µm)', startWeight: 'Startgewicht', samplesPerMeasurement: 'Monsters / Meting',
               predictedGraph: 'Voorspelde Gas Grafiek', predictedGraphDesc: 'Upload een screenshot van de voorspelling voor deze variant',
               uploadImage: 'Afbeelding Uploaden', addDay: '+ Dag Toevoegen',
-              secSummary: '2. Samenvatting en Conclusies', mainConclusion: 'Hoofdconclusie',
+              secSummary: 'Samenvatting en Conclusies', mainConclusion: 'Hoofdconclusie',
               conclusionFor: 'Conclusie:', detailedConclusions: 'Gedetailleerde Conclusies (Punten)',
               noConclusions: 'Nog geen gedetailleerde conclusies toegevoegd.',
               addActionPoint: 'Actiepunt of gedetailleerde conclusie toevoegen...', general: 'Algemeen',
@@ -2703,6 +3034,13 @@
               managePhotos: 'Foto’s Beheren',
               captionPlaceholder: 'Bijschrift / Beschrijving...',
               uploadPhotos: 'Foto’s Uploaden',
+              photoProcessing: 'Verwerken', photoResizeHint: 'Wordt automatisch verkleind',
+              takePhoto: 'Foto maken', chooseExisting: 'Bestaande kiezen',
+              sampleLabel: 'Monster', removeSample: 'Monster verwijderen', thWeightPlain: 'Gewicht', lossLabel: 'Verlies',
+              addSampleBtn: 'Monster toevoegen', generalObs: 'Algemene observaties', qualityEval: 'Kwaliteitsbeoordeling', enableEval: 'Kwaliteit beoordelen',
+              measDay: 'Dag', measSamples: 'monsters',
+              noMeasurementDays: 'Deze variant heeft nog geen meetdagen.',
+              fileProtocolWarning: 'Rechtstreeks vanaf schijf geopend (file://) — er kan niets worden opgeslagen. Start de lokale server en open http://localhost:8000/GitHub/report.html.', measEnter: 'Invoeren', measPhotos: 'Foto’s', measAvg: 'Gemiddeld',
               done: 'Klaar', savePhotos: 'Foto’s Opslaan',
               catExternalQuality: 'Externe Kwaliteit', catInternalQuality: 'Interne Kwaliteit',
               catLooseProduce: 'Los Product', catBoxCrate: 'Doos/Krat',
@@ -2758,9 +3096,9 @@
             },
             es: {
               tabSetup: 'Proyecto y Cliente', tabGroups: 'Resultados de Variantes', tabAnalysis: 'Análisis y Concl.',
-              loadJson: 'Cargar JSON', saveAs: 'Guardar como...', previewReport: 'Ver Informe', home: 'Inicio',
+              loadJson: 'Cargar JSON', saveAs: 'Guardar como...', previewReport: 'Ver Informe', boardBtn: 'Board', boardBtnTitle: 'Volver al Project Board',
               warningFillCompany: '¡Advertencia: Complete los datos de la empresa!',
-              secProject: '1. Detalles del Proyecto', reportTitle: 'Título del Informe', productName: 'Nombre del Producto',
+              secProject: 'Detalles del Proyecto', reportTitle: 'Título del Informe', productName: 'Nombre del Producto',
               reportDate: 'Fecha del Informe', packingDate: 'Fecha de Empaque', totalDays: 'Días Totales Empacados',
               retailSim: 'Simulación Retail (después de abrir)', processingType: 'Tipo de Procesamiento',
               whole: 'Entero', processed: 'Procesado / Cortado',
@@ -2770,15 +3108,15 @@
               uploadPerfoTecLogo: 'Subir Logo PerfoTec (PNG)', uploadClientLogo: 'Subir Logo Cliente',
               coverPhoto: 'Foto de Portada (Página 1)', refPhoto: 'Foto Ref (P+0)',
               clickUpload: 'Clic para subir',
-              secCompany: '2. Empresa y Contacto', companyName: 'Nombre de Empresa', perfoTecEmployee: 'Empleado PerfoTec',
+              secCompany: 'Empresa y Contacto', companyName: 'Nombre de Empresa', perfoTecEmployee: 'Empleado PerfoTec',
               employeeEmail: 'Email Empleado', employeePhone: 'Teléfono Empleado',
               street: 'Calle', houseNo: 'Número', addressExtra: 'Información adicional (piso, edificio, etc.)', zipCode: 'Código Postal', city: 'Ciudad', country: 'País',
               contactPerson: 'Persona de Contacto', role: 'Cargo', email: 'Correo', phone: 'Teléfono',
               phoneDirect: 'Teléfono (Directo)', phoneWork: 'Teléfono (Trabajo)', addContactBtn: 'Añadir Contacto',
-              secProduct: '3. Detalles del Producto',
+              secProduct: 'Detalles del Producto',
               secA: 'A. Producto y Empaque', secB: 'B. Desafío y Objetivos', secC: 'C. Cadena de Suministro Actual',
               metric: 'Métrico', imperial: 'Imperial',
-              secGoals: '3. Objetivos y Desafíos', currentChallenge: 'Desafío Actual', trialTarget: 'Objetivo de Prueba',
+              secGoals: 'Objetivos y Desafíos', currentChallenge: 'Desafío Actual', trialTarget: 'Objetivo de Prueba',
               secSupplyChain: 'Cadena de Suministro', transportMode: 'Modo de Transporte',
               supplyChainFlow: 'Flujo de Cadena de Suministro',
               step: 'Paso', phase: 'Fase (Actividad)', temp: 'Temp (°C)', days: 'Tiempo (Días)', action: 'Acción',
@@ -2787,7 +3125,7 @@
               dimens: 'Dimensiones del empaque (Internas)', len: 'Longitud', wid: 'Ancho', widSeal: 'Ancho del Sello', hei: 'Altura',
               addPackaging: '+ Añadir Envase', removePackaging: 'Eliminar', packaging: 'Envase', netWeight: 'Peso Neto',
               qualityCrit: 'Criterios de Calidad', qualityCritDesc: 'Haga clic en un criterio para activarlo o desactivarlo.',
-              secDefects: '5. Características del Producto y Prevención de Defectos',
+              secDefects: 'Características del Producto y Prevención de Defectos',
               defectsMatrixSubtitle: 'Matriz de Defectos y Prevención',
               defectsMatrixDesc: 'Liste los defectos típicos para este producto. Para cada defecto, describa la causa fisiológica y cómo los tratamientos MHP (humedad) y MAP (gas) influyen en ellos.',
               defectColLabel: 'Defecto', causeColLabel: 'Causa Fisiológica',
@@ -2841,7 +3179,7 @@
               holeSize: 'Tamaño del Orificio (µm)', startWeight: 'Peso Inicial', samplesPerMeasurement: 'Muestras / Med.',
               predictedGraph: 'Gráfico de Gas Predicho', predictedGraphDesc: 'Suba una captura de la predicción para esta variante',
               uploadImage: 'Subir Imagen', addDay: '+ Añadir Día',
-              secSummary: '2. Resumen y Conclusiones', mainConclusion: 'Conclusión Principal',
+              secSummary: 'Resumen y Conclusiones', mainConclusion: 'Conclusión Principal',
               conclusionFor: 'Conclusión:', detailedConclusions: 'Conclusiones Detalladas (Puntos)',
               noConclusions: 'Aún no se han añadido conclusiones detalladas.',
               addActionPoint: 'Añadir punto de acción o conclusión detallada...', general: 'General',
@@ -2879,6 +3217,13 @@
               managePhotos: 'Gestionar Fotos',
               captionPlaceholder: 'Leyenda / Descripción...',
               uploadPhotos: 'Subir Fotos',
+              photoProcessing: 'Procesando', photoResizeHint: 'Se reduce automáticamente',
+              takePhoto: 'Hacer foto', chooseExisting: 'Elegir existente',
+              sampleLabel: 'Muestra', removeSample: 'Eliminar muestra', thWeightPlain: 'Peso', lossLabel: 'Pérdida',
+              addSampleBtn: 'Añadir muestra', generalObs: 'Observaciones generales', qualityEval: 'Evaluación de calidad', enableEval: 'Evaluar calidad',
+              measDay: 'Día', measSamples: 'muestras',
+              noMeasurementDays: 'Esta variante aún no tiene días de medición.',
+              fileProtocolWarning: 'Abierto directamente desde el disco (file://) — no se puede guardar nada. Inicie el servidor local y abra http://localhost:8000/GitHub/report.html.', measEnter: 'Introducir', measPhotos: 'Fotos', measAvg: 'Promedio',
               done: 'Hecho', savePhotos: 'Guardar Fotos',
               catExternalQuality: 'Calidad Externa', catInternalQuality: 'Calidad Interna',
               catLooseProduce: 'Producto Suelto', catBoxCrate: 'Caja',
@@ -2934,6 +3279,11 @@
             }
           };
           const rt = RT[lang] || RT['en'];
+
+          // Layout switch for the measurement screens. A hook, so it must live at
+          // the top of the component — the measurement markup sits inside a
+          // conditional IIFE where calling one would break hook order.
+          const isPhone = usePhoneLayout();
 
           const [activeTab, setActiveTab] = useState('setup');
           const [activeGroupId, setActiveGroupId] = useState(1);
@@ -3005,9 +3355,46 @@
               id: 1, name: 'Control',
               specs: { packaging: 'Punnets', material: 'BOPP', length: '', width: '', height: '', holes: '2', holeSize: '6000', startWeight: '', sampleCount: 3 },
               measurements: [{ day: 0, samples: [{id:1,o2:'20.9',co2:'0.03',weight:''}, {id:2,o2:'20.9',co2:'0.03',weight:''}, {id:3,o2:'20.9',co2:'0.03',weight:''}], quality: 10, notes: 'Start quality excellent', images: [], qualityParams: [], evaluateQuality: true }],
-              predictedImage: null 
+              predictedImage: null
             }
           ]);
+
+          // That seed row is a PLACEHOLDER: ambient air (20.9 / 0.03) and an
+          // example note, prefilled so a new report opens with something sensible.
+          // It is not a measurement anybody took, and the board-autosave below
+          // must never report it as one — doing so stamped a single
+          // "Measurement P+0, done" action on the card, which the board renders as
+          // "all measurements done" for a trial where nothing has been measured.
+          // A measurements fingerprint (measurements only, NOT specs) tells the
+          // two apart: applying an intake product rewrites specs and must not
+          // count, while loading a real report or typing a measurement must.
+          const measurementsFingerprint = (gs) => JSON.stringify((gs || []).map(g => g.measurements || []));
+          const seedMeasurementsRef = useRef(null);
+          const reportHasMeasurementsRef = useRef(false);
+          useEffect(() => {
+            if (seedMeasurementsRef.current === null) { seedMeasurementsRef.current = measurementsFingerprint(groups); return; }
+            if (!reportHasMeasurementsRef.current && measurementsFingerprint(groups) !== seedMeasurementsRef.current) {
+              reportHasMeasurementsRef.current = true;
+            }
+          }, [groups]);
+
+          // Keep the selected variant pointing at a variant that actually exists.
+          // activeGroupId is seeded with 1 on the assumption that the built-in
+          // "Control" group is always there, but a LOADED report can start at any
+          // id — delete the first variant once (here or in the proposal) and the
+          // saved ids begin at 2. Nothing reconciled the two, and the entire
+          // right-hand column of Variant Results is behind
+          // `const activeG = groups.find(g => g.id === activeGroupId); if (!activeG) return null;`
+          // So the variant list on the left kept listing the variants while the
+          // panel next to it — packaging specs, the Measurements heading, Add day,
+          // the measurement table with its "enter measurement" and "add photos"
+          // buttons, even the friendly "no measurement days yet" notice — rendered
+          // as an empty white card, with no error to explain it. Clicking a variant
+          // fixed it, which is what made this look intermittent.
+          useEffect(() => {
+            if (!groups.length) return;
+            if (!groups.some(g => g.id === activeGroupId)) setActiveGroupId(groups[0].id);
+          }, [groups, activeGroupId]);
 
           const [analysis, setAnalysis] = useState({ graphNotes: '', conclusion: '', variantConclusions: {}, recommendation: 'retest', nextSteps: [], temperatureImages: [], temperatureLabel: '', showGasSection: null, showHubPredictions: null, showWeightLoss: null, generalObservations: '', targetAchieved: null, targetEvaluation: '' });
           const [newStep, setNewStep] = useState('');
@@ -3123,22 +3510,28 @@
             setUnitSystem(newSys);
           };
 
-          const handleImgUpload = (e, field, isGroup = false) => { const f = e.target.files[0]; if(f) { const r = new FileReader(); r.onloadend = () => { if(isGroup) setGroups(p => p.map(g => g.id === activeGroupId ? {...g, predictedImage: r.result} : g)); else if(field === 'clientLogo') setClientInfo(c => ({...c, logo: r.result})); else setProject(p => ({...p, [field]: r.result})); }; r.readAsDataURL(f); }};
-          
-          const handlePredictedImageUpload = (e, groupId) => { 
-            const file = e.target.files[0]; 
-            if(file) { 
-              const reader = new FileReader(); 
-              reader.onloadend = () => {
-                 const group = groups.find(g => g.id === groupId);
-                 if (group && group.predictedImage) {
-                    setPendingImageReplace({ groupId: groupId, result: reader.result });
-                 } else {
-                    setGroups(prev => prev.map(g => g.id === groupId ? { ...g, predictedImage: reader.result } : g)); 
-                 }
-              };
-              reader.readAsDataURL(file); 
-              e.target.value = '';
+          // Every image entering the report goes through readImageFile, which
+          // downscales it. Logos and other small files pass through untouched.
+          const handleImgUpload = async (e, field, isGroup = false) => {
+            const f = e.target.files[0];
+            e.target.value = null;
+            if (!f) return;
+            const { dataUrl } = await globalConfig.readImageFile(f);
+            if (isGroup) setGroups(p => p.map(g => g.id === activeGroupId ? { ...g, predictedImage: dataUrl } : g));
+            else if (field === 'clientLogo') setClientInfo(c => ({ ...c, logo: dataUrl }));
+            else setProject(p => ({ ...p, [field]: dataUrl }));
+          };
+
+          const handlePredictedImageUpload = async (e, groupId) => {
+            const file = e.target.files[0];
+            e.target.value = '';
+            if (!file) return;
+            const { dataUrl } = await globalConfig.readImageFile(file);
+            const group = groups.find(g => g.id === groupId);
+            if (group && group.predictedImage) {
+              setPendingImageReplace({ groupId: groupId, result: dataUrl });
+            } else {
+              setGroups(prev => prev.map(g => g.id === groupId ? { ...g, predictedImage: dataUrl } : g));
             }
           };
 
@@ -3624,7 +4017,14 @@
                   // Mirror coupled fields tool → board: packing date and PerfoTec
                   // employee (= product manager on the board).
                   if (project.packingDate) patch.startDate = project.packingDate;
-                  if (project.employee) patch.productManager = project.employee;
+                  // Fill-if-empty, like client and product above. The board owns this
+                  // field: it has the people registry, the picker and rename. This
+                  // tool only PREFILLS its employee box from the card, so writing it
+                  // back unconditionally meant every autosave re-asserted a value the
+                  // user may have just changed on the board — two writers on one
+                  // field, which is exactly what surfaces as "someone else was
+                  // faster" (with your own name on it, because you are both writers).
+                  if (!p.productManager && project.employee) patch.productManager = project.employee;
                   if (!p.image && (project.coverImage || project.startImage)) {
                     const scaled = await B.scaleImage(project.coverImage || project.startImage, 480);
                     if (scaled) patch.image = scaled;
@@ -3638,7 +4038,16 @@
                     if (!m) return false;
                     if (Array.isArray(m.images) && m.images.length) return true;
                     if ((m.notes || '').trim()) return true;
-                    if (Array.isArray(m.qualityParams) && m.qualityParams.length) return true;
+                    // A row's qualityParams are the criteria to ASSESS, written out
+                    // when the trial is planned — identical on a measured and an
+                    // unmeasured day, every score an empty string. Counting their
+                    // mere presence as data marked every planned day done, so a
+                    // trial with only P+0 filled in read as "all measurements done".
+                    // Only a criterion that actually carries a score or a note is
+                    // evidence that someone measured.
+                    if (Array.isArray(m.qualityParams) && m.qualityParams.some(q => q &&
+                        (String(q.score == null ? '' : q.score).trim() !== '' ||
+                         String(q.notes == null ? '' : q.notes).trim() !== ''))) return true;
                     if (Array.isArray(m.samples) && m.samples.some(s => {
                       const w = String(s.weight == null ? '' : s.weight).trim();
                       const o2 = String(s.o2 == null ? '' : s.o2).trim();
@@ -3665,7 +4074,26 @@
                     if (prevA.doneManual != null) action.doneManual = prevA.doneManual;
                     return action;
                   });
-                  patch.actions = [...measActions, ...manualActions];
+                  // Only touch the card's actions once this tool actually holds
+                  // measurements. Opening a project whose report has not been
+                  // started leaves the placeholder row in `groups`, and this
+                  // autosave fires there without any user edit — a shared product
+                  // record rewritten by another project is enough to trigger it.
+                  // Writing then would replace the real planning with one bogus
+                  // "done" action. Leaving `actions` alone keeps whatever the card
+                  // already had.
+                  if (reportHasMeasurementsRef.current) {
+                    patch.actions = [...measActions, ...manualActions];
+                  } else {
+                    // Repair a card the old code already corrupted. The
+                    // placeholder could only ever produce a day-0 action, so
+                    // clearing a measurement set that is nothing BUT day 0 —
+                    // while this tool holds no measurements — removes the bogus
+                    // "all measurements done" and cannot touch a real multi-day
+                    // plan. Anything else is left exactly as it is.
+                    const meas = prevActions.filter(a => a && a.kind === 'measurement');
+                    if (meas.length && meas.every(a => Number(a.day) === 0)) patch.actions = manualActions;
+                  }
                   manifest.projects[idx] = { ...p, ...patch };
                   await B.writeManifest(manifest);
                 }
@@ -4231,22 +4659,45 @@
                 </div>
               )}
 
+              {/* Opened straight from disk. The origin is then `null`, so there is no
+                  per-origin storage identity: the folder cannot be bound and nothing
+                  can be saved to the shared database. The tool still renders, which is
+                  exactly why this needs saying out loud rather than failing quietly at
+                  the moment someone tries to save a day of measurements. */}
+              {location.protocol === 'file:' && (
+                <div className="w-full text-white text-sm px-4 py-2.5 flex items-center justify-center gap-2 text-center" style={{ backgroundColor: '#ea580c' }}>
+                  <AlertTriangle size={16} className="shrink-0" />
+                  <span>{rt.fileProtocolWarning}</span>
+                </div>
+              )}
+
               {/* HEADER */}
-              <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40 shadow-sm">
-                <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 flex items-center gap-3 md:gap-4">
-                  {/* LEFT: Logo + Home */}
+              <header className="bg-white/80 backdrop-blur-md border-b border-blue-600/40 sticky top-0 z-40">
+                <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 flex flex-wrap items-center gap-3 md:gap-4">
+                  {/* LEFT: Logo + back to the board */}
                   <div className="flex items-center gap-2 md:gap-3 shrink-0">
                     <img src={BRAND.logos.default} alt="PerfoTec" className="h-7 md:h-9 object-contain" />
-                    <a href="index.html" className="bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-800 p-2 xl:px-3 xl:py-2 rounded-lg text-xs font-bold transition-all border border-slate-200 flex items-center gap-1.5 whitespace-nowrap" title={rt.home}>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" /></svg>
-                      <span className="hidden xl:inline">{rt.home}</span>
-                    </a>
+                    {/* The only way back, now that the floating bar is gone. A button
+                        rather than a link because these tools autosave on a ~1.2s
+                        debounce: goToBoard() flushes that first, so the last edit
+                        made before leaving is not dropped. Falls back to a plain
+                        navigation if the shared layer failed to load. */}
+                    <button type="button"
+                      onClick={() => {
+                        const B = window.PerfoTecBoard;
+                        if (B && B.goToBoard) B.goToBoard();
+                        else window.location.assign('board.html');
+                      }}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-800 p-2 xl:px-3 xl:py-2 rounded-lg text-xs font-bold transition-all border border-slate-200 flex items-center gap-1.5 whitespace-nowrap" title={rt.boardBtnTitle}>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
+                      <span className="hidden xl:inline">{rt.boardBtn}</span>
+                    </button>
                   </div>
 
                   {/* CENTER: Title — dedicated space, visible from md */}
                   <div className="hidden md:flex flex-1 min-w-0 border-l-2 border-slate-200 pl-3 md:pl-4">
                     <div className="min-w-0">
-                      <h1 className="font-extrabold text-base md:text-lg lg:text-xl xl:text-2xl tracking-tight leading-tight truncate" style={{color: BRAND.colors.blue}}>PerfoTec Manager</h1>
+                      <h1 className="font-extrabold text-base md:text-lg lg:text-xl xl:text-2xl tracking-tight leading-tight truncate" style={{color: BRAND.colors.black}}>PerfoTec Manager</h1>
                       <p className="text-[10px] md:text-xs text-slate-500 font-bold uppercase tracking-widest mt-0.5 truncate">OFFICIAL REPORT TOOL</p>
                     </div>
                   </div>
@@ -4255,7 +4706,7 @@
                   <div className="md:hidden flex-1"></div>
 
                   {/* RIGHT: Action buttons + Language selector (lang always rightmost) */}
-                  <div className="flex items-center gap-1.5 md:gap-2 xl:gap-3 shrink-0">
+                  <div className="flex items-center gap-1.5 md:gap-2 xl:gap-3 shrink-0 ml-auto">
                     <label className="cursor-pointer bg-white border border-slate-300 text-slate-700 p-2 lg:pr-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm" title={rt.loadJson}>
                       <FolderOpen size={18} className="text-blue-600 shrink-0"/>
                       <span className="hidden lg:flex flex-col items-start leading-[1.05] text-[10px] uppercase tracking-tight">
@@ -4307,11 +4758,18 @@
                         </button>
                       ))}
                     </div>
+                    {/* Which build is this? document.lastModified is the HTML file's
+                        own timestamp, so it needs no bumping and cannot drift out of
+                        date. Without it there is no way to tell a stale cached page
+                        from a current one, which cost real debugging time. */}
+                    <span className="hidden sm:block text-[10px] font-bold text-slate-400 tabular-nums" title={'Build: ' + document.lastModified}>
+                      {(document.lastModified || '').slice(0, 10)}
+                    </span>
                   </div>
                 </div>
               </header>
 
-              <main className="max-w-7xl mx-auto p-4 sm:p-6 grid grid-cols-1 md:grid-cols-12 gap-6">
+              <main className="max-w-7xl mx-auto p-3 sm:p-6 grid grid-cols-1 md:grid-cols-12 gap-4 sm:gap-6">
                 <div className="col-span-1 md:col-span-12 flex flex-wrap gap-2 border-b border-slate-200 pb-1 mb-2">
                   {['setup', 'groups', 'analysis'].map(tab => (
                     <button key={tab} onClick={() => setActiveTab(tab)} className={`px-5 sm:px-8 py-3.5 font-bold rounded-t-xl transition-all flex items-center gap-2 ${activeTab === tab ? 'text-white shadow-sm transform scale-105 origin-bottom' : 'bg-white text-slate-500 hover:bg-slate-100 border border-b-0 border-slate-200'}`} style={{ backgroundColor: activeTab === tab ? BRAND.colors.green : undefined }}>
@@ -4330,16 +4788,7 @@
                   <div className="col-span-1 md:col-span-12 space-y-10 max-w-5xl mx-auto w-full">
 
                     {/* ========== DEEL 1 — PROJECT DETAILS ========== */}
-                    <section className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden">
-                       <div className="absolute top-0 left-0 w-full h-1" style={{ backgroundColor: BRAND.colors.green }}></div>
-                       <div className="flex items-center justify-between border-b-2 border-slate-100 pb-6 mb-8">
-                         <div className="flex items-center gap-4">
-                           <div className="p-3 bg-green-50 rounded-xl">
-                             <ClipboardList size={28} color={BRAND.colors.green} />
-                           </div>
-                           <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">{rt.secProject}</h2>
-                         </div>
-                       </div>
+                    <Panel title={rt.secProject} icon={ClipboardList} accent={BRAND.colors.green} iconBg="#f0fdf4">
                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-10 lg:items-start">
                          <div className="lg:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 content-start">
                            <div className="sm:col-span-2"><label className={labelClass}>{rt.reportTitle}</label><input type="text" className={`${inputClass} text-lg font-bold`} value={project.reportTitle || ''} onChange={e => handleProjectChange('reportTitle', e.target.value)} /></div>
@@ -4388,19 +4837,10 @@
                             </div>
                          </div>
                        </div>
-                    </section>
+                    </Panel>
 
                     {/* ========== DEEL 2 — COMPANY & CONTACT DETAILS ========== */}
-                    <section className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden">
-                       <div className="absolute top-0 left-0 w-full h-1" style={{ backgroundColor: BRAND.colors.green }}></div>
-                       <div className="flex items-center justify-between border-b-2 border-slate-100 pb-6 mb-8">
-                         <div className="flex items-center gap-4">
-                           <div className="p-3 bg-green-50 rounded-xl">
-                             <Building2 size={28} color={BRAND.colors.green} />
-                           </div>
-                           <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">{rt.secCompany}</h2>
-                         </div>
-                       </div>
+                    <Panel title={rt.secCompany} icon={Building2} accent={BRAND.colors.green} iconBg="#f0fdf4">
                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
                          <div className="lg:col-span-2 flex flex-col gap-8">
 
@@ -4525,22 +4965,15 @@
                            <div><label className={labelClass}>{rt.employeePhone}</label><input type="text" className={inputClass} value={project.employeePhone || ''} onChange={e => handleProjectChange('employeePhone', e.target.value)} /></div>
                          </div>
                        </div>
-                    </section>
+                    </Panel>
 
                     {/* ========== DEEL 3 — PRODUCT DETAILS (A / B / C) ==========
                         Mirrors proposal.html: A = Product & Packaging, B =
                         Challenge & Objectives, C = Current Supply Chain. */}
-                    <section className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden">
-                       <div className="absolute top-0 left-0 w-full h-1" style={{ backgroundColor: BRAND.colors.green }}></div>
-                       <div className="flex items-center justify-between gap-4 border-b-2 border-slate-100 pb-6 mb-8">
-                         <div className="flex items-center gap-4">
-                           <div className="p-3 bg-green-50 rounded-xl">
-                             <PackagePlus size={28} color={BRAND.colors.green} />
-                           </div>
-                           <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">{rt.secProduct}</h2>
-                         </div>
-                         {/* UNIT TOGGLE — mirrors Proposal */}
-                         <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner border border-slate-200">
+                    <Panel title={rt.secProduct} icon={PackagePlus} accent={BRAND.colors.green} iconBg="#f0fdf4"
+                      badge={
+                        /* UNIT TOGGLE — mirrors Proposal */
+                        <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner border border-slate-200">
                              <button type="button" onClick={() => { if (unitSystem !== 'metric') handleUnitToggle(); }}
                                className={`px-4 py-2 rounded-lg transition-all flex flex-col items-center leading-tight ${unitSystem === 'metric' ? 'bg-white text-slate-800 shadow-sm border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}>
                                  <span className="text-sm font-bold">{rt.metric}</span>
@@ -4551,8 +4984,8 @@
                                  <span className="text-sm font-bold">{rt.imperial}</span>
                                  <span className="text-[10px] font-medium tracking-wide opacity-70 mt-0.5">(inch/lb)</span>
                              </button>
-                         </div>
-                       </div>
+                        </div>
+                      }>
 
                        {/* A. Product & Packaging */}
                        <div className="mb-10">
@@ -4878,19 +5311,10 @@
                            </button>
                          </div>
                        </div>
-                    </section>
+                    </Panel>
 
                     {/* ========== DEEL 6 — PRODUCT CHARACTERISTICS & DEFECT PREVENTION ========== */}
-                    <section className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden">
-                       <div className="absolute top-0 left-0 w-full h-1" style={{ backgroundColor: BRAND.colors.green }}></div>
-                       <div className="flex items-center justify-between border-b-2 border-slate-100 pb-6 mb-6">
-                         <div className="flex items-center gap-4">
-                           <div className="p-3 bg-green-50 rounded-xl">
-                             <AlertTriangle size={28} color={BRAND.colors.green} />
-                           </div>
-                           <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">{rt.secDefects}</h2>
-                         </div>
-                       </div>
+                    <Panel title={rt.secDefects} icon={AlertTriangle} accent={BRAND.colors.green} iconBg="#f0fdf4">
 
                        {/* === PRODUCT-SHEET DROP ZONE === */}
                        <div
@@ -4956,9 +5380,9 @@
                          <table className="w-full text-sm bg-white">
                            <thead className="bg-slate-100 border-b border-slate-200">
                              <tr className="text-left text-slate-600 uppercase tracking-wider text-[10px] font-bold">
-                               <th className="p-3" style={{ color: '#004B87' }}>{rt.defectColLabel}</th>
-                               <th className="p-3" style={{ color: '#004B87' }}>{rt.causeColLabel}</th>
-                               <th className="p-3" style={{ color: '#5B9BD5' }}>{rt.effectMHPColLabel}</th>
+                               <th className="p-3" style={{ color: '#073DA6' }}>{rt.defectColLabel}</th>
+                               <th className="p-3" style={{ color: '#073DA6' }}>{rt.causeColLabel}</th>
+                               <th className="p-3" style={{ color: '#5A85E7' }}>{rt.effectMHPColLabel}</th>
                                <th className="p-3" style={{ color: BRAND.colors.green }}>{rt.effectMAPColLabel}</th>
                                <th className="p-3 w-10"></th>
                              </tr>
@@ -4990,7 +5414,7 @@
                          <div className="bg-white p-1.5 rounded-lg shadow-sm"><Plus size={16} /></div>
                          {rt.addDefectRow}
                        </button>
-                    </section>
+                    </Panel>
                   </div>
                 )}
 
@@ -5001,11 +5425,7 @@
                     <div className="flex flex-col gap-6">
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                            {/* Global Assessment Criteria — click-to-toggle grid (mirrors Intake/Proposal) */}
-                           <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col h-full">
-                              <label className="block mb-2 font-extrabold text-slate-800 text-lg border-b border-slate-100 pb-3 flex items-center gap-2">
-                                 <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center"><Beaker size={16} className="text-blue-700"/></div>
-                                 {rt.globalCriteria}
-                              </label>
+                           <Panel chip fill title={rt.globalCriteria} icon={Beaker} chipClass="bg-blue-100 text-blue-700">
                               <div className="flex flex-wrap gap-3 mt-4">
                                  {DEFAULT_CRITERIA.map(c => {
                                    const isSelected = (project.criteria || []).includes(c);
@@ -5020,14 +5440,10 @@
                                    <span className="text-sm text-gray-400 italic w-full">{rt.noCriteria}</span>
                                  )}
                               </div>
-                           </div>
+                           </Panel>
 
                            {/* PerfoTec Technology */}
-                           <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col h-full">
-                              <label className="block mb-2 font-extrabold text-slate-800 text-lg border-b border-slate-100 pb-3 flex items-center gap-2">
-                                 <div className="w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center"><Package size={16} className="text-green-700"/></div>
-                                 {rt.perfoTecTech}
-                              </label>
+                           <Panel chip fill title={rt.perfoTecTech} icon={Package} chipClass="bg-green-100 text-green-700">
                               <div className="flex flex-wrap gap-3 mt-4">
                                   {PERFOTEC_TECHNOLOGIES.map(tech => {
                                       const isSelected = project.technologies?.includes(tech);
@@ -5047,22 +5463,19 @@
                                  <label className={labelClass}>{rt.technologyNote}</label>
                                  <input type="text" className={inputClass} placeholder={rt.technologyNotePlaceholder} value={project.technologyNote || ''} onChange={e => setProject(prev => ({...prev, technologyNote: e.target.value}))} />
                               </div>
-                           </div>
+                           </Panel>
                         </div>
 
                         {/* === GLOBAL EVALUATION DAYS — mirrors Proposal ===
                          * Drives the measurement-row days for the active group.
                          * Index-based identity (no value-shifting while typing),
                          * sort happens only on commit-add. */}
-                        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm">
+                        <Panel chip title={rt.globalEvalDays} icon={Clock} chipClass="bg-amber-100 text-amber-700">
                            <div className="flex flex-wrap items-start justify-between gap-4">
-                              <div>
-                                 <label className="block mb-2 font-extrabold text-slate-800 text-lg">{rt.globalEvalDays}</label>
-                                 <p className="text-sm text-slate-500 mb-6">{rt.evalDaysDesc}</p>
-                              </div>
+                              <p className="text-sm text-slate-500 mb-4 sm:mb-6">{rt.evalDaysDesc}</p>
                               {/* Same worksheet as the header button — surfaced here because
                                   this is where the measurement plan is put together. */}
-                              <button type="button" onClick={() => setIsSheet(true)} className="text-sm bg-white border border-slate-300 text-slate-700 px-5 py-2.5 rounded-xl font-bold hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm inline-flex items-center gap-2 shrink-0">
+                              <button type="button" onClick={() => setIsSheet(true)} className="text-sm bg-white border border-slate-300 text-slate-700 px-5 py-3 sm:py-2.5 rounded-xl font-bold hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm inline-flex items-center gap-2 shrink-0">
                                  <ClipboardList size={16} style={{ color: BRAND.colors.green }}/> {rt.sheetButton}
                               </button>
                            </div>
@@ -5076,10 +5489,13 @@
                               ))}
                            </div>
                            <button onClick={() => addEvaluationDay(activeGroupId)} className="w-full sm:w-auto text-sm bg-blue-50 text-blue-700 px-5 py-3 rounded-xl font-bold border border-blue-200 hover:bg-blue-100 transition-colors inline-flex justify-center items-center gap-2"><Plus size={18}/> {rt.addEvalDay}</button>
-                        </div>
+                        </Panel>
                     </div>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                    {/* items-start: without it the columns stretch to equal height,
+                        which gives this one a definite height for a height:100% child
+                        to resolve against. Belt and braces with `fill` above. */}
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
                        <div className="lg:col-span-3 space-y-4">
                            <button onClick={addNewVariant} className="w-full py-4 rounded-2xl font-extrabold border-2 border-dashed border-green-300 hover:border-green-500 bg-green-50/50 hover:bg-green-50 text-green-700 transition flex items-center justify-center gap-2 shadow-sm mb-2"><div className="bg-white p-1 rounded-md shadow-sm"><Plus size={18}/></div>{rt.addVariant}</button>
                            <div className="space-y-3">
@@ -5094,7 +5510,7 @@
                              ))}
                            </div>
                        </div>
-                       <div className="lg:col-span-9 bg-white p-6 sm:p-10 rounded-3xl shadow-sm border border-slate-200 space-y-10 overflow-hidden relative">
+                       <div className="lg:col-span-9 bg-white px-2 py-4 sm:p-10 rounded-2xl sm:rounded-3xl shadow-sm border border-slate-200 space-y-6 sm:space-y-10 overflow-hidden relative">
                            <div className="absolute top-0 left-0 w-1 h-full bg-slate-200"></div>
                            {(() => {
                              const activeG = groups.find(g => g.id === activeGroupId);
@@ -5103,9 +5519,8 @@
                              const hasR2 = groups.some(x => x.verificationOf === activeG.id);
                              return (
                              <>
-                               <div>
-                                 <div className="flex flex-wrap items-center justify-between gap-4 mb-8 border-b-2 border-slate-100 pb-4">
-                                   <h3 className="font-extrabold text-2xl text-slate-800">{rt.variantConfig}</h3>
+                               <Panel chip title={rt.variantConfig} icon={Settings} chipClass="bg-slate-100 text-slate-700">
+                                 <div className="flex flex-wrap items-center justify-end gap-4 mb-6 sm:mb-8">
                                    {isR2 ? (
                                      <span className="text-xs font-extrabold uppercase tracking-wider px-3 py-2 rounded-xl bg-blue-50 text-blue-700 border border-blue-200 flex items-center gap-2"><Copy size={14}/> {rt.verificationBadge}</span>
                                    ) : !hasR2 ? (
@@ -5173,12 +5588,12 @@
                                       <button onClick={() => handleGroupChange(activeGroupId, null, 'predictedImage', null)} className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-all shadow-lg hover:bg-red-600 hover:scale-110"><Trash2 size={16}/></button>
                                     </div>
                                  )}
-                               </div>
+                               </Panel>
                                
-                               <div className="bg-slate-50 p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
-                                 <div className="flex justify-between items-center mb-2">
-                                    <h4 className="font-extrabold text-xl text-slate-800">{rt.measurementsTitle}</h4>
-                                    <button onClick={() => addMeasurementDay(activeGroupId)} className="text-sm text-white px-5 py-2 rounded-lg font-bold shadow-md hover:opacity-90 transition-opacity" style={{background: BRAND.colors.green}}>{rt.addDay}</button>
+                               <div className="bg-slate-50 p-3 sm:p-8 rounded-2xl sm:rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+                                 <div className="flex flex-wrap justify-between items-center gap-3 mb-2">
+                                    <h4 className="font-extrabold text-lg sm:text-xl text-slate-800">{rt.measurementsTitle}</h4>
+                                    <button onClick={() => addMeasurementDay(activeGroupId)} className="text-sm text-white px-5 py-3 sm:py-2 rounded-xl sm:rounded-lg font-bold shadow-md hover:opacity-90 transition-opacity" style={{background: BRAND.colors.green}}>{rt.addDay}</button>
                                  </div>
                                  <p className="text-xs text-slate-500 mb-6 flex items-center gap-1.5"><Camera size={14} className="text-red-400 shrink-0"/> {rt.packedPhotoHint}</p>
                                  {/* Atmosphere-strategy-aware measurement table:
@@ -5188,9 +5603,107 @@
                                   * The modal flow itself still works for both —
                                   * gas-aware filtering happens at render time. */}
                                  {(() => {
-                                   const activeGroup = groups.find(g => g.id === activeGroupId);
+                                   // Reuse the group the guard above already resolved rather
+                                   // than looking it up a second time by the same id: a second
+                                   // lookup is a second chance to come up empty, and every use
+                                   // below assumed it had not. Measurements are normalised to an
+                                   // array here too, so a legacy or hand-edited variant whose
+                                   // measurements are missing or not a list still renders the
+                                   // panel (with the "no measurement days" prompt) instead of
+                                   // taking the whole section down with it.
+                                   const activeGroup = activeG;
+                                   const measRows = Array.isArray(activeGroup.measurements) ? activeGroup.measurements : [];
                                    const isMAP = !activeGroup?.specs?.atmosphereStrategy || activeGroup.specs.atmosphereStrategy === 'MAP';
                                    return (
+                                 <>
+                                 {/* ---- PHONE: one card per measurement day -------------
+                                  * The table beside this is min-w-[600px]; on a 375px
+                                  * screen 359px of it sat behind a horizontal scroll,
+                                  * so you could see roughly 40% of the schedule and had
+                                  * to swipe to find the row you wanted. The card shows
+                                  * the whole day at once and puts the two things you do
+                                  * in the field — enter readings, take photos — as full
+                                  * buttons instead of 32px icons.
+                                  * ------------------------------------------------------ */}
+                                 {/* A variant can arrive without measurement days: an older
+                                     export, or one created as a verification round. Unguarded
+                                     .map() threw on a missing array, and an empty array
+                                     rendered the section as blank space with no fields and
+                                     nothing explaining why — which reads as "the inputs are
+                                     gone". Say so instead, and point at the button. */}
+                                 {measRows.length === 0 && (
+                                   <div className="rounded-2xl border-2 border-dashed border-amber-300 bg-amber-50 p-5 text-center">
+                                     <p className="font-bold text-amber-900">{rt.noMeasurementDays}</p>
+                                     <button onClick={() => addMeasurementDay(activeGroupId)}
+                                       className="mt-3 inline-flex items-center gap-2 text-sm text-white px-5 py-3 rounded-xl font-bold shadow-md"
+                                       style={{ background: BRAND.colors.green }}><Plus size={16}/> {rt.addDay}</button>
+                                   </div>
+                                 )}
+                                 {isPhone && (
+                                 <div className="space-y-3">
+                                   {measRows.map((m, idx) => {
+                                     const avgO2 = getAverage(m.samples, 'o2');
+                                     const avgCO2 = getAverage(m.samples, 'co2');
+                                     const avgW = getAverage(m.samples, 'weight');
+                                     const hasPhotos = m.images && m.images.length > 0;
+                                     const isOpened = project.totalDuration && parseFloat(m.day) > parseFloat(project.totalDuration);
+                                     const needsPackedPhoto = parseFloat(m.day) === 0 && !hasPhotos;
+                                     return (
+                                       <div key={idx} id={'meas-day-m-' + m.day} className="rounded-2xl border-2 border-slate-200 bg-white shadow-sm overflow-hidden">
+                                         <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-b border-slate-200">
+                                           <span className="font-extrabold text-lg text-slate-800">P+{m.day}</span>
+                                           <span className="text-xs font-bold text-slate-400">{m.samples?.length || 0} {rt.measSamples}</span>
+                                         </div>
+                                         <div className="px-4 py-3 flex flex-wrap gap-x-5 gap-y-1.5 text-sm">
+                                           {isMAP && (
+                                             <span className="font-bold" style={{color: BRAND.colors.blue}}>
+                                               O₂ <span className="text-base">{isOpened ? '—' : avgO2}</span>
+                                             </span>
+                                           )}
+                                           {isMAP && (
+                                             <span className="font-bold" style={{color: BRAND.colors.green}}>
+                                               CO₂ <span className="text-base">{isOpened ? '—' : avgCO2}</span>
+                                             </span>
+                                           )}
+                                           <span className="font-bold text-slate-600">{rt.thWeightPlain} <span className="text-base">{avgW}</span></span>
+                                         </div>
+                                         <div className="px-4 pb-3 flex items-center gap-2">
+                                           <label className="flex items-center gap-2 shrink-0">
+                                             <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">{rt.thQuality}</span>
+                                             <select className="h-11 bg-slate-50 border-2 border-slate-200 font-bold text-slate-700 px-2 rounded-xl outline-none focus:border-blue-500" value={m.quality || ''} onChange={e => updateQuality(activeGroupId, idx, e.target.value)}>
+                                               {[10,9,8,7,6,5,4,3,2,1].map(n=><option key={n} value={n}>{n}</option>)}
+                                             </select>
+                                           </label>
+                                           <button onClick={() => removeMeasurementDay(activeGroupId, idx)} disabled={parseFloat(m.day)===0}
+                                             aria-label={rt.thActions}
+                                             className={`ml-auto p-3 rounded-xl border-2 shrink-0 ${parseFloat(m.day)===0 ? 'bg-slate-50 text-slate-300 border-slate-200' : 'bg-white text-red-500 border-red-100 active:bg-red-50'}`}><Trash2 size={18}/></button>
+                                         </div>
+                                         <div className="grid grid-cols-2 gap-2 p-3 pt-0">
+                                           <button onClick={() => openSampleModal(activeGroupId, idx)}
+                                             className="flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-white text-sm active:opacity-90"
+                                             style={{ backgroundColor: BRAND.colors.blue }}><Edit3 size={17}/> {rt.measEnter}</button>
+                                           <button onClick={() => openDetailsModal(activeGroupId, idx)}
+                                             className={`flex items-center justify-center gap-2 py-3.5 rounded-xl font-bold text-sm border-2 active:opacity-90 ${hasPhotos ? 'text-white border-transparent' : needsPackedPhoto ? 'bg-red-50 text-red-600 border-red-200' : 'bg-white text-slate-600 border-slate-200'}`}
+                                             style={hasPhotos ? { backgroundColor: BRAND.colors.green } : {}}>
+                                             <Camera size={17}/> {rt.measPhotos}{hasPhotos ? ' (' + m.images.length + ')' : ''}
+                                           </button>
+                                         </div>
+                                       </div>
+                                     );
+                                   })}
+                                 </div>
+                                 )}
+
+                                 {/* Always rendered — never behind a condition.
+                                     This table is the only way to enter a
+                                     measurement on a desktop, and it went missing
+                                     twice: first because `hidden md:block` depended
+                                     on a Tailwind class the runtime CDN did not
+                                     always emit, then still for reasons a JS branch
+                                     did not explain. Availability beats tidiness
+                                     here, so on a phone you get the cards above AND
+                                     this table below (scrolling sideways, as it did
+                                     before the mobile work). Nothing can hide it. */}
                                  <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
                                    <table className="w-full text-sm min-w-[600px]">
                                      <thead className="bg-slate-100 border-b border-slate-200">
@@ -5205,7 +5718,7 @@
                                         </tr>
                                      </thead>
                                      <tbody className="divide-y divide-slate-100">
-                                       {activeGroup.measurements.map((m, idx) => {
+                                       {measRows.map((m, idx) => {
                                          const avgO2 = getAverage(m.samples, 'o2');
                                          const avgCO2 = getAverage(m.samples, 'co2');
                                          const avgW = getAverage(m.samples, 'weight');
@@ -5235,6 +5748,7 @@
                                      </tbody>
                                    </table>
                                  </div>
+                                 </>
                                    );
                                  })()}
                                </div>
@@ -5249,16 +5763,10 @@
                 {/* 3. ANALYSIS */}
                 {activeTab === 'analysis' && (
                   <div className="col-span-12 space-y-6">
-                    <section className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden grid grid-cols-1 md:grid-cols-2 gap-10">
-                       <div className="absolute top-0 left-0 w-full h-1" style={{ backgroundColor: BRAND.colors.green }}></div>
-                       <div className="md:col-span-2 flex items-center justify-between border-b-2 border-slate-100 pb-6">
-                          <div className="flex items-center gap-4">
-                             <div className="p-3 bg-green-50 rounded-xl">
-                                <Activity size={28} color={BRAND.colors.green} />
-                             </div>
-                             <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">{rt.secSummary.replace(/^[0-9]+\.\s*/, '')}</h2>
-                          </div>
-                       </div>
+                    {/* The grid moves onto the body wrapper so the children keep their
+                        md:col-span-2 while the heading becomes the panel header. */}
+                    <Panel title={rt.secSummary} icon={Activity} accent={BRAND.colors.green} iconBg="#f0fdf4"
+                      bodyClass="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-10">
 
                        <div className="md:col-span-2">
                           <label className={`${labelClass} text-sm mb-3`}>{rt.mainConclusion}</label>
@@ -5396,15 +5904,16 @@
                            </div>
                          )}
                          <div className="border-2 border-dashed border-slate-300 rounded-2xl p-6 flex flex-col items-center justify-center text-center bg-slate-50 hover:bg-blue-50 hover:border-blue-300 transition-all cursor-pointer relative overflow-hidden shadow-sm group min-h-[120px]">
-                           <input type="file" accept="image/*" multiple className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={(e) => {
+                           <input type="file" accept="image/*" multiple className="absolute inset-0 opacity-0 cursor-pointer z-10" onChange={async (e) => {
                                const files = Array.from(e.target.files || []);
-                               const target = e.target;
-                               files.forEach(file => {
-                                 const reader = new FileReader();
-                                 reader.onloadend = () => setAnalysis(prev => ({...prev, temperatureImages: [...getTempImages(prev), reader.result]}));
-                                 reader.readAsDataURL(file);
-                               });
-                               target.value = '';
+                               e.target.value = '';
+                               // Sequential, not forEach: each await has to settle
+                               // before the next setAnalysis reads getTempImages,
+                               // otherwise parallel reads overwrite each other.
+                               for (const file of files) {
+                                 const { dataUrl } = await globalConfig.readImageFile(file);
+                                 setAnalysis(prev => ({ ...prev, temperatureImages: [...getTempImages(prev), dataUrl] }));
+                               }
                            }} />
                            <div className="flex flex-col items-center">
                                <div className="w-16 h-16 bg-white rounded-full shadow-sm flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
@@ -5436,7 +5945,7 @@
                            </label>
                          </div>
                        </div>
-                    </section>
+                    </Panel>
                   </div>
                 )}
               </main>
