@@ -6,8 +6,8 @@
     <title>PerfoTec Proposal Tool</title>
     <meta name="description" content="PerfoTec Proposal Tool — Create trial proposals for MAP packaging testing.">
     <meta name="author" content="PerfoTec B.V.">
-    <meta name="theme-color" content="#007C27">
-    
+    <meta name="theme-color" content="#008837">
+
     <!-- Preconnect speeds up the Google Fonts waterfall so Montserrat is
          ready before the user clicks Download PDF. -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -17,6 +17,9 @@
 
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- PerfoTec Brand 2.0 palette, type and radii for Tailwind. Must load
+         AFTER the Play CDN, which is what defines the global `tailwind`. -->
+    <script src="brand.js?v=e549b527"></script>
 
     <!-- Babel compiler for in-browser React (JSX) -->
     <!-- Pinned to Babel 7. v8 (released 2026-05) changed React preset's default
@@ -25,15 +28,20 @@
     <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
 
     <!-- LOAD CENTRAL STYLING & CONFIGURATION -->
-    <link rel="stylesheet" href="style.css?v=77634a3c">
-    <script src="config.js?v=37136610"></script>
-    <script src="board-db.js?v=a2107b12"></script>
+    <link rel="stylesheet" href="style.css?v=e8637b4c">
+    <script src="config.js?v=8d659a19"></script>
+    <!-- This page renders its own Board button in the header, so the shared
+         floating bar that board-db.js injects would be a second, redundant way
+         back. Pages WITHOUT a header button (the Product Dashboard) still get it. -->
+    <script>window.PERFOTEC_NO_BACK_BUTTON = true;</script>
+    <script src="board-db.js?v=2371f8df"></script>
     <script src="product-tools.js?v=eca36103"></script>
 </head>
-<body class="bg-slate-50 text-slate-800 antialiased selection:bg-blue-200 selection:text-blue-900">
+<body class="bg-slate-50 text-slate-700 antialiased selection:bg-blue-200 selection:text-blue-900">
     <div id="root">
-        <div style="padding: 2rem; text-align: center; font-family: sans-serif; color: #666;">
-            Loading Proposal Tool... Please ensure 'style.css' and 'config.js' are in the same folder.
+        <div class="pf-loading" role="status">
+            Loading the proposal tool…
+            <span class="pf-loading-note">If this stays put, check that style.css and config.js sit in the same folder.</span>
         </div>
     </div>
 
@@ -59,10 +67,10 @@
 
         const BRAND = {
           colors: {
-            green: globalConfig.BRAND?.colors?.primary?.green || '#007C27',
-            blue: globalConfig.BRAND?.colors?.primary?.blue || '#054E9A',
-            black: globalConfig.BRAND?.colors?.neutral?.black || '#211A1A',
-            gray: globalConfig.BRAND?.colors?.neutral?.lightGray || '#E9E9E9',
+            green: globalConfig.BRAND?.colors?.primary?.green || '#008837',
+            blue: globalConfig.BRAND?.colors?.primary?.blue || '#084BCD',
+            black: globalConfig.BRAND?.colors?.neutral?.black || '#1A1B1F',
+            gray: globalConfig.BRAND?.colors?.neutral?.lightGray || '#F7F7F7',
           },
           logos: {
             default: globalConfig.BRAND?.logos?.default || 'https://cdn.prod.website-files.com/68b594c756c22085ddc6c1ea/68b59ba2f027bfeecd25261b_PerfoTec%20logo.png'
@@ -74,11 +82,11 @@
         };
 
         const CHART_COLORS = globalConfig.CHART_COLORS || [
-          { stroke: '#054E9A', fill: '#dbeafe', name: 'Electric Blue' },    
-          { stroke: '#007C27', fill: '#dcfce7', name: 'La Salle Green' },     
-          { stroke: '#211A1A', fill: '#f3f4f6', name: 'Eerie Black' },   
+          { stroke: '#084BCD', fill: '#F1F6FF', name: 'PerfoTec Blue' },    
+          { stroke: '#008837', fill: '#EDF8F2', name: 'PerfoTec Green' },     
+          { stroke: '#1A1B1F', fill: '#F2F5F9', name: 'PerfoTec Ink' },   
           { stroke: '#ea580c', fill: '#ffedd5', name: 'Orange' },  
-          { stroke: '#9333ea', fill: '#f3e8ff', name: 'Purple' }   
+          { stroke: '#5A85E7', fill: '#E0EAFF', name: 'Light Blue Accent' }   
         ];
 
         // i18n arrays are the single source; flat arrays are derived from them
@@ -522,6 +530,118 @@
         };
 
         // --- PRINT PREVIEW ---
+        /* ==========================================================================
+         * Panel — a form section that is collapsed on a phone and always open on a
+         * desktop.
+         *
+         * The Setup tab is five full-height panels. On a 375px screen that is a lot
+         * of scrolling to reach one field, and you cannot see what else exists.
+         * Collapsed, the whole form fits on one screen as a list of headings you
+         * tap into.
+         *
+         * Desktop is deliberately left exactly as it was: there the fields sit two
+         * and three across and collapsing them would only add clicks. So the phone
+         * gets the accordion and the desktop keeps the plain heading — same markup,
+         * one branch.
+         *
+         * The `open` state is kept even while the desktop branch renders, so
+         * rotating a tablet does not reset which panels you had unfolded.
+         * ========================================================================== */
+        const usePhoneLayout = () => {
+          // Width alone is the wrong test. A laptop with DevTools docked to the
+          // right, or a half-screen window, is under 768px and would get the phone
+          // layout — panels collapsed, the day table reflowed somewhere else — which
+          // is not what a desktop user asked for and made the measurement inputs
+          // look lost. `pointer: coarse` is what actually separates a touch device
+          // from a narrow mouse window, so both must hold.
+          const query = '(max-width: 767px) and (pointer: coarse)';
+          const [isPhone, setIsPhone] = useState(() =>
+            typeof window.matchMedia === 'function' ? window.matchMedia(query).matches : false);
+          useEffect(() => {
+            if (typeof window.matchMedia !== 'function') return;
+            const mq = window.matchMedia(query);
+            // Both signals: the media-query change event is the right one, but it
+            // does not fire in every environment (it did not under viewport
+            // emulation), and being wrong here means the whole measurement layout
+            // is wrong. `resize` re-reads mq.matches, so the two cannot disagree.
+            const sync = () => setIsPhone(mq.matches);
+            mq.addEventListener('change', sync);
+            window.addEventListener('resize', sync);
+            sync();
+            return () => {
+              mq.removeEventListener('change', sync);
+              window.removeEventListener('resize', sync);
+            };
+          }, []);
+          return isPhone;
+        };
+
+        /* `chip` is the smaller variant used by the panels inside the Variant tab:
+         * a plain white box with a label-sized heading and a coloured icon square,
+         * instead of a full section with an accent bar. Same collapse behaviour. */
+        const Panel = ({ title, icon: Icon, accent, iconBg, badge, children, bodyClass = '', defaultOpen = false, chip = false, chipClass = '' }) => {
+          const isPhone = usePhoneLayout();
+          const [open, setOpen] = useState(defaultOpen);
+          const showBody = !isPhone || open;
+
+          if (chip) {
+            return (
+              <div className="bg-white p-4 sm:p-8 rounded-2xl sm:rounded-3xl border border-slate-200 shadow-sm flex flex-col h-full">
+                {isPhone ? (
+                  <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
+                    className={`w-full flex items-center gap-2.5 text-left ${open ? 'border-b border-slate-100 pb-3 mb-3' : ''}`}>
+                    {Icon && <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${chipClass}`}><Icon size={18}/></div>}
+                    <span className="flex-1 min-w-0 font-extrabold text-slate-800 leading-tight">{title}</span>
+                    <ChevronDown size={20} className="shrink-0 text-slate-400 transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'none' }} />
+                  </button>
+                ) : (
+                  <label className="block mb-2 font-extrabold text-slate-800 text-lg border-b border-slate-100 pb-3 flex items-center gap-2">
+                    {Icon && <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${chipClass}`}><Icon size={16}/></div>}
+                    {title}
+                  </label>
+                )}
+                {showBody && (bodyClass ? <div className={bodyClass}>{children}</div> : children)}
+              </div>
+            );
+          }
+
+          return (
+            <section className="bg-white p-4 sm:p-8 md:p-10 rounded-2xl sm:rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-full h-1" style={{ backgroundColor: accent }}></div>
+              {isPhone ? (
+                <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open}
+                  className={`w-full flex items-center gap-3 text-left ${open ? 'border-b-2 border-slate-100 pb-4 mb-5' : ''}`}>
+                  {Icon && (
+                    <div className="p-2.5 rounded-xl shrink-0" style={{ backgroundColor: iconBg || (accent + '1a') }}>
+                      <Icon size={22} color={accent} />
+                    </div>
+                  )}
+                  <span className="flex-1 min-w-0 font-extrabold text-base text-slate-800 leading-tight">{title}</span>
+                  <ChevronDown size={22} className="shrink-0 text-slate-400 transition-transform" style={{ transform: open ? 'rotate(180deg)' : 'none' }} />
+                </button>
+              ) : (
+                <div className="flex flex-wrap items-center justify-between gap-4 border-b-2 border-slate-100 pb-6 mb-8">
+                  <div className="flex items-center gap-4">
+                    {Icon && (
+                      <div className="p-3 rounded-xl" style={{ backgroundColor: iconBg || (accent + '1a') }}>
+                        <Icon size={28} color={accent} />
+                      </div>
+                    )}
+                    <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">{title}</h2>
+                  </div>
+                  {badge}
+                </div>
+              )}
+              {/* A badge (e.g. the metric/imperial switch) sits beside the title on a
+                  desktop. On a phone there is no room next to a title and a chevron,
+                  so it drops into the body as its own row — visible once you open the
+                  panel, which is also when it is relevant. */}
+              {isPhone && badge && open && <div className="mb-4 flex">{badge}</div>}
+              {showBody && (bodyClass ? <div className={bodyClass}>{children}</div> : children)}
+            </section>
+          );
+        };
+
         const PrintPreview = ({ clientInfo, project, groups, proposal, supplyChain, lang, unitSystem, onBack }) => {
           const pv = PV[lang] || PV.en;
           let allTemps = [];
@@ -557,7 +677,7 @@
 
           const handleWordExport = () => {
               const content = document.getElementById('print-content').innerHTML;
-              const preHtml = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export HTML To Doc</title><style>body { font-family: 'Arial', sans-serif; } .page-break { page-break-before: always; } table { width: 100%; border-collapse: collapse; margin-bottom: 20px; } th, td { border: 1px solid #ccc; padding: 8px; text-align: left; } th { background-color: #007C27; color: white; } img { max-width: 100%; height: auto; }</style></head><body>`;
+              const preHtml = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export HTML To Doc</title><style>body { font-family: 'Montserrat', Arial, sans-serif; color: #333333; } .page-break { page-break-before: always; } table { width: 100%; border-collapse: collapse; margin-bottom: 20px; } th, td { border: 1px solid #E4EBF3; padding: 8px 10px; text-align: left; } th { background-color: #084BCD; color: white; } img { max-width: 100%; height: auto; }</style></head><body>`;
               const postHtml = "</body></html>";
               const html = preHtml + content + postHtml;
               const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
@@ -719,7 +839,7 @@
 
                   <div className="mb-8 print:mb-3 grid grid-cols-2 md:grid-cols-3 print:grid-cols-3 gap-4 print:gap-2 text-sm print:text-xs">
                       {project.o2Target && <div className="bg-emerald-50 p-4 print:p-2 rounded-xl border border-emerald-100 shadow-sm"><strong className="text-emerald-800 block mb-1 uppercase tracking-wide text-xs print:text-[9px]">{pv.o2TargetPreviewLabel}</strong><span className="text-xl print:text-base font-extrabold text-emerald-700">{project.o2Target}</span></div>}
-                      {project.acpO2 && <div className="bg-blue-50 p-4 print:p-2 rounded-xl border border-blue-100 shadow-sm"><strong className="text-blue-800 block mb-1 uppercase tracking-wide text-xs print:text-[9px]">{pv.o2MinAcp}</strong><span className="text-xl print:text-base font-extrabold text-[#004B87]">{project.acpO2}</span></div>}
+                      {project.acpO2 && <div className="bg-blue-50 p-4 print:p-2 rounded-xl border border-blue-100 shadow-sm"><strong className="text-blue-800 block mb-1 uppercase tracking-wide text-xs print:text-[9px]">{pv.o2MinAcp}</strong><span className="text-xl print:text-base font-extrabold text-[#073DA6]">{project.acpO2}</span></div>}
                       {project.co2Target && <div className="bg-cyan-50 p-4 print:p-2 rounded-xl border border-cyan-100 shadow-sm"><strong className="text-cyan-800 block mb-1 uppercase tracking-wide text-xs print:text-[9px]">{pv.co2TargetPreviewLabel}</strong><span className="text-xl print:text-base font-extrabold text-cyan-700">{project.co2Target}</span></div>}
                       {project.co2Max && <div className="bg-red-50 p-4 print:p-2 rounded-xl border border-red-100 shadow-sm"><strong className="text-red-800 block mb-1 uppercase tracking-wide text-xs print:text-[9px]">{pv.co2MaxLabel}</strong><span className="text-xl print:text-base font-extrabold text-red-600">{project.co2Max}</span></div>}
                       {project.co2Shock && <div className="bg-orange-50 p-4 print:p-2 rounded-xl border border-orange-100 shadow-sm"><strong className="text-orange-800 block mb-1 uppercase tracking-wide text-xs print:text-[9px]">{pv.co2ShockLabel}</strong><span className="text-xl print:text-base font-extrabold text-orange-600">{project.co2Shock}</span>{project.co2ShockHours && <div className="text-xs print:text-[9px] text-orange-600/80 mt-1 font-medium leading-tight">{fillTemplate(pv.co2ShockHintTemplate, { max: project.co2Max || pv.maxFallback, hours: project.co2ShockHours })}</div>}</div>}
@@ -740,10 +860,10 @@
                                   </colgroup>
                                   <thead>
                                       <tr>
-                                          <th className="p-3 print:p-2 text-left text-white font-bold" style={{backgroundColor: '#004B87'}}>{pv.matrixDefect}</th>
-                                          <th className="p-3 print:p-2 text-left text-white font-bold" style={{backgroundColor: '#004B87'}}>{pv.matrixCause}</th>
-                                          <th className="p-3 print:p-2 text-left text-white font-bold" style={{backgroundColor: '#5B9BD5'}}>{pv.matrixMHP}</th>
-                                          <th className="p-3 print:p-2 text-left text-white font-bold" style={{backgroundColor: '#007C27'}}>{pv.matrixMAP}</th>
+                                          <th className="p-3 print:p-2 text-left text-white font-bold" style={{backgroundColor: '#073DA6'}}>{pv.matrixDefect}</th>
+                                          <th className="p-3 print:p-2 text-left text-white font-bold" style={{backgroundColor: '#073DA6'}}>{pv.matrixCause}</th>
+                                          <th className="p-3 print:p-2 text-left text-white font-bold" style={{backgroundColor: '#5A85E7'}}>{pv.matrixMHP}</th>
+                                          <th className="p-3 print:p-2 text-left text-white font-bold" style={{backgroundColor: '#008837'}}>{pv.matrixMAP}</th>
                                       </tr>
                                   </thead>
                                   <tbody className="divide-y divide-slate-200">
@@ -1126,9 +1246,9 @@
             en: {
               loadJson: 'Load JSON', saveAs: 'Save As...', previewProposal: 'Preview Proposal',
               tabSetup: 'Project & Product', tabGroups: 'Variants & Planning', tabTexts: 'Proposal Texts',
-              home: 'Home',
+              boardBtn: 'Board', boardBtnTitle: 'Back to the Project Board',
               // Setup tab
-              secProject: '1. Project Details', proposalTitle: 'Proposal Title', projectName: 'Project Name', productName: 'Product Name',
+              secProject: 'Project Details', proposalTitle: 'Proposal Title', projectName: 'Project Name', productName: 'Product Name',
               proposalDate: 'Proposal Date', packingDate: 'Packing Date', totalDuration: 'Total Duration (Days)',
               retailSim: 'Retail Simulation (after opening)', processingType: 'State of product',
               whole: 'Whole', processed: 'Processed / Fresh-cut',
@@ -1138,15 +1258,15 @@
               respirationData: 'Respiration Data', measuredAt: 'Measured at (°C)',
               uploadPerfoTecLogo: 'Upload PerfoTec Logo', uploadClientLogo: 'Upload Client Logo', clickUpload: 'Click to upload',
               coverPhoto: 'Cover Photo (Page 1)', refPhoto: 'Product Photo',
-              secCompany: '2. Company & Contact Details', companyName: 'Company Name', perfoTecEmployee: 'PerfoTec Employee',
+              secCompany: 'Company & Contact Details', companyName: 'Company Name', perfoTecEmployee: 'PerfoTec Employee',
               employeeEmail: 'Employee Email', employeePhone: 'Employee Phone',
               street: 'Street', houseNo: 'House No.', addressExtra: 'Additional Info (floor, building, etc.)', zipCode: 'Zip code', city: 'City', country: 'Country',
               contactPerson: 'Contact Person', role: 'Role', email: 'Email', phone: 'Phone', phoneDirect: 'Phone (Direct)', phoneWork: 'Phone (Work)', addContactBtn: 'Add Contact',
-              secProduct: '3. Product Details',
+              secProduct: 'Product Details',
               secA: 'A. Product & Packaging', secB: 'B. Challenge & Objectives', secC: 'C. Current Supply Chain',
               qualityCrit: 'Quality Criteria', qualityCritDesc: 'Click a criterion to toggle it on or off.',
-              secGoals: '3. Challenge & Objectives', currentChallenge: 'Current Challenge', trialTarget: 'Target Goal',
-              secSupplyChain: '4. Product Supply Chain', transportMode: 'Transport & Storage',
+              secGoals: 'Challenge & Objectives', currentChallenge: 'Current Challenge', trialTarget: 'Target Goal',
+              secSupplyChain: 'Product Supply Chain', transportMode: 'Transport & Storage',
               step: 'Step', phase: 'Phase (Activity)', temp: 'Temp (°C)', days: 'Time (Days)', action: 'Action',
               actNone: '- None -', actPack: 'Pack', actUnpack: 'Unpack', addStep: 'Add Extra Step',
               // Groups tab
@@ -1190,7 +1310,7 @@
               transportRoad: 'Transport by road', transportSea: 'Seafreight', transportAir: 'Airfreight', transportStorage: 'Storage',
               stagePlaceholder: 'e.g. Farm, Transport...', min: 'Min', max: 'Max',
               metric: 'Metric', imperial: 'Imperial', supplyChainFlow: 'Supply Chain Flow',
-              secDefects: '5. Product Characteristics & Defect Prevention',
+              secDefects: 'Product Characteristics & Defect Prevention',
               defectsMatrixSubtitle: 'Defects & Prevention Matrix',
               defectsMatrixDesc: 'List the typical defects for this product. For each defect, describe the physiological cause and how MHP (moisture) and MAP (gas) treatments influence it.',
               defectColLabel: 'Defect', causeColLabel: 'Physiological Cause',
@@ -1233,8 +1353,8 @@
             nl: {
               loadJson: 'Laden JSON', saveAs: 'Opslaan als...', previewProposal: 'Preview Voorstel',
               tabSetup: 'Project & Product', tabGroups: 'Varianten & Planning', tabTexts: 'Voorstel Teksten',
-              home: 'Home',
-              secProject: '1. Projectgegevens', proposalTitle: 'Titel Voorstel', projectName: 'Projectnaam', productName: 'Productnaam',
+              boardBtn: 'Board', boardBtnTitle: 'Terug naar het Project Board',
+              secProject: 'Projectgegevens', proposalTitle: 'Titel Voorstel', projectName: 'Projectnaam', productName: 'Productnaam',
               proposalDate: 'Datum Voorstel', packingDate: 'Verpakdatum', totalDuration: 'Totale Duur (Dagen)',
               retailSim: 'Retail Simulatie (na opening)', processingType: 'Staat van het product',
               whole: 'Heel', processed: 'Verwerkt / Gesneden',
@@ -1244,15 +1364,15 @@
               respirationData: 'Respiratie Data', measuredAt: 'Gemeten bij (°C)',
               uploadPerfoTecLogo: 'Upload PerfoTec Logo', uploadClientLogo: 'Upload Klant Logo', clickUpload: 'Klik om te uploaden',
               coverPhoto: 'Omslagfoto', refPhoto: 'Product Foto',
-              secCompany: '2. Bedrijfs- & Contactgegevens', companyName: 'Bedrijfsnaam', perfoTecEmployee: 'PerfoTec Medewerker',
+              secCompany: 'Bedrijfs- & Contactgegevens', companyName: 'Bedrijfsnaam', perfoTecEmployee: 'PerfoTec Medewerker',
               employeeEmail: 'E-mailadres Medewerker', employeePhone: 'Telefoon Medewerker',
               street: 'Straat', houseNo: 'Huisnummer', addressExtra: 'Extra (verdieping, gebouw, etc.)', zipCode: 'Postcode', city: 'Plaats / Stad', country: 'Land',
               contactPerson: 'Naam Contactpersoon', role: 'Functie', email: 'E-mailadres', phone: 'Telefoon', phoneDirect: 'Telefoon (Direct)', phoneWork: 'Telefoon (Werk)', addContactBtn: 'Contactpersoon Toevoegen',
-              secProduct: '3. Product(en) voor de Test',
+              secProduct: 'Product(en) voor de Test',
               secA: 'A. Product & Verpakking', secB: 'B. Uitdaging & Doelstelling', secC: 'C. Huidige Supply Chain',
               qualityCrit: 'Kwaliteitscriteria', qualityCritDesc: 'Klik op een criterium om deze in of uit te schakelen.',
-              secGoals: '3. Uitdaging & Doelstelling', currentChallenge: 'Huidige Uitdaging', trialTarget: 'Beoogd Doel',
-              secSupplyChain: '4. Product Supply Chain', transportMode: 'Transport & Opslag',
+              secGoals: 'Uitdaging & Doelstelling', currentChallenge: 'Huidige Uitdaging', trialTarget: 'Beoogd Doel',
+              secSupplyChain: 'Product Supply Chain', transportMode: 'Transport & Opslag',
               step: 'Stap', phase: 'Fase (Activiteit)', temp: 'Temp (°C)', days: 'Tijd (Dagen)', action: 'Actie',
               actNone: '- Geen -', actPack: 'Inpakken', actUnpack: 'Uitpakken', addStep: 'Extra Stap Toevoegen',
               globalCriteria: 'Globale Beoordelingscriteria', noCriteria: 'Geen criteria geselecteerd.',
@@ -1293,7 +1413,7 @@
               transportRoad: 'Wegtransport', transportSea: 'Zeevracht', transportAir: 'Luchtvracht', transportStorage: 'Opslag',
               stagePlaceholder: 'bijv. Boerderij, Transport...', min: 'Min', max: 'Max',
               metric: 'Metrisch', imperial: 'Imperiaal', supplyChainFlow: 'Supply Chain Flow',
-              secDefects: '5. Producteigenschappen & Defectpreventie',
+              secDefects: 'Producteigenschappen & Defectpreventie',
               defectsMatrixSubtitle: 'Defecten & Preventiematrix',
               defectsMatrixDesc: 'Voer de typische defecten voor dit product op. Beschrijf per defect de fysiologische oorzaak en hoe MHP (vocht) en MAP (gas) behandeling deze beïnvloeden.',
               defectColLabel: 'Defect', causeColLabel: 'Fysiologische Oorzaak',
@@ -1336,8 +1456,8 @@
             es: {
               loadJson: 'Cargar JSON', saveAs: 'Guardar como...', previewProposal: 'Ver Propuesta',
               tabSetup: 'Proyecto y Producto', tabGroups: 'Variantes y Planificación', tabTexts: 'Textos de Propuesta',
-              home: 'Inicio',
-              secProject: '1. Detalles del Proyecto', proposalTitle: 'Título de Propuesta', projectName: 'Nombre del Proyecto', productName: 'Nombre del Producto',
+              boardBtn: 'Board', boardBtnTitle: 'Volver al Project Board',
+              secProject: 'Detalles del Proyecto', proposalTitle: 'Título de Propuesta', projectName: 'Nombre del Proyecto', productName: 'Nombre del Producto',
               proposalDate: 'Fecha de Propuesta', packingDate: 'Fecha de Empaque', totalDuration: 'Duración Total (Días)',
               retailSim: 'Simulación Retail (después de abrir)', processingType: 'Estado del producto',
               whole: 'Entero', processed: 'Procesado / Cortado',
@@ -1347,15 +1467,15 @@
               respirationData: 'Datos de Respiración', measuredAt: 'Medido a (°C)',
               uploadPerfoTecLogo: 'Subir Logo PerfoTec', uploadClientLogo: 'Subir Logo Cliente', clickUpload: 'Pulsar para subir',
               coverPhoto: 'Foto de Portada (Página 1)', refPhoto: 'Foto del Producto',
-              secCompany: '2. Detalles de la Empresa y Contacto', companyName: 'Nombre de Empresa', perfoTecEmployee: 'Empleado PerfoTec',
+              secCompany: 'Detalles de la Empresa y Contacto', companyName: 'Nombre de Empresa', perfoTecEmployee: 'Empleado PerfoTec',
               employeeEmail: 'Email Empleado', employeePhone: 'Teléfono Empleado',
               street: 'Calle', houseNo: 'Número', addressExtra: 'Información adicional (piso, edificio, etc.)', zipCode: 'Código Postal', city: 'Ciudad', country: 'País',
               contactPerson: 'Persona de Contacto', role: 'Cargo', email: 'Correo', phone: 'Teléfono', phoneDirect: 'Teléfono (Directo)', phoneWork: 'Teléfono (Trabajo)', addContactBtn: 'Añadir Contacto',
-              secProduct: '3. Detalles del Producto',
+              secProduct: 'Detalles del Producto',
               secA: 'A. Producto y Empaque', secB: 'B. Desafío y Objetivos', secC: 'C. Cadena de Suministro Actual',
               qualityCrit: 'Criterios de Calidad', qualityCritDesc: 'Haga clic en un criterio para activarlo o desactivarlo.',
-              secGoals: '3. Desafío y Objetivos', currentChallenge: 'Desafío Actual', trialTarget: 'Objetivo',
-              secSupplyChain: '4. Cadena de Suministro', transportMode: 'Transporte y Almacenamiento',
+              secGoals: 'Desafío y Objetivos', currentChallenge: 'Desafío Actual', trialTarget: 'Objetivo',
+              secSupplyChain: 'Cadena de Suministro', transportMode: 'Transporte y Almacenamiento',
               step: 'Paso', phase: 'Fase (Actividad)', temp: 'Temp (°C)', days: 'Tiempo (Días)', action: 'Acción',
               actNone: '- Ninguna -', actPack: 'Empacar', actUnpack: 'Desempacar', addStep: 'Añadir Paso',
               globalCriteria: 'Criterios de Evaluación Global', noCriteria: 'Ningún criterio seleccionado.',
@@ -1396,7 +1516,7 @@
               transportRoad: 'Transporte Terrestre', transportSea: 'Transporte Marítimo', transportAir: 'Transporte Aéreo', transportStorage: 'Almacenamiento',
               stagePlaceholder: 'ej. Granja, Transporte...', min: 'Mín', max: 'Máx',
               metric: 'Métrico', imperial: 'Imperial', supplyChainFlow: 'Flujo de la Cadena de Suministro',
-              secDefects: '5. Características del Producto y Prevención de Defectos',
+              secDefects: 'Características del Producto y Prevención de Defectos',
               defectsMatrixSubtitle: 'Matriz de Defectos y Prevención',
               defectsMatrixDesc: 'Liste los defectos típicos para este producto. Para cada defecto, describa la causa fisiológica y cómo los tratamientos MHP (humedad) y MAP (gas) influyen en ellos.',
               defectColLabel: 'Defecto', causeColLabel: 'Causa Fisiológica',
@@ -1593,35 +1713,27 @@
              });
           };
 
-          const handleImgUpload = (e, field) => { 
-             const f = e.target.files[0]; 
-             if(f) { 
-                const r = new FileReader(); 
-                r.onloadend = () => { 
-                   if (field === 'clientLogo') {
-                      setClientInfo(c => ({...c, logo: r.result}));
-                   } else {
-                      setProject(p => ({...p, [field]: r.result}));
-                   }
-                }; 
-                r.readAsDataURL(f); 
-             }
+          // readImageFile downscales what comes off a camera and passes small
+          // files (logos) through untouched. See config.js §7c.
+          const handleImgUpload = async (e, field) => {
+             const f = e.target.files[0];
+             e.target.value = null;
+             if (!f) return;
+             const { dataUrl } = await globalConfig.readImageFile(f);
+             if (field === 'clientLogo') setClientInfo(c => ({ ...c, logo: dataUrl }));
+             else setProject(p => ({ ...p, [field]: dataUrl }));
           };
 
-          const handlePredictedImageUpload = (e, groupId) => { 
-            const file = e.target.files[0]; 
-            if(file) { 
-              const group = groups.find(g => g.id === groupId);
-              const reader = new FileReader(); 
-              reader.onloadend = () => {
-                 if (group && group.predictedImage) {
-                    setPendingImageReplace({ groupId: groupId, result: reader.result });
-                 } else {
-                    setGroups(prev => prev.map(g => g.id === groupId ? { ...g, predictedImage: reader.result } : g)); 
-                 }
-              };
-              reader.readAsDataURL(file); 
-              e.target.value = '';
+          const handlePredictedImageUpload = async (e, groupId) => {
+            const file = e.target.files[0];
+            e.target.value = '';
+            if (!file) return;
+            const group = groups.find(g => g.id === groupId);
+            const { dataUrl } = await globalConfig.readImageFile(file);
+            if (group && group.predictedImage) {
+              setPendingImageReplace({ groupId: groupId, result: dataUrl });
+            } else {
+              setGroups(prev => prev.map(g => g.id === groupId ? { ...g, predictedImage: dataUrl } : g));
             }
           };
 
@@ -2053,7 +2165,14 @@
                   // Mirror coupled fields tool → board: packing date and PerfoTec
                   // employee (= product manager on the board).
                   if (project.packingDate) patch.startDate = project.packingDate;
-                  if (project.employee) patch.productManager = project.employee;
+                  // Fill-if-empty, like client and product above. The board owns this
+                  // field: it has the people registry, the picker and rename. This
+                  // tool only PREFILLS its employee box from the card, so writing it
+                  // back unconditionally meant every autosave re-asserted a value the
+                  // user may have just changed on the board — two writers on one
+                  // field, which is exactly what surfaces as "someone else was
+                  // faster" (with your own name on it, because you are both writers).
+                  if (!p.productManager && project.employee) patch.productManager = project.employee;
                   if (!p.image && project.startImage) {
                     const scaled = await B.scaleImage(project.startImage, 480);
                     if (scaled) patch.image = scaled;
@@ -2625,21 +2744,32 @@
               )}
               
               {/* HEADER */}
-              <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40 shadow-sm">
-                <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 flex items-center gap-3 md:gap-4">
-                  {/* LEFT: Logo + Home */}
+              <header className="bg-white/80 backdrop-blur-md border-b border-blue-600/40 sticky top-0 z-40">
+                <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 flex flex-wrap items-center gap-3 md:gap-4">
+                  {/* LEFT: Logo + back to the board */}
                   <div className="flex items-center gap-2 md:gap-3 shrink-0">
                     <img src={BRAND.logos.default} alt="PerfoTec" className="h-7 md:h-9 object-contain" />
-                    <a href="index.html" className="bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-800 p-2 xl:px-3 xl:py-2 rounded-lg text-xs font-bold transition-all border border-slate-200 flex items-center gap-1.5 whitespace-nowrap" title={pt.home}>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" /></svg>
-                      <span className="hidden xl:inline">{pt.home}</span>
-                    </a>
+                    {/* The only way back, now that the floating bar is gone. A button
+                        rather than a link because these tools autosave on a ~1.2s
+                        debounce: goToBoard() flushes that first, so the last edit
+                        made before leaving is not dropped. Falls back to a plain
+                        navigation if the shared layer failed to load. */}
+                    <button type="button"
+                      onClick={() => {
+                        const B = window.PerfoTecBoard;
+                        if (B && B.goToBoard) B.goToBoard();
+                        else window.location.assign('board.html');
+                      }}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-800 p-2 xl:px-3 xl:py-2 rounded-lg text-xs font-bold transition-all border border-slate-200 flex items-center gap-1.5 whitespace-nowrap" title={pt.boardBtnTitle}>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
+                      <span className="hidden xl:inline">{pt.boardBtn}</span>
+                    </button>
                   </div>
 
                   {/* CENTER: Title — dedicated space, visible from md */}
                   <div className="hidden md:flex flex-1 min-w-0 border-l-2 border-slate-200 pl-3 md:pl-4">
                     <div className="min-w-0">
-                      <h1 className="font-extrabold text-base md:text-lg lg:text-xl xl:text-2xl tracking-tight leading-tight truncate" style={{color: BRAND.colors.blue}}>PerfoTec Manager</h1>
+                      <h1 className="font-extrabold text-base md:text-lg lg:text-xl xl:text-2xl tracking-tight leading-tight truncate" style={{color: BRAND.colors.black}}>PerfoTec Manager</h1>
                       <p className="text-[10px] md:text-xs text-slate-500 font-bold uppercase tracking-widest mt-0.5 truncate">PROPOSAL TOOL</p>
                     </div>
                   </div>
@@ -2648,7 +2778,7 @@
                   <div className="md:hidden flex-1"></div>
 
                   {/* RIGHT: Action buttons + Language selector (lang always rightmost) */}
-                  <div className="flex items-center gap-1.5 md:gap-2 xl:gap-3 shrink-0">
+                  <div className="flex items-center gap-1.5 md:gap-2 xl:gap-3 shrink-0 ml-auto">
                     <label className="cursor-pointer bg-white border border-slate-300 text-slate-700 p-2 lg:pr-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm" title={pt.loadJson}>
                       <FolderOpen size={18} className="text-blue-600 shrink-0"/>
                       <span className="hidden lg:flex flex-col items-start leading-[1.05] text-[10px] uppercase tracking-tight">
@@ -2699,16 +2829,7 @@
 
 
                     {/* ========== DEEL 1 — PROJECT DETAILS ========== */}
-                    <section className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden">
-                       <div className="absolute top-0 left-0 w-full h-1" style={{ backgroundColor: BRAND.colors.green }}></div>
-                       <div className="flex items-center justify-between border-b-2 border-slate-100 pb-6 mb-8">
-                         <div className="flex items-center gap-4">
-                           <div className="p-3 bg-green-50 rounded-xl">
-                             <ClipboardList size={28} color={BRAND.colors.green} />
-                           </div>
-                           <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">{pt.secProject}</h2>
-                         </div>
-                       </div>
+                    <Panel title={pt.secProject} icon={ClipboardList} accent={BRAND.colors.green} iconBg="#f0fdf4">
                        {/* lg:items-start keeps the left column at its natural
                            height so form rows don't stretch to match the two
                            stacked upload tiles on the right. */}
@@ -2760,19 +2881,10 @@
                             </div>
                          </div>
                        </div>
-                    </section>
+                    </Panel>
 
                     {/* ========== DEEL 2 — COMPANY & CONTACT DETAILS ========== */}
-                    <section className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden">
-                       <div className="absolute top-0 left-0 w-full h-1" style={{ backgroundColor: BRAND.colors.green }}></div>
-                       <div className="flex items-center justify-between border-b-2 border-slate-100 pb-6 mb-8">
-                         <div className="flex items-center gap-4">
-                           <div className="p-3 bg-green-50 rounded-xl">
-                             <Building2 size={28} color={BRAND.colors.green} />
-                           </div>
-                           <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">{pt.secCompany}</h2>
-                         </div>
-                       </div>
+                    <Panel title={pt.secCompany} icon={Building2} accent={BRAND.colors.green} iconBg="#f0fdf4">
                         <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
                          <div className="lg:col-span-2 flex flex-col gap-8">
                            
@@ -2897,21 +3009,13 @@
                            <div><label className={labelClass}>{pt.employeePhone}</label><input type="text" className={inputClass} value={project.employeePhone || ''} onChange={e => handleProjectChange('employeePhone', e.target.value)} /></div>
                          </div>
                        </div>
-                    </section>
+                    </Panel>
 
                     {/* ========== DEEL 3 — PRODUCT DETAILS (A / B / C) ========== */}
-                    <section className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden">
-                       <div className="absolute top-0 left-0 w-full h-1" style={{ backgroundColor: BRAND.colors.green }}></div>
-                       <div className="flex items-center justify-between gap-4 border-b-2 border-slate-100 pb-6 mb-8">
-                         <div className="flex items-center gap-4">
-                           <div className="p-3 bg-green-50 rounded-xl">
-                             <PackagePlus size={28} color={BRAND.colors.green} />
-                           </div>
-                           <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">{pt.secProduct}</h2>
-                         </div>
-                         
-                         {/* UNIT TOGGLE SWITCH — mirrors Intake, with unit hint
-                             underneath (kg/meter · inch/lb) for quick user reference. */}
+                    <Panel title={pt.secProduct} icon={PackagePlus} accent={BRAND.colors.green} iconBg="#f0fdf4"
+                      badge={
+                         /* UNIT TOGGLE SWITCH — mirrors Intake, with unit hint
+                             underneath (kg/meter · inch/lb) for quick user reference. */
                          <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner border border-slate-200">
                              <button
                                type="button"
@@ -2930,7 +3034,7 @@
                                  <span className="text-[10px] font-medium tracking-wide opacity-70 mt-0.5">(inch/lb)</span>
                              </button>
                          </div>
-                       </div>
+                      }>
                        {/* A. Product & Packaging */}
                        <div className="mb-10">
                          <div className="flex items-center gap-3 mb-6 border-b border-slate-100 pb-3">
@@ -3246,19 +3350,10 @@
                            </button>
                          </div>
                        </div>
-                    </section>
+                    </Panel>
 
                     {/* ========== DEEL 6 — DEFECTS & PREVENTION MATRIX ========== */}
-                    <section className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden">
-                       <div className="absolute top-0 left-0 w-full h-1" style={{ backgroundColor: BRAND.colors.green }}></div>
-                       <div className="flex items-center justify-between border-b-2 border-slate-100 pb-6 mb-6">
-                         <div className="flex items-center gap-4">
-                           <div className="p-3 bg-green-50 rounded-xl">
-                             <AlertTriangle size={28} color={BRAND.colors.green} />
-                           </div>
-                           <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">{pt.secDefects}</h2>
-                         </div>
-                       </div>
+                    <Panel title={pt.secDefects} icon={AlertTriangle} accent={BRAND.colors.green} iconBg="#f0fdf4">
 
                        {/* The product is chosen in section 3; selecting one there fills
                            the fields below. This drop zone stays for product sheets
@@ -3321,9 +3416,9 @@
                          <table className="w-full text-sm bg-white">
                            <thead className="bg-slate-100 border-b border-slate-200">
                              <tr className="text-left text-slate-600 uppercase tracking-wider text-[10px] font-bold">
-                               <th className="p-3" style={{ color: '#004B87' }}>{pt.defectColLabel}</th>
-                               <th className="p-3" style={{ color: '#004B87' }}>{pt.causeColLabel}</th>
-                               <th className="p-3" style={{ color: '#5B9BD5' }}>{pt.effectMHPColLabel}</th>
+                               <th className="p-3" style={{ color: '#073DA6' }}>{pt.defectColLabel}</th>
+                               <th className="p-3" style={{ color: '#073DA6' }}>{pt.causeColLabel}</th>
+                               <th className="p-3" style={{ color: '#5A85E7' }}>{pt.effectMHPColLabel}</th>
                                <th className="p-3" style={{ color: BRAND.colors.green }}>{pt.effectMAPColLabel}</th>
                                <th className="p-3 w-10"></th>
                              </tr>
@@ -3355,7 +3450,7 @@
                          <div className="bg-white p-1.5 rounded-lg shadow-sm"><Plus size={16} /></div>
                          {pt.addDefectRow}
                        </button>
-                    </section>
+                    </Panel>
 
                   </div>
                 )}
@@ -3369,8 +3464,7 @@
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                            
                            {/* Criteria — click-to-toggle grid (mirrors Intake) */}
-                           <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col h-full">
-                              <label className="block mb-2 font-extrabold text-slate-800 text-lg border-b border-slate-100 pb-3">{pt.globalCriteria}</label>
+                           <Panel chip title={pt.globalCriteria} icon={Beaker} chipClass="bg-blue-100 text-blue-700">
                               <p className="text-sm text-slate-500 mb-4">Click a criterion to toggle it on or off.</p>
                               <div className="flex flex-wrap gap-3">
                                 {DEFAULT_CRITERIA.map(c => {
@@ -3387,11 +3481,10 @@
                                   );
                                 })}
                               </div>
-                           </div>
+                           </Panel>
 
                            {/* Evaluation Days — the plan for EVERY variant */}
-                           <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col h-full">
-                              <label className="block mb-2 font-extrabold text-slate-800 text-lg">{pt.globalEvalDays}</label>
+                           <Panel chip title={pt.globalEvalDays} icon={Clock} chipClass="bg-amber-100 text-amber-700">
                               <p className="text-sm text-slate-500 mb-3">{pt.evalDaysDesc}</p>
                               <p className="text-xs font-bold text-blue-800 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2.5 mb-5 flex items-start gap-2">
                                  <AlertCircle size={14} className="shrink-0 mt-0.5"/> {pt.evalDaysAllVariants}
@@ -3409,12 +3502,11 @@
                               <div className="mt-auto">
                                   <button onClick={addEvaluationDay} className="w-full sm:w-auto text-sm bg-blue-50 text-blue-700 px-5 py-3 rounded-xl font-bold border border-blue-200 hover:bg-blue-100 transition-colors inline-flex justify-center items-center gap-2"><Plus size={18}/> {pt.addEvalDay}</button>
                               </div>
-                           </div>
+                           </Panel>
                         </div>
 
                         {/* PerfoTec Technology */}
-                        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-slate-200 shadow-sm flex flex-col h-full">
-                            <label className="block mb-4 font-extrabold text-slate-800 text-lg border-b border-slate-100 pb-3">{pt.perfoTecTech}</label>
+                        <Panel chip title={pt.perfoTecTech} icon={Package} chipClass="bg-green-100 text-green-700">
                             <div className="flex flex-wrap gap-3">
                                 {PERFOTEC_TECHNOLOGIES.map(tech => {
                                     const isSelected = project.technologies?.includes(tech);
@@ -3430,7 +3522,7 @@
                                     );
                                 })}
                             </div>
-                        </div>
+                        </Panel>
                     </div>
 
                     {/* BOTTOM SECTION: VARIANTS */}
@@ -3640,16 +3732,8 @@
                 {/* 3. PROPOSAL (Texts) */}
                 {activeTab === 'proposal' && (
                   <div className="col-span-12 space-y-8 max-w-5xl mx-auto w-full">
-                    <section className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden grid grid-cols-1 md:grid-cols-2 gap-10">
-                       <div className="absolute top-0 left-0 w-full h-1" style={{ backgroundColor: BRAND.colors.blue }}></div>
-                       <div className="md:col-span-2 border-b-2 border-slate-100 pb-6 mb-2">
-                          <div className="flex items-center gap-4">
-                            <div className="p-3 bg-blue-50 rounded-xl">
-                              <FileText size={28} color={BRAND.colors.blue}/>
-                            </div>
-                            <h2 className="text-2xl font-extrabold text-slate-800 tracking-tight">{pt.proposalEvalText}</h2>
-                          </div>
-                       </div>
+                    <Panel title={pt.proposalEvalText} icon={FileText} accent={BRAND.colors.blue} iconBg="#eff6ff"
+                      bodyClass="grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-10">
                        
                        <div className="md:col-span-2">
                           <label className={`${labelClass} text-sm mb-3`}>{pt.introLabel}</label>
@@ -3677,7 +3761,7 @@
                              placeholder={pt.requirementsPlaceholder}
                           />
                        </div>
-                    </section>
+                    </Panel>
                   </div>
                 )}
 
