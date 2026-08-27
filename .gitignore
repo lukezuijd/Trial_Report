@@ -1,22 +1,77 @@
-# Local secrets, if this app is ever configured for the client intake form.
+# ==========================================================================
+# NOTE: this repository is intended to be published (GitHub Pages). A GitHub
+# Pages SITE is always publicly reachable unless the organisation is on GitHub
+# Enterprise Cloud — so treat everything that is not ignored here as world
+# readable. Run `git status` before the first push and check the list yourself.
+# ==========================================================================
+
+# --- Secrets --------------------------------------------------------------
+# config.js is PUBLIC app configuration (branding, i18n, schema helpers) and is
+# committed on purpose — the published site needs it. Secrets moved out of it
+# into config.secrets.js; the .example template IS safe to commit.
 config.secrets.js
+
+# pipedrive.local.json holds the Pipedrive API token. The .example file next to
+# it is the template and IS safe to commit — it contains no secret.
+pipedrive.local.json
+
+# Any other local override / credential file.
 *.local.json
+!pipedrive.local.example.json
 .env
 .env.*
 
-# Never commit the database or tool exports into this public repository.
-board.json*
-meta.json
-people.json
+# Sync bookkeeping and logs written by pipedrive-sync.mjs.
+.sync/
+
+# --- Customer data --------------------------------------------------------
+# The board database (project cards, intake/proposal/report exports, product
+# records) holds CUSTOMER data: company names, contacts, trial results and
+# photos. It must never end up in the repository. The live database now lives in
+# the SharePoint folder; what is left here is the pre-migration archive.
+DataBasa Kanban/
+DataBase Kanban/
+DataBase Trial WorkFlow/
+# Archived pre-SharePoint database + loose exports. Its contents happen to match
+# the filename patterns below, but that is luck, not intent: anything dropped in
+# there under another name would show up as untracked. Ignore the folder itself.
+_OLD-*/
+_ARCHIVE-*/
+
+# Build output of publish.mjs: the public app tree, with its own git history and
+# its own remote. Generated, so it must not be committed here as well.
+_publish/
+board.json
+board.json.bak
 products.json
-cards/
 projects/
 products/
-_backups/
+
+# Loose tool exports (these are customer data too, whatever they are called).
+*_report_*.json
 Intake Form_*.json
 Validation Report*.json
-*_report_*.json
+perfotec_proposal_*.json
+perfotec_report_*.json
+_backups/
 
+# --- OS / editor noise ----------------------------------------------------
 desktop.ini
 Thumbs.db
 .DS_Store
+~$*
+node_modules/
+.vscode/
+.idea/
+
+# --- Local test rigs ------------------------------------------------------
+# board-fakefs.js binds an in-memory File System Access root so a tool can be
+# driven without picking a real folder, and the *-test / *-old dashboard copies
+# are that tool with its two script tags swapped to load it. They are whole
+# copies of a file this repository already tracks, so git history already holds
+# what they preserve. They also must not reach the published site: a committed
+# dashboard-test.html would be a reachable page that looks like the dashboard
+# but runs on a fake database.
+*-fakefs.js
+*-old.html
+*-test.html
