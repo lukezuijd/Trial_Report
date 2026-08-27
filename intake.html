@@ -6,25 +6,41 @@
     <title>PerfoTec Client Intake</title>
     <meta name="description" content="PerfoTec Client Intake — Collect client and product information for quality testing.">
     <meta name="author" content="PerfoTec B.V.">
-    <meta name="theme-color" content="#007C27">
+    <meta name="theme-color" content="#008837">
+
+    <!-- Montserrat is the brand typeface. Preconnecting shaves the font
+         waterfall so the form is already on-brand on first paint, and so the
+         font is cached before anyone reaches Print / PDF. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap">
+
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- PerfoTec Brand 2.0 palette, type and radii for Tailwind. Must load
+         AFTER the Play CDN, which is what defines the global `tailwind`. -->
+    <script src="brand.js?v=e549b527"></script>
     <!-- Pinned to Babel 7. v8 (released 2026-05) changed React preset's default
          runtime to "automatic", which emits `import "react/jsx-runtime"` — a
          bare specifier the browser cannot resolve, breaking ESM imports. -->
     <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
     
     <!-- LOAD CENTRAL STYLING & CONFIGURATION -->
-    <link rel="stylesheet" href="style.css?v=77634a3c">
-    <script src="config.js?v=37136610"></script>
-    <script src="board-db.js?v=a2107b12"></script>
+    <link rel="stylesheet" href="style.css?v=e8637b4c">
+    <script src="config.js?v=8d659a19"></script>
+    <!-- This page renders its own Board button in the header, so the shared
+         floating bar that board-db.js injects would be a second, redundant way
+         back. Pages WITHOUT a header button (the Product Dashboard) still get it. -->
+    <script>window.PERFOTEC_NO_BACK_BUTTON = true;</script>
+    <script src="board-db.js?v=2371f8df"></script>
     <script src="product-tools.js?v=eca36103"></script>
 
     <!-- Print rules live in style.css so Intake, Proposal and Report share one source. -->
 </head>
-<body class="bg-slate-100 text-slate-800 antialiased selection:bg-blue-200 selection:text-blue-900">
+<body class="bg-slate-100 text-slate-700 antialiased selection:bg-blue-200 selection:text-blue-900">
     <div id="root">
-        <div style="padding: 2rem; text-align: center; font-family: sans-serif; color: #666;">
-            Loading Intake Form... Please ensure 'style.css' and 'config.js' are in the same folder.
+        <div class="pf-loading" role="status">
+            Loading the intake form…
+            <span class="pf-loading-note">If this stays put, check that style.css and config.js sit in the same folder.</span>
         </div>
     </div>
 
@@ -43,11 +59,12 @@
         // --- LINK WITH CONFIG.JS ---
         const globalConfig = window.PERFOTEC_CONFIG || {};
 
+        // Fallbacks are PerfoTec Brand 2.0, matching config.js and brand.js.
         const BRAND = {
-          colors: { 
-            green: globalConfig.BRAND?.colors?.primary?.green || '#007C27', 
-            blue: globalConfig.BRAND?.colors?.primary?.blue || '#054E9A', 
-            black: globalConfig.BRAND?.colors?.neutral?.black || '#211A1A' 
+          colors: {
+            green: globalConfig.BRAND?.colors?.primary?.green || '#008837',
+            blue: globalConfig.BRAND?.colors?.primary?.blue || '#084BCD',
+            black: globalConfig.BRAND?.colors?.neutral?.black || '#1A1B1F'
           },
           logos: {
             default: globalConfig.BRAND?.logos?.default || 'https://cdn.prod.website-files.com/68b594c756c22085ddc6c1ea/68b59ba2f027bfeecd25261b_PerfoTec%20logo.png'
@@ -119,7 +136,7 @@
             closeBtn: "I understand, close", submitBtn: "Finish & Send",
             removeStep: "Remove Step",
             addPackaging: '+ Add Packaging', removePackaging: 'Remove', packaging: 'Packaging',
-            home: "Home",
+            boardBtn: "Board", boardBtnTitle: "Back to the Project Board",
             warnCompanyName: "Warning: Please enter a company name!",
             selectCriterion: "Select standard criterion...",
             addBtn: "Add"
@@ -172,7 +189,7 @@
             closeBtn: "Ik begrijp het, sluiten", submitBtn: "Afronden & Verzenden",
             removeStep: "Verwijder Stap",
             addPackaging: '+ Verpakking Toevoegen', removePackaging: 'Verwijderen', packaging: 'Verpakking',
-            home: "Home",
+            boardBtn: "Board", boardBtnTitle: "Terug naar het Project Board",
             warnCompanyName: "Waarschuwing: Voer een bedrijfsnaam in!",
             selectCriterion: "Selecteer standaard criterium...",
             addBtn: "Toevoegen"
@@ -225,7 +242,7 @@
             closeBtn: "Entendido, cerrar", submitBtn: "Terminar y Enviar",
             removeStep: "Eliminar Paso",
             addPackaging: '+ Añadir Envase', removePackaging: 'Eliminar', packaging: 'Envase',
-            home: "Inicio",
+            boardBtn: "Board", boardBtnTitle: "Volver al Project Board",
             warnCompanyName: "¡Advertencia: Ingrese un nombre de empresa!",
             selectCriterion: "Seleccionar criterio estándar...",
             addBtn: "Añadir"
@@ -358,7 +375,7 @@
 
           const handleWordExport = () => {
               const content = document.getElementById('print-content').innerHTML;
-              const preHtml = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export HTML To Doc</title><style>body { font-family: 'Arial', sans-serif; } .page-break { page-break-before: always; } table { width: 100%; border-collapse: collapse; margin-bottom: 20px; } th, td { border: 1px solid #ccc; padding: 8px; text-align: left; } th { background-color: #007C27; color: white; } img { max-width: 100%; height: auto; }</style></head><body>`;
+              const preHtml = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export HTML To Doc</title><style>body { font-family: 'Montserrat', Arial, sans-serif; color: #333333; } .page-break { page-break-before: always; } table { width: 100%; border-collapse: collapse; margin-bottom: 20px; } th, td { border: 1px solid #E4EBF3; padding: 8px 10px; text-align: left; } th { background-color: #084BCD; color: white; } img { max-width: 100%; height: auto; }</style></head><body>`;
               const postHtml = "</body></html>";
               const html = preHtml + content + postHtml;
               const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
@@ -643,13 +660,14 @@
              }));
           };
 
-          const handleLogoUpload = (e) => {
+          // readImageFile downscales what comes off a camera and passes small
+          // files (logos) through untouched. See config.js §7c.
+          const handleLogoUpload = async (e) => {
             const file = e.target.files[0];
-            if (file) {
-              const reader = new FileReader();
-              reader.onloadend = () => handleClientChange('logo', reader.result);
-              reader.readAsDataURL(file);
-            }
+            e.target.value = null;
+            if (!file) return;
+            const { dataUrl } = await globalConfig.readImageFile(file);
+            handleClientChange('logo', dataUrl);
           };
 
           // --- HANDLERS PRODUCTS ---
@@ -841,13 +859,12 @@
               }
           };
 
-          const handleProductPhotoUpload = (e, id) => {
+          const handleProductPhotoUpload = async (e, id) => {
             const file = e.target.files[0];
-            if (file) {
-              const reader = new FileReader();
-              reader.onloadend = () => handleProductChange(id, 'photo', reader.result);
-              reader.readAsDataURL(file);
-            }
+            e.target.value = null;
+            if (!file) return;
+            const { dataUrl } = await globalConfig.readImageFile(file);
+            handleProductChange(id, 'photo', dataUrl);
           };
 
           // --- HANDLERS SUPPLY CHAIN ---
@@ -1287,21 +1304,32 @@
               )}
 
               {/* HEADER */}
-              <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40 shadow-sm">
-                <div className="max-w-6xl mx-auto px-4 md:px-6 py-3 flex items-center gap-3 md:gap-4">
-                  {/* LEFT: Logo + Home */}
+              <header className="bg-white/80 backdrop-blur-md border-b border-blue-600/40 sticky top-0 z-40">
+                <div className="max-w-6xl mx-auto px-4 md:px-6 py-3 flex flex-wrap items-center gap-3 md:gap-4">
+                  {/* LEFT: Logo + back to the board */}
                   <div className="flex items-center gap-2 md:gap-3 shrink-0">
                     <img src={BRAND.logos.default} alt="PerfoTec" className="h-7 md:h-9 object-contain" />
-                    <a href="index.html" className="bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-800 p-2 xl:px-3 xl:py-2 rounded-lg text-xs font-bold transition-all border border-slate-200 flex items-center gap-1.5 whitespace-nowrap" title={t.home || 'Home'}>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-4 0a1 1 0 01-1-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 01-1 1" /></svg>
-                      <span className="hidden xl:inline">{t.home || 'Home'}</span>
-                    </a>
+                    {/* The only way back, now that the floating bar is gone. A button
+                        rather than a link because these tools autosave on a ~1.2s
+                        debounce: goToBoard() flushes that first, so the last edit
+                        made before leaving is not dropped. Falls back to a plain
+                        navigation if the shared layer failed to load. */}
+                    <button type="button"
+                      onClick={() => {
+                        const B = window.PerfoTecBoard;
+                        if (B && B.goToBoard) B.goToBoard();
+                        else window.location.assign('board.html');
+                      }}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-800 p-2 xl:px-3 xl:py-2 rounded-lg text-xs font-bold transition-all border border-slate-200 flex items-center gap-1.5 whitespace-nowrap" title={t.boardBtnTitle}>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
+                      <span className="hidden xl:inline">{t.boardBtn}</span>
+                    </button>
                   </div>
 
                   {/* CENTER: Title — dedicated space, visible from md */}
                   <div className="hidden md:flex flex-1 min-w-0 border-l-2 border-slate-200 pl-3 md:pl-4">
                     <div className="min-w-0">
-                      <h1 className="font-extrabold text-base md:text-lg lg:text-xl xl:text-2xl tracking-tight leading-tight truncate" style={{color: BRAND.colors.blue}}>{t.title}</h1>
+                      <h1 className="font-extrabold text-base md:text-lg lg:text-xl xl:text-2xl tracking-tight leading-tight truncate" style={{color: BRAND.colors.black}}>{t.title}</h1>
                       <p className="text-[10px] md:text-xs text-slate-500 font-bold uppercase tracking-widest mt-0.5 truncate">{t.subtitle}</p>
                     </div>
                   </div>
@@ -1310,7 +1338,7 @@
                   <div className="md:hidden flex-1"></div>
 
                   {/* RIGHT: Action buttons + Language selector (lang always rightmost) */}
-                  <div className="flex items-center gap-1.5 md:gap-2 xl:gap-3 shrink-0">
+                  <div className="flex items-center gap-1.5 md:gap-2 xl:gap-3 shrink-0 ml-auto">
                     <label className="cursor-pointer bg-white border border-slate-300 text-slate-700 p-2 lg:pr-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm" title={t.load}>
                       <FolderOpen size={18} className="text-blue-600 shrink-0"/>
                       <span className="hidden lg:flex flex-col items-start leading-[1.05] text-[10px] uppercase tracking-tight">
@@ -1487,7 +1515,7 @@
                         <div className="absolute top-0 left-0 w-full h-1" style={{ backgroundColor: BRAND.colors.green }}></div>
                         
                         {/* PRODUCT HEADER */}
-                        <div className="flex items-center justify-between gap-4 border-b-2 border-slate-100 pb-6 mb-8">
+                        <div className="flex flex-wrap items-center justify-between gap-4 border-b-2 border-slate-100 pb-6 mb-8">
                            <div className="flex items-center gap-4">
                              <div className="p-3 bg-green-50 rounded-xl">
                                <PackagePlus size={28} color={BRAND.colors.green} />
