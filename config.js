@@ -42,47 +42,62 @@ window.PERFOTEC_CONFIG = {
         favicon: 'https://cdn.prod.website-files.com/68b594c756c22085ddc6c1ea/68b59ba2f027bfeecd25261b_PerfoTec%20logo.png',
         description: 'PerfoTec Management Hub — Tools for quality testing, trial proposals, and official reporting.',
         author: 'PerfoTec B.V.',
-        themeColor: '#007C27'
+        themeColor: '#008837'
     },
 
-    // === 1. BRANDING & STYLING (per Brand Guidelines) ===
+    // === 1. BRANDING & STYLING (PerfoTec Brand Guidelines v2.0) ===
+    // Values come from perfotec-brand-tokens.json v2.0. The 2023 identity that
+    // used to live here — #007C27 green, #054E9A blue, League Spartan + Inter —
+    // is retired; brand.js carries the same palette into Tailwind, and style.css
+    // into CSS custom properties. All three must stay in step.
     BRAND: {
         name: 'PerfoTec',
         tagline: 'BEST FOR FRESHNESS',
         logos: {
+            // The full lockup: wordmark plus tagline. The guide forbids splitting
+            // the two, so the shorter wordmark-only file the website uses in its
+            // own navigation is not an option here.
             default: 'https://cdn.prod.website-files.com/68b594c756c22085ddc6c1ea/68b59ba2f027bfeecd25261b_PerfoTec%20logo.png',
             icon: '',
             reverse: ''
         },
         colors: {
             primary: {
-                green: '#007C27',
-                blue: '#054E9A',
-                darkBlue: '#004B87'
+                green: '#008837',      // brand; contact & sustainability
+                blue: '#084BCD',       // primary action
+                darkBlue: '#073DA6'    // hover / pressed on primary
             },
             secondary: {
-                lightBlue: '#5B9BD5',
+                lightBlue: '#5A85E7',
                 orange: '#ea580c'
             },
             neutral: {
-                black: '#211A1A',
-                gray: '#E9E9E9',
-                lightGray: '#F3F4F6',
+                black: '#1A1B1F',      // Ink — display headings
+                charcoal: '#333333',   // body text
+                muted: '#8A97AD',      // captions, eyebrow labels
+                gray: '#E4EBF3',       // Cool Gray — borders, dividers
+                lightGray: '#F7F7F7',  // Mist — section backgrounds
+                blueTint: '#F1F6FF',   // soft tech section backgrounds
                 white: '#FFFFFF'
             }
         },
         fonts: {
-            heading: '"League Spartan", sans-serif',
-            body: '"Inter", sans-serif'
+            heading: '"Montserrat", Arial, "Helvetica Neue", Helvetica, sans-serif',
+            body: '"Montserrat", Arial, "Helvetica Neue", Helvetica, sans-serif'
         }
     },
 
+    // Series colours for the trial charts, repainted onto the v2.0 palette.
+    // The order is deliberately unchanged: a variant that was the green line in
+    // last month's report stays the green line in this month's, so two reports
+    // side by side still compare. Fills are the matching light tint from the
+    // same ramps brand.js installs into Tailwind.
     CHART_COLORS: [
-        { stroke: '#007C27', fill: '#dcfce7', name: 'PerfoTec Green' },
-        { stroke: '#054E9A', fill: '#dbeafe', name: 'PerfoTec Blue' },
-        { stroke: '#211A1A', fill: '#f3f4f6', name: 'PerfoTec Black' },
-        { stroke: '#5B9BD5', fill: '#e0f2fe', name: 'Light Blue Accent' },
-        { stroke: '#85B942', fill: '#ecfccb', name: 'Light Green Accent' }
+        { stroke: '#008837', fill: '#EDF8F2', name: 'PerfoTec Green' },
+        { stroke: '#084BCD', fill: '#F1F6FF', name: 'PerfoTec Blue' },
+        { stroke: '#1A1B1F', fill: '#F2F5F9', name: 'PerfoTec Ink' },
+        { stroke: '#5A85E7', fill: '#E0EAFF', name: 'Light Blue Accent' },
+        { stroke: '#00A346', fill: '#D0F0DE', name: 'Light Green Accent' }
     ],
 
     // === 1b. SHARED UI CLASS STRINGS (Tailwind) ===
@@ -90,9 +105,14 @@ window.PERFOTEC_CONFIG = {
     // and Report. Pages alias these into their local `inputClass` / `labelClass`
     // constants so per-field overrides (e.g. `${inputClass} focus:ring-green-500`)
     // continue to work unchanged.
+    // The colours here are Tailwind names, and brand.js has remapped those names
+    // onto the v2.0 palette — `border-slate-200` is Cool Gray #E4EBF3, `blue-600`
+    // is PerfoTec Blue, `rounded-lg` is the guide's 8px. The label recipe is the
+    // eyebrow treatment perfotec.com puts above its own blocks: small, SemiBold,
+    // uppercase, tracked wide, in the muted grey rather than heavy charcoal.
     UI_CLASSES: {
-        input: 'w-full bg-slate-50 border border-slate-300 text-slate-900 text-sm rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 block p-3 shadow-sm transition-all hover:bg-slate-100 focus:bg-white',
-        label: 'block mb-2 text-xs font-bold tracking-wide text-slate-600 uppercase'
+        input: 'w-full bg-slate-50 border border-slate-200 text-slate-700 text-sm rounded-lg focus:ring-2 focus:ring-blue-600/25 focus:border-blue-600 block p-3 shadow-sm transition-all hover:border-slate-300 focus:bg-white',
+        label: 'block mb-2 text-[11px] font-semibold tracking-[0.14em] text-slate-500 uppercase'
     },
 
     // === 2. DROPDOWN OPTIONS (with i18n) ===
@@ -495,6 +515,161 @@ window.PERFOTEC_CONFIG = {
         }
 
         return data;
+    },
+
+    // === 7c. IMAGE INTAKE (camera / file) ===
+    /**
+     * Sane defaults for photos that go into a report. 1600px on the long edge
+     * keeps enough detail to judge mould, browning and condensation — these
+     * photos are evidence, not decoration — and lands around 200-400 KB.
+     */
+    IMAGE_INTAKE: {
+        maxEdge: 1600,
+        quality: 0.8,
+        // Below this, a file is left exactly as it is. Covers logos (often PNG
+        // with transparency, which JPEG would flatten onto black) and anything
+        // already small enough not to matter.
+        skipBelowBytes: 400 * 1024
+    },
+
+    /**
+     * Read an image File (camera capture or file pick) and return a downscaled
+     * JPEG data URL, with the numbers needed to show the user what happened.
+     *
+     * Why this exists: photos went in at full size. A real trial report measured
+     * 62.5 MB for 21 photos — 100% of the file, largest single photo 8.25 MB.
+     * Phone cameras make that worse: a 12 MP shot is 3-12 MB and base64 adds
+     * another third. Every autosave rewrites the whole phase file, so full-size
+     * photos make the tool unusable on a phone and sluggish on a desktop.
+     *
+     * EXIF orientation matters here. Phone photos carry a rotation flag, and
+     * drawing such a photo straight onto a canvas produces a sideways portrait.
+     * createImageBitmap with imageOrientation 'from-image' applies the flag; the
+     * <img> fallback leans on the browser doing it, which current browsers do.
+     *
+     * Never loses a photo: any failure resolves to the untouched original, so a
+     * browser quirk costs bytes, not evidence.
+     *
+     * @param {File|Blob} file
+     * @param {{maxEdge?:number, quality?:number, skipBelowBytes?:number}} [opts]
+     * @returns {Promise<{dataUrl:string, width:number, height:number,
+     *                    bytes:number, originalBytes:number, scaled:boolean}>}
+     */
+    readImageFile: function (file, opts) {
+        const cfg = Object.assign({}, this.IMAGE_INTAKE, opts || {});
+        const self = this;
+
+        const asDataUrl = (blob) => new Promise((resolve, reject) => {
+            const r = new FileReader();
+            r.onload = () => resolve(r.result);
+            r.onerror = () => reject(r.error || new Error('read failed'));
+            r.readAsDataURL(blob);
+        });
+
+        // Bytes of a data URL's payload, not of the base64 text.
+        const payloadBytes = (dataUrl) => {
+            const i = dataUrl.indexOf(',');
+            if (i < 0) return dataUrl.length;
+            const b64 = dataUrl.slice(i + 1);
+            const pad = b64.endsWith('==') ? 2 : b64.endsWith('=') ? 1 : 0;
+            return Math.floor(b64.length * 3 / 4) - pad;
+        };
+
+        const untouched = (why) => asDataUrl(file).then(dataUrl => self.measureDataUrl(dataUrl).then(dim => ({
+            dataUrl: dataUrl,
+            width: dim.width,
+            height: dim.height,
+            bytes: payloadBytes(dataUrl),
+            originalBytes: file.size || payloadBytes(dataUrl),
+            scaled: false,
+            reason: why
+        })));
+
+        if (!file || !/^image\//.test(file.type || '')) return untouched('not an image');
+
+        // Small enough to leave alone, unless it is also oversized in pixels.
+        const maybeSkip = (file.size && file.size < cfg.skipBelowBytes)
+            ? asDataUrl(file).then(u => self.measureDataUrl(u).then(d =>
+                (Math.max(d.width, d.height) <= cfg.maxEdge)
+                    ? { skip: true, dataUrl: u, dim: d }
+                    : { skip: false }))
+            : Promise.resolve({ skip: false });
+
+        return maybeSkip.then(pre => {
+            if (pre.skip) return {
+                dataUrl: pre.dataUrl,
+                width: pre.dim.width,
+                height: pre.dim.height,
+                bytes: payloadBytes(pre.dataUrl),
+                originalBytes: file.size,
+                scaled: false,
+                reason: 'already small'
+            };
+
+            return self.decodeImage(file).then(src => {
+                const sw = src.width, sh = src.height;
+                const scale = Math.min(1, cfg.maxEdge / Math.max(sw, sh));
+                const w = Math.max(1, Math.round(sw * scale));
+                const h = Math.max(1, Math.round(sh * scale));
+                const c = document.createElement('canvas');
+                c.width = w; c.height = h;
+                const ctx = c.getContext('2d');
+                // White ground: a transparent PNG would otherwise flatten to black.
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(0, 0, w, h);
+                ctx.drawImage(src, 0, 0, w, h);
+                if (src.close) src.close();          // free the ImageBitmap
+                const dataUrl = c.toDataURL('image/jpeg', cfg.quality);
+                return {
+                    dataUrl: dataUrl,
+                    width: w,
+                    height: h,
+                    bytes: payloadBytes(dataUrl),
+                    originalBytes: file.size || 0,
+                    // Re-encoded, whether or not the pixel dimensions changed:
+                    // a same-size JPEG pass still shrinks a 12 MP camera file.
+                    scaled: true,
+                    resized: (w !== sw || h !== sh)
+                };
+            }).catch(() => untouched('decode failed'));
+        }).catch(() => untouched('read failed'));
+    },
+
+    /** Decode to something drawable, applying EXIF orientation where possible. */
+    decodeImage: function (file) {
+        if (typeof createImageBitmap === 'function') {
+            return createImageBitmap(file, { imageOrientation: 'from-image' })
+                .catch(() => this.decodeViaImgElement(file));
+        }
+        return this.decodeViaImgElement(file);
+    },
+
+    decodeViaImgElement: function (file) {
+        return new Promise((resolve, reject) => {
+            const url = URL.createObjectURL(file);
+            const img = new Image();
+            img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+            img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('decode failed')); };
+            img.src = url;
+        });
+    },
+
+    /** Pixel dimensions of a data URL, 0x0 when it cannot be decoded. */
+    measureDataUrl: function (dataUrl) {
+        return new Promise(resolve => {
+            const img = new Image();
+            img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+            img.onerror = () => resolve({ width: 0, height: 0 });
+            img.src = dataUrl;
+        });
+    },
+
+    /** "3.2 MB → 280 KB" for telling the user what the camera step did. */
+    formatBytes: function (n) {
+        if (!n && n !== 0) return '';
+        if (n < 1024) return n + ' B';
+        if (n < 1024 * 1024) return (n / 1024).toFixed(0) + ' KB';
+        return (n / (1024 * 1024)).toFixed(1) + ' MB';
     },
 
     // === 7b. PRINT / PDF EXPORT HELPER ===
