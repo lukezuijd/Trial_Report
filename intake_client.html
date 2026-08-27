@@ -6,23 +6,33 @@
     <title>PerfoTec – Product Intake Form</title>
     <meta name="description" content="PerfoTec Client Intake — Collect client and product information for quality testing.">
     <meta name="author" content="PerfoTec B.V.">
-    <meta name="theme-color" content="#007C27">
+    <meta name="theme-color" content="#008837">
+
+    <!-- Montserrat is the brand typeface; preconnect keeps the first paint on-brand. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap">
+
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- PerfoTec Brand 2.0 palette, type and radii for Tailwind. Must load
+         AFTER the Play CDN, which is what defines the global `tailwind`. -->
+    <script src="brand.js?v=e549b527"></script>
     <!-- Pinned to Babel 7. v8 (released 2026-05) changed React preset's default
          runtime to "automatic", which emits `import "react/jsx-runtime"` — a
          bare specifier the browser cannot resolve, breaking ESM imports. -->
     <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
     
     <!-- LOAD CENTRAL STYLING & CONFIGURATION -->
-    <link rel="stylesheet" href="style.css?v=77634a3c">
-    <script src="config.js?v=37136610"></script>
+    <link rel="stylesheet" href="style.css?v=e8637b4c">
+    <script src="config.js?v=8d659a19"></script>
 
     <!-- Print rules live in style.css so Intake, Proposal and Report share one source. -->
 </head>
-<body class="bg-slate-100 text-slate-800 antialiased selection:bg-blue-200 selection:text-blue-900">
+<body class="bg-slate-100 text-slate-700 antialiased selection:bg-blue-200 selection:text-blue-900">
     <div id="root">
-        <div style="padding: 2rem; text-align: center; font-family: sans-serif; color: #666;">
-            Loading Intake Form... Please ensure 'style.css' and 'config.js' are in the same folder.
+        <div class="pf-loading" role="status">
+            Loading the intake form…
+            <span class="pf-loading-note">If this stays put, check that style.css and config.js sit in the same folder.</span>
         </div>
     </div>
 
@@ -42,9 +52,9 @@
 
         const BRAND = {
           colors: { 
-            green: globalConfig.BRAND?.colors?.primary?.green || '#007C27', 
-            blue: globalConfig.BRAND?.colors?.primary?.blue || '#054E9A', 
-            black: globalConfig.BRAND?.colors?.neutral?.black || '#211A1A' 
+            green: globalConfig.BRAND?.colors?.primary?.green || '#008837', 
+            blue: globalConfig.BRAND?.colors?.primary?.blue || '#084BCD', 
+            black: globalConfig.BRAND?.colors?.neutral?.black || '#1A1B1F' 
           },
           logos: {
             default: globalConfig.BRAND?.logos?.default || 'https://cdn.prod.website-files.com/68b594c756c22085ddc6c1ea/68b59ba2f027bfeecd25261b_PerfoTec%20logo.png'
@@ -322,7 +332,7 @@
 
           const handleWordExport = () => {
               const content = document.getElementById('print-content').innerHTML;
-              const preHtml = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export HTML To Doc</title><style>body { font-family: 'Arial', sans-serif; } .page-break { page-break-before: always; } table { width: 100%; border-collapse: collapse; margin-bottom: 20px; } th, td { border: 1px solid #ccc; padding: 8px; text-align: left; } th { background-color: #007C27; color: white; } img { max-width: 100%; height: auto; }</style></head><body>`;
+              const preHtml = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>Export HTML To Doc</title><style>body { font-family: 'Montserrat', Arial, sans-serif; color: #333333; } .page-break { page-break-before: always; } table { width: 100%; border-collapse: collapse; margin-bottom: 20px; } th, td { border: 1px solid #E4EBF3; padding: 8px 10px; text-align: left; } th { background-color: #084BCD; color: white; } img { max-width: 100%; height: auto; }</style></head><body>`;
               const postHtml = "</body></html>";
               const html = preHtml + content + postHtml;
               const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
@@ -605,14 +615,22 @@
              }));
           };
 
-          const handleLogoUpload = (e) => {
+          // The 2 MB guard used to reject the FILE, which made this form unusable
+          // from a phone: every camera photo is bigger than that. readImageFile
+          // downscales first (config.js §7c), so the limit now applies to the
+          // result — a 10 MB camera shot lands around 300 KB and is accepted.
+          const acceptImage = async (file) => {
+            if (!file) return null;
+            const r = await globalConfig.readImageFile(file);
+            if (r.bytes > 2 * 1024 * 1024) { alert(t.fileSizeError); return null; }
+            return r.dataUrl;
+          };
+
+          const handleLogoUpload = async (e) => {
             const file = e.target.files[0];
-            if (file) {
-              if (file.size > 2 * 1024 * 1024) { alert(t.fileSizeError); e.target.value = null; return; }
-              const reader = new FileReader();
-              reader.onloadend = () => handleClientChange('logo', reader.result);
-              reader.readAsDataURL(file);
-            }
+            e.target.value = null;
+            const dataUrl = await acceptImage(file);
+            if (dataUrl) handleClientChange('logo', dataUrl);
           };
 
           // --- HANDLERS PRODUCTS ---
@@ -708,14 +726,11 @@
               }
           };
 
-          const handleProductPhotoUpload = (e, id) => {
+          const handleProductPhotoUpload = async (e, id) => {
             const file = e.target.files[0];
-            if (file) {
-              if (file.size > 2 * 1024 * 1024) { alert(t.fileSizeError); e.target.value = null; return; }
-              const reader = new FileReader();
-              reader.onloadend = () => handleProductChange(id, 'photo', reader.result);
-              reader.readAsDataURL(file);
-            }
+            e.target.value = null;
+            const dataUrl = await acceptImage(file);
+            if (dataUrl) handleProductChange(id, 'photo', dataUrl);
           };
 
           // --- HANDLERS SUPPLY CHAIN ---
@@ -954,7 +969,7 @@
 
               {/* HEADER */}
               <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
-                <div className="max-w-5xl mx-auto px-4 md:px-6 py-3 flex items-center gap-4">
+                <div className="max-w-5xl mx-auto px-4 md:px-6 py-3 flex flex-wrap items-center gap-4">
                   <img src={BRAND.logos.default} alt="PerfoTec" className="h-8 md:h-10 object-contain shrink-0" />
                   <div className="flex-1 min-w-0 border-l-2 border-slate-200 pl-4">
                     <h1 className="font-extrabold text-base md:text-xl tracking-tight leading-tight truncate" style={{color: BRAND.colors.blue}}>{t.title}</h1>
@@ -992,7 +1007,7 @@
                 {/* 1. COMPANY DETAILS */}
                 <section className="bg-white p-8 md:p-10 rounded-3xl shadow-sm border border-slate-200 relative overflow-hidden">
                   <div className="absolute top-0 left-0 w-full h-1" style={{ backgroundColor: BRAND.colors.green }}></div>
-                  <div className="flex items-center justify-between border-b-2 border-slate-100 pb-6 mb-8">
+                  <div className="flex flex-wrap items-center justify-between gap-4 border-b-2 border-slate-100 pb-6 mb-8">
                     <div className="flex items-center gap-4">
                       <div className="p-3 bg-green-50 rounded-xl">
                         <Building2 size={28} color={BRAND.colors.green} />
@@ -1117,7 +1132,7 @@
                         <div className="absolute top-0 left-0 w-full h-1" style={{ backgroundColor: BRAND.colors.green }}></div>
                         
                         {/* PRODUCT HEADER */}
-                        <div className="flex items-center justify-between gap-4 border-b-2 border-slate-100 pb-6 mb-8">
+                        <div className="flex flex-wrap items-center justify-between gap-4 border-b-2 border-slate-100 pb-6 mb-8">
                            <div className="flex items-center gap-4">
                              <div className="p-3 bg-green-50 rounded-xl">
                                <PackagePlus size={28} color={BRAND.colors.green} />
