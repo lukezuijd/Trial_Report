@@ -3,8 +3,20 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PerfoTec — GTM Intelligence Dashboard</title>
-    
+    <!-- Named as the page names itself in its own hero, and as the rest of the
+         workflow names its tabs. "GTM Intelligence Dashboard" was the only title
+         in the suite that did not say what the board's last column links to. -->
+    <title>PerfoTec Product Dashboard</title>
+    <meta name="description" content="PerfoTec Product Dashboard — product research, trial results and validation across the freshness workflow.">
+    <meta name="author" content="PerfoTec B.V.">
+    <meta name="theme-color" content="#008837">
+
+    <!-- Montserrat is the brand typeface. Preconnecting shaves the font
+         waterfall so the first paint is already on-brand. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap">
+
     <!-- Tailwind CSS for styling -->
     <!-- The Play CDN defines the global `tailwind` object, so the brand token
          overrides MUST be assigned AFTER it loads. They used to sit before it,
@@ -12,28 +24,15 @@
          PerfoTec palette — the dashboard then rendered in default Tailwind
          blue/green instead of #084BCD / #008837. -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- PerfoTec Brand 2.0 Tailwind token overrides -->
-    <script>
-    tailwind.config = {
-        theme: {
-            extend: {
-                colors: {
-                    blue: {
-                        50:'#F1F6FF', 100:'#e3ecff', 200:'#c3d5f7',
-                        300:'#91b0f0', 400:'#5a85e7', 500:'#2c5fd8',
-                        600:'#084BCD', 700:'#073da6', 800:'#062e7e', 900:'#042057'
-                    },
-                    green: {
-                        50:'#edf8f2', 100:'#d0f0de', 200:'#a3e2be',
-                        300:'#66cc90', 400:'#2db565', 500:'#00a346',
-                        600:'#008837', 700:'#006e2c', 800:'#005422', 900:'#003b18'
-                    }
-                }
-            }
-        }
-    }
-    </script>
-    
+    <!-- PerfoTec Brand 2.0 palette, type and radii for Tailwind. This used to be
+         an inline copy covering only blue and green, which left the ~600 slate
+         surfaces and borders on Tailwind's own neutrals — visibly cooler and
+         greyer than the rest of the workflow. brand.js is now the one source
+         the board and all four tools share, and it also carries the neutral
+         ramp, Montserrat and the 8-12px radius cap. Same ordering rule as
+         before: it must come AFTER the Play CDN, which defines `tailwind`. -->
+    <script src="brand.js?v=e549b527"></script>
+
     <!-- Chart.js for graphs -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
@@ -53,7 +52,10 @@
          It now sits in the hub folder next to board.html, so this is an ordinary
          same-origin sibling and the shared handle follows by construction.
          The ?v= stamp is written by stamp-assets.mjs; do not set it by hand. -->
-    <script src="board-db.js?v=cfe58db6"></script>
+    <!-- This page renders its own Board button in the header, so the shared
+         floating bar that board-db.js injects would be a second, redundant way back. -->
+    <script>window.PERFOTEC_NO_BACK_BUTTON = true;</script>
+    <script src="board-db.js?v=2371f8df"></script>
 
     <!-- Import Maps for modern modules -->
     <script type="importmap">
@@ -69,79 +71,93 @@
     }
     </script>
 
-    <style>
-        /* === PERFOTEC BRAND FONTS === */
-        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap');
+    <!-- The shared foundation the board and the four tools all load: the v2.0
+         tokens, the .pf-* component layer, the a11y focus states, and the touch
+         rules that give every control a 44px target on a phone. The dashboard
+         used to carry a private copy of the tokens and none of the rest, which
+         is most of why it read as a different product. Local rules below still
+         win — this link deliberately sits above them. -->
+    <link rel="stylesheet" href="style.css?v=e8637b4c">
 
-        /* === PerfoTec Brand 2.0 tokens — source: perfotec-brand-tokens.json v2.0 === */
-        :root {
-            /* Core palette */
-            --pf-green:      #008837;  /* PerfoTec Green — brand, contact, sustainability */
-            --pf-blue:       #084BCD;  /* PerfoTec Blue  — primary action, data, features */
-            --pf-charcoal:   #333333;  /* Body & heading text */
-            --pf-ink:        #1A1B1F;  /* Display headlines, dark backgrounds */
-            --pf-mist:       #F7F7F7;  /* Section/card backgrounds */
-            --pf-blue-tint:  #F1F6FF;  /* Soft tech section backgrounds */
-            --pf-cool-gray:  #E4EBF3;  /* Borders, dividers, UI surfaces */
-            /* Legacy aliases (keep for Tailwind arbitrary values still in JSX) */
-            --brand-green:      #008837;
-            --brand-blue:       #084BCD;
-            --brand-dark-blue:  #063aaa;
-            --font-heading: 'Montserrat', Arial, "Helvetica Neue", Helvetica, sans-serif;
-            --font-body:    'Montserrat', Arial, "Helvetica Neue", Helvetica, sans-serif;
+    <style>
+        /* Dashboard-specific styling only. Anything the whole workflow shares —
+           brand tokens, body type, .pf-loading, focus rings — now comes from
+           style.css above. */
+
+        /* style.css hides everything but #print-content when printing, because
+           intake, proposal and report all print through that wrapper. The
+           dashboard has no print view, so on Ctrl+P it would have produced a
+           blank page. Put it back to printing what is on screen. */
+        @media print {
+            body * { visibility: visible !important; }
         }
 
-        body { font-family: 'Montserrat', Arial, "Helvetica Neue", Helvetica, sans-serif; background-color: #F7F7F7; color: #333333; }
+        /* Legacy font classes from the 2023 identity, redirected to Montserrat.
+           Still on 94 call sites; the class names are the only thing left of
+           League Spartan and Inter. */
+        .font-spartan { font-family: var(--font-heading); font-weight: 800; letter-spacing: -0.01em; }
+        .font-inter   { font-family: var(--font-body); }
 
-        /* Redirect legacy font classes to Montserrat */
-        .font-spartan { font-family: 'Montserrat', Arial, "Helvetica Neue", Helvetica, sans-serif; font-weight: 800; letter-spacing: -0.01em; }
-        .font-inter   { font-family: 'Montserrat', Arial, "Helvetica Neue", Helvetica, sans-serif; }
+        /* Product hero — a solid blue feature panel, which is what the guide
+           gives for one: `featurePanel: bg #084BCD, text #FFFFFF`. It was a
+           three-stop diagonal gradient with a dot-pattern overlay, both of
+           which v2.0 retired ("metal gradient / dot-pattern backgrounds →
+           white / mist / blue-tint") and neither of which appears anywhere
+           else in the workflow. */
+        .pf-hero { background-color: var(--pf-blue); }
 
-        /* Hero banner: clean blue instead of dark metal */
-        .bg-metal-gradient { background: linear-gradient(135deg, #084BCD 0%, #063aaa 55%, #052e85 100%); }
-
-        /* Remove skew — replace with rounded corners so buttons feel like the reference suite */
-        .shape-80deg         { transform: none !important; border-radius: 0.625rem; overflow: hidden; }
+        /* Remove skew — replace with rounded corners so buttons feel like the
+           reference suite. 8px is the guide's button radius. */
+        .shape-80deg         { transform: none !important; border-radius: var(--pf-radius); overflow: hidden; }
         .shape-80deg-reverse { transform: none !important; display: flex; align-items: center; justify-content: center; }
 
-        /* Active-step shadow — softer, no horizontal offset */
-        .confident-overlap { box-shadow: 0 4px 24px rgba(8, 75, 205, 0.10); z-index: 20; border-radius: 0.75rem; }
+        /* Active-step lift, on the same shadow scale as the rest of the suite. */
+        .confident-overlap { box-shadow: 0 6px 16px rgba(16, 24, 40, 0.10); z-index: 20; border-radius: var(--pf-radius-card); }
 
-        /* Dot pattern — subtle blue tint to match blue hero */
-        .dot-pattern { background-image: radial-gradient(rgba(255,255,255,0.15) 1.5px, transparent 1.5px); background-size: 24px 24px; }
-
-        /* Scrollbar — slate tones */
+        /* Scrollbar — brand neutrals */
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #084BCD; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #CFD9E6; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: var(--pf-blue); }
 
         textarea { resize: vertical; min-height: 70px; }
 
         /* === PRODUCT-SHEET DESIGN SYSTEM ===================================
            Mirrors the PerfoTec product sheet (perfotec-product-sheet skill) so the
-           dashboard and the sheet read as one document: same card, same eyebrow,
-           same type scale. Tokens copied verbatim from the sheet template. */
+           dashboard and the sheet read as one document.
+
+           Where the sheet template and the workflow suite disagreed, the suite
+           now wins — the dashboard sits inside the workflow, and both derive
+           from the same guide anyway. Two specs moved:
+             - the card shadow, from a 16-40px blur to the one recipe
+               perfotec.com uses under its cards and brand.js installs as
+               Tailwind's `shadow`. The old blur made these cards float well
+               above every other card in the workflow.
+             - the eyebrow, onto the same 600 / .14em tracking as the field
+               labels in intake, proposal and report (UI_CLASSES in config.js).
+               An eyebrow is the most-repeated brand signature on a page; two
+               versions of it read as two products. */
         .ps-card {
-            background: #FFFFFF;
+            background: var(--pf-white);
             border: 1px solid var(--pf-cool-gray);
-            border-radius: 12px;
-            box-shadow: 0 2px 16px rgba(0,0,0,.08);
+            border-radius: var(--pf-radius-card);
+            box-shadow: var(--pf-shadow);
             transition: transform .2s, box-shadow .2s;
         }
-        .ps-card-hover:hover { transform: translateY(-2px); box-shadow: 0 8px 40px rgba(0,0,0,.14); }
+        .ps-card-hover:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(16, 24, 40, 0.10); }
         .ps-eyebrow {
-            font-size: 11px; font-weight: 700; text-transform: uppercase;
-            letter-spacing: .08em; color: var(--pf-blue);
+            font-size: 11px; font-weight: 600; text-transform: uppercase;
+            letter-spacing: .14em; color: var(--pf-blue);
         }
         .ps-title { font-size: 28px; font-weight: 800; color: var(--pf-ink); line-height: 1.2; letter-spacing: -0.01em; }
         .ps-subtitle { font-size: 20px; font-weight: 800; color: var(--pf-ink); line-height: 1.25; }
         .ps-value { font-size: 26px; font-weight: 800; color: var(--pf-ink); line-height: 1.1; }
-        /* Sheet table chrome: solid blue head, zebra rows, blue targets */
-        .ps-table thead tr { background: var(--pf-blue); color: #fff; }
+        /* Sheet table chrome: solid blue head, zebra rows, blue targets — the
+           same treatment .report-table now carries in style.css. */
+        .ps-table thead tr { background: var(--pf-blue); color: var(--pf-white); }
         .ps-table thead th {
-            padding: 12px 16px; font-weight: 700; text-align: left;
-            font-size: 11px; text-transform: uppercase; letter-spacing: .07em; white-space: nowrap;
+            padding: 12px 16px; font-weight: 600; text-align: left;
+            font-size: 11px; text-transform: uppercase; letter-spacing: .14em; white-space: nowrap;
         }
         .ps-table tbody tr { border-bottom: 1px solid var(--pf-cool-gray); }
         .ps-table tbody tr:nth-child(even) { background: var(--pf-mist); }
@@ -149,20 +165,32 @@
         .ps-table tbody td { padding: 12px 16px; vertical-align: top; }
         .ps-target { font-weight: 700; color: var(--pf-blue); }
         .ps-good   { font-weight: 700; color: var(--pf-green); }
-        .ps-warn   { font-weight: 700; color: #c0392b; }
+        .ps-warn   { font-weight: 700; color: #B91C1C; }
 
-        /* Focus ring — matches reference suite */
-        *:focus-visible { outline: 2px solid var(--brand-blue); outline-offset: 2px; }
-
-        /* Excel-like table — slate palette */
-        .excel-table th { background-color: #f8fafc; border: 1px solid #e2e8f0; padding: 8px 12px; font-weight: 700; font-size: 11px; text-transform: uppercase; color: #64748b; white-space: nowrap; }
-        .excel-table td { border: 1px solid #e2e8f0; padding: 0; position: relative; }
-        .excel-table input, .excel-table select { width: 100%; height: 100%; padding: 8px 12px; border: none; outline: none; background: transparent; font-size: 13px; color: #1e293b; font-family: 'Montserrat', sans-serif; }
-        .excel-table input:focus, .excel-table select:focus { background-color: #F1F6FF; box-shadow: inset 0 0 0 2px #084BCD; }
+        /* Excel-like data grid — on the brand neutrals rather than Tailwind's
+           own slate, so it matches every other table in the workflow. */
+        .excel-table th {
+            background-color: var(--pf-mist); border: 1px solid var(--pf-cool-gray);
+            padding: 8px 12px; font-weight: 600; font-size: 11px;
+            text-transform: uppercase; letter-spacing: .14em;
+            color: var(--pf-muted); white-space: nowrap;
+        }
+        .excel-table td { border: 1px solid var(--pf-cool-gray); padding: 0; position: relative; }
+        .excel-table input, .excel-table select {
+            width: 100%; height: 100%; padding: 8px 12px; border: none; outline: none;
+            background: transparent; font-size: 13px; color: var(--pf-charcoal);
+            font-family: var(--font-body);
+        }
+        .excel-table input:focus, .excel-table select:focus {
+            background-color: var(--pf-blue-tint);
+            box-shadow: inset 0 0 0 2px var(--pf-blue);
+        }
     </style>
 </head>
 <body>
-    <div id="root"></div>
+    <div id="root">
+        <div class="pf-loading" role="status">Loading the product dashboard…</div>
+    </div>
 
     <script type="text/babel" data-type="module">
         import React, { useState, useEffect, useRef, useMemo } from 'react';
@@ -172,7 +200,7 @@
             ShieldCheck, AlertCircle, X, Leaf, ShoppingCart, Box, Layers, Database, 
             Calculator, TestTube, ThermometerSnowflake, LineChart, Wind, UploadCloud, Check, FileCheck, Upload,
             Cpu, Link as LinkIcon, Plus, FolderOpen, Loader2, MessageSquare, Briefcase, CheckSquare, Square,
-            Image as ImageIcon, Beaker, Globe, Download, LayoutDashboard, ListTodo, Eye, Table, RefreshCw, Merge, LayoutGrid, Filter, Package, Trash2, Search, StickyNote
+            Image as ImageIcon, Beaker, Globe, Download, LayoutDashboard, ListTodo, Eye, Table, RefreshCw, Merge, LayoutGrid, Filter, Package, Trash2, Search, StickyNote, Info
         } from 'lucide-react';
         
         import { initializeApp } from 'firebase/app';
@@ -285,11 +313,16 @@
                 }
                 if (chartInstance.current) { chartInstance.current.destroy(); chartInstance.current = null; }
                 if (series.length === 0) return;
-                const palette = ['#008837', '#084BCD', '#7c3aed', '#0891b2', '#f59e0b', '#dc2626'];
+                // Same series order as CHART_COLORS in config.js, so a shelf-life
+                // curve here and one in the report tool colour their trials
+                // identically. It was a mix of brand and off-brand hues (cyan,
+                // amber, red) — red especially, which reads as the sellable-limit
+                // line drawn just below. The control stays muted grey and dashed.
+                const palette = ['#008837', '#084BCD', '#1A1B1F', '#5A85E7', '#00A346', '#EA580C'];
                 let ci = 0;
                 const maxDay = Math.max(...series.flatMap(s => s.pts.map(p => p.x)));
                 const datasets = series.map(s => {
-                    const color = s.isControl ? '#94a3b8' : palette[(ci++) % palette.length];
+                    const color = s.isControl ? '#8A97AD' : palette[(ci++) % palette.length];
                     return { type: 'line', label: s.label, data: s.pts, borderColor: color, backgroundColor: color, borderWidth: 2.5, tension: 0.3, pointRadius: 4, borderDash: s.isControl ? [6, 4] : [] };
                 });
                 datasets.push({ type: 'line', label: 'Sellable limit (score 6)', data: [{ x: 0, y: 6 }, { x: maxDay, y: 6 }], borderColor: '#dc2626', borderWidth: 1.5, borderDash: [4, 4], pointRadius: 0 });
@@ -452,12 +485,12 @@
                     const predLabel = hasTarget ? ('Prediction → ' + tgtO2 + '% O₂') : 'Prediction (raw TV/kg)';
                     datasets.push({ type: 'line', label: predLabel, data: lineData, borderColor: '#084BCD', backgroundColor: 'transparent', borderWidth: 2.5, pointRadius: 0, borderDash: [6, 4], fill: false, tension: 0 });
                 }
-                if (tierExcl.length > 0)  datasets.push({ type: 'scatter', label: 'O₂ outside 1–10% (excl.)', data: tierExcl,  backgroundColor: 'rgba(148,163,184,0.3)', borderColor: 'rgba(148,163,184,0.5)', pointRadius: 5, borderWidth: 1   });
-                if (tierGrey.length > 0)  datasets.push({ type: 'scatter', label: 'Unrated',                      data: tierGrey,  backgroundColor: 'rgba(100,116,139,0.5)', borderColor: '#64748b',              pointRadius: 6, borderWidth: 1.5 });
+                if (tierExcl.length > 0)  datasets.push({ type: 'scatter', label: 'O₂ outside 1–10% (excl.)', data: tierExcl,  backgroundColor: 'rgba(138,151,173,0.3)', borderColor: 'rgba(138,151,173,0.5)', pointRadius: 5, borderWidth: 1   });
+                if (tierGrey.length > 0)  datasets.push({ type: 'scatter', label: 'Unrated',                      data: tierGrey,  backgroundColor: 'rgba(102,112,127,0.5)', borderColor: '#66707F',              pointRadius: 6, borderWidth: 1.5 });
                 if (tierRed.length > 0)   datasets.push({ type: 'scatter', label: 'Rating <5',                    data: tierRed,   backgroundColor: 'rgba(220,38,38,0.7)',   borderColor: '#dc2626',              pointRadius: 7, borderWidth: 1.5 });
-                if (tierBlue.length > 0)  datasets.push({ type: 'scatter', label: 'Rating 5–7',              data: tierBlue,  backgroundColor: 'rgba(37,99,235,0.7)',   borderColor: '#2563eb',              pointRadius: 7, borderWidth: 1.5 });
-                if (tierGreen.length > 0) datasets.push({ type: 'scatter', label: 'Rating ≥8',               data: tierGreen, backgroundColor: 'rgba(21,128,61,0.8)',   borderColor: '#15803d',              pointRadius: 8, borderWidth: 2   });
-                if (tierMHP.length > 0)   datasets.push({ type: 'scatter', label: 'MHP (ambient atm.)',       data: tierMHP,   backgroundColor: 'rgba(139,92,246,0.7)',  borderColor: '#7c3aed',              pointRadius: 7, borderWidth: 1.5 });
+                if (tierBlue.length > 0)  datasets.push({ type: 'scatter', label: 'Rating 5–7',              data: tierBlue,  backgroundColor: 'rgba(8,75,205,0.7)',   borderColor: '#084BCD',              pointRadius: 7, borderWidth: 1.5 });
+                if (tierGreen.length > 0) datasets.push({ type: 'scatter', label: 'Rating ≥8',               data: tierGreen, backgroundColor: 'rgba(0,110,44,0.8)',   borderColor: '#006E2C',              pointRadius: 8, borderWidth: 2   });
+                if (tierMHP.length > 0)   datasets.push({ type: 'scatter', label: 'MHP (ambient atm.)',       data: tierMHP,   backgroundColor: 'rgba(234,88,12,0.7)',  borderColor: '#EA580C',              pointRadius: 7, borderWidth: 1.5 });
                 if (tierOpen.length > 0)    datasets.push({ type: 'scatter', label: 'Open (no MAP)',            data: tierOpen,    backgroundColor: 'rgba(234,88,12,0.7)', borderColor: '#c2410c',              pointRadius: 7, borderWidth: 1.5 });
 
                 if (chartInstance.current) chartInstance.current.destroy();
@@ -623,6 +656,64 @@
             return target;
         };
 
+        // Status and rarely-used actions, out of the header. Mirrors InfoPanel on
+        // the Project Board so the two apps behave the same way.
+        const DashInfoPanel = ({ folderName, fileSaveState, dbFileHandle, usingFirebase, onRetry, onSaveAs, onMerge, onClose }) => {
+            const Row = ({ label, children }) => (
+                <div className="px-2 py-2 rounded-lg hover:bg-slate-50">
+                    <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">{label}</span>
+                    {children}
+                </div>
+            );
+            const saving = fileSaveState === 'saving';
+            const failed = fileSaveState === 'error' || fileSaveState === 'needs-permission';
+            const where = usingFirebase ? 'Firestore' : (folderName || dbFileHandle?.name || null);
+            return (
+                <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border border-slate-100 z-50 p-3 text-left">
+                    <div className="flex items-center justify-between mb-1">
+                        <span className="font-bold text-sm text-[#084BCD] font-spartan">Database &amp; status</span>
+                        <button onClick={onClose} className="p-1 rounded hover:bg-slate-100 text-slate-400"><X size={14}/></button>
+                    </div>
+                    <Row label="Where the data lives">
+                        <div className="flex items-center gap-2">
+                            {saving ? <Loader2 size={14} className="shrink-0 animate-spin text-slate-400"/>
+                                    : failed ? <AlertCircle size={14} className="shrink-0 text-amber-600"/>
+                                    : <FolderOpen size={14} className="shrink-0 text-[#008837]"/>}
+                            <span className="flex-1 min-w-0 truncate text-sm font-semibold text-slate-800">{where || 'No folder linked'}</span>
+                            {failed && (
+                                <button onClick={onRetry}
+                                    className="shrink-0 text-[11px] font-bold px-2 py-1 rounded-md border border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100">Retry</button>
+                            )}
+                        </div>
+                        <p className="text-[11px] text-slate-400 mt-1 leading-snug">
+                            {failed ? 'The last save did not go through.'
+                                    : saving ? 'Saving…'
+                                    : where ? 'Products and projects share one database. Changes save automatically.'
+                                    : 'Link the shared folder to save automatically.'}
+                        </p>
+                    </Row>
+                    {!usingFirebase && (
+                        <Row label="Backup copy">
+                            <div className="flex items-center gap-2">
+                                <Download size={13} className="shrink-0 text-slate-400"/>
+                                <span className="flex-1 min-w-0 text-sm text-slate-700">Export the database to a file</span>
+                                <button onClick={onSaveAs}
+                                    className="shrink-0 text-[11px] font-bold px-2 py-1 rounded-md border border-slate-200 text-slate-600 hover:bg-slate-100">Save As…</button>
+                            </div>
+                        </Row>
+                    )}
+                    <Row label="Pipelines">
+                        <div className="flex items-center gap-2">
+                            <Merge size={13} className="shrink-0 text-slate-400"/>
+                            <span className="flex-1 min-w-0 text-sm text-slate-700">Merge two product pipelines</span>
+                            <button onClick={onMerge}
+                                className="shrink-0 text-[11px] font-bold px-2 py-1 rounded-md border border-slate-200 text-slate-600 hover:bg-slate-100">Merge</button>
+                        </div>
+                    </Row>
+                </div>
+            );
+        };
+
         function App() {
             const [user, setUser] = useState(null);
             const [products, setProducts] = useState([]);
@@ -639,6 +730,7 @@
             const [qualityCurveSel, setQualityCurveSel] = useState(null); // null = auto (best practice round); Set = user selection
             const [qualityCurveType, setQualityCurveType] = useState(null); // packaging type to plot; null = chart hidden until a type is clicked
             const [showGlobalSearch, setShowGlobalSearch] = useState(false); // header search overlay
+            const [showDashInfo, setShowDashInfo] = useState(false);          // header info popover
             const [globalSearch, setGlobalSearch] = useState('');
 
             // Ctrl+K / Cmd+K opens the global search
@@ -693,6 +785,13 @@
             const [conflictChoices, setConflictChoices] = useState({});                    // {'tk.fk': 'target'|'source'}
 
             const [activeStepId, setActiveStepId] = useState(1);
+            // Sections the user opened BY HAND. Auto-collapse must never close one
+            // of these: typing the last missing value into a section you
+            // deliberately opened should not yank it shut under the cursor.
+            // Cleared when the product or the workflow step changes — that is the
+            // "…or I navigate somewhere else" half of the rule.
+            const manuallyOpenedRef = useRef(new Set());
+            const selectStep = (id) => { manuallyOpenedRef.current = new Set(); setActiveStepId(id); };
             const [newLinkData, setNewLinkData] = useState({ title: '', url: '', type: 'link' });
             const [newTempInputs, setNewTempInputs] = useState({});
 
@@ -723,6 +822,15 @@
             // When auto-selecting on load, land on the family's "All varieties" aggregate if the
             // product has siblings (multiple varieties), so the dashboard opens on the combined
             // overview by default rather than one arbitrary variety.
+            // Opened for a specific project or product? Then auto-landing on the first
+            // product in the list would show the wrong one — and if the real target
+            // never resolves, leave the user sitting on it believing it is theirs.
+            // Better to show nothing until the right product is known.
+            const opensSomethingSpecific = () => {
+                const q = new URLSearchParams(window.location.search);
+                return !!(q.get('boardProject') || q.get('product'));
+            };
+
             const familyLandingId = (prod, list) => {
                 if (!prod) return null;
                 const fam = (list || products).filter(p => p.name === prod.name && p.state === prod.state);
@@ -735,7 +843,7 @@
                 const unsubscribe = onSnapshot(productsRef, (snapshot) => {
                     const fetchedProducts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                     setProducts(fetchedProducts);
-                    if (!activeProductId && fetchedProducts.length > 0) setActiveProductId(familyLandingId(fetchedProducts[0], fetchedProducts));
+                    if (!activeProductId && fetchedProducts.length > 0 && !opensSomethingSpecific()) setActiveProductId(familyLandingId(fetchedProducts[0], fetchedProducts));
                     setLoading(false);
                 }, (error) => { console.error(error); setLoading(false); });
                 return () => unsubscribe();
@@ -766,7 +874,7 @@
                 // An empty root that has never held products is a first run — offer
                 // to bring the existing database across instead of starting blank.
                 setNeedsProductMigration(!hasStore && records.length === 0);
-                setActiveProductId(prev => prev || (records.length > 0 ? familyLandingId(records[0], records) : null));
+                setActiveProductId(prev => prev || ((records.length > 0 && !opensSomethingSpecific()) ? familyLandingId(records[0], records) : null));
                 setFolderState('ready');
                 setLoading(false);
             };
@@ -952,7 +1060,7 @@
                         else setProducts(prev => prev.map(p => p.id === prevId ? { ...p, formData: prevData } : p));
                         setAutosaveState(null);
                     }
-                    setLocalFormData(activeProduct.formData || {}); setLoadedDataId(activeProduct.id); setExpandedTaskIds(new Set()); setQualityCurveSel(null); setQualityCurveType(null); setDashVarietyFilter('all');
+                    setLocalFormData(activeProduct.formData || {}); setLoadedDataId(activeProduct.id); setExpandedTaskIds(new Set()); manuallyOpenedRef.current = new Set(); setQualityCurveSel(null); setQualityCurveType(null); setDashVarietyFilter('all');
                 }
             }, [activeProduct, loadedDataId]);
 
@@ -1164,7 +1272,15 @@
             const handleDeleteProduct = async (productId) => {
                 const product = products.find(p => p.id === productId);
                 if (!product || product.isAverage) return;
-                const confirmed = window.confirm(`Are you sure you want to delete "${product.name}${product.variety ? ' - ' + product.variety : ''}"? This cannot be undone.`);
+                // Not "cannot be undone" any more: on the shared folder the record is
+                // tombstoned and stays in the board's recycle bin until someone
+                // erases it there on purpose. Firestore has no bin, so say so.
+                const recoverable = !db;
+                const confirmed = window.confirm(`Delete "${product.name}${product.variety ? ' - ' + product.variety : ''}"?
+
+` + (recoverable
+                    ? 'It moves to the recycle bin on the Project Board, with its trial history, and can be restored from there.'
+                    : 'This cannot be undone.'));
                 if (!confirmed) return;
                 if (db) {
                     try { await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', productId)); } catch (e) { console.error(e); }
@@ -1543,6 +1659,10 @@
                     return (en ? en.textContent : el.textContent).trim().replace(/\s+/g, ' ');
                 };
 
+                // Lower safe temperature as stated by the parameter table's own warning cell,
+                // read below in preference to the prose regexes.
+                let nfMinTempText = "";
+
                 if (hasNewPSFormat) {
                     // 1. Card pairs (card-eyebrow → card-value)
                     doc.querySelectorAll('.card').forEach(card => {
@@ -1566,6 +1686,13 @@
                             const m = val.match(/([\d.,]+(?:\s*[-–]\s*[\d.,]+)?)\s*°C/i);
                             if (m) storageTempText = m[0].trim();
                         }
+                        // Critical CO₂ card: ">15,0% CO₂". This is the sheet stating the
+                        // tolerance limit outright, so it outranks anything inferred from a
+                        // warning cell below.
+                        if ((label.includes('critical co') || label.includes('kritieke co') || label.includes('kritische co') || label.includes('crítico')) && !critCO2) {
+                            const m = val.match(/([\d.,]+)/);
+                            if (m) critCO2 = m[1].replace(',', '.');
+                        }
                     });
 
                     // 2. Parameters table (t-param / t-target / t-warn rows)
@@ -1584,24 +1711,40 @@
                             const acpM = wTxt.match(/(?:acp)[^0-9]*([\d.,]+)/i);
                             if (acpM && !acp) acp = acpM[1].replace(',', '.');
                         }
-                        // CO₂ initial burst → use for critCO2 warning threshold
+                        // CO₂ initial burst → a target range only.
                         if ((pLow.includes('co₂') || pLow.includes('co2')) && (pLow.includes('burst') || pLow.includes('initial') || pLow.includes('start') || pLow.includes('startburst'))) {
                             nfCO2BurstText = tTxt;
-                            // Extract FIRST number in the warning (e.g. ">10–15%" → "10", the onset of damage)
-                            const co2WM = wTxt.match(/([\d.,]+)/);
-                            if (co2WM && !critCO2) critCO2 = co2WM[1].replace(',', '.');
                         }
                         // CO₂ steady-state → preferred target
                         if ((pLow.includes('co₂') || pLow.includes('co2')) && pLow.includes('steady')) {
                             nfCO2SteadyText = tTxt;
+                        }
+                        // Critical CO₂ from a warning cell, but ONLY where the warning states
+                        // an upper bound: "> 15,0% = internal browning". This used to take the
+                        // first number in the burst row's warning, which in this template is
+                        // timing text — "24–48 hours after packing" — so Green Beans imported a
+                        // critical CO₂ of 24%. A "<" bound is the opposite claim (Cape
+                        // Gooseberry's "<4,0% = inhibition lost" is where the effect stops, not
+                        // where damage starts) and must not be read as a limit either.
+                        if ((pLow.includes('co₂') || pLow.includes('co2')) && !critCO2) {
+                            const upper = wTxt.replace(/,/g, '.').match(/>\s*([\d.]+)\s*%/);
+                            if (upper) critCO2 = upper[1];
                         }
                         // RH
                         if ((pLow.includes(' rh') || pLow.includes('humidity') || pLow.includes('vochtig') || pLow.includes('relativ')) && !targetRHText) {
                             targetRHText = tTxt;
                         }
                         // Temperature
-                        if ((pLow.startsWith('temp') || pLow.includes('temperat')) && !storageTempText) {
-                            storageTempText = tTxt;
+                        if (pLow.startsWith('temp') || pLow.includes('temperat')) {
+                            if (!storageTempText) storageTempText = tTxt;
+                            // "<5,0 °C = chilling injury · >7,5 °C = senescence" — the lower
+                            // bound is the minimum safe temperature. The template writes the
+                            // threshold BEFORE the words, which the keyword-then-number regex
+                            // further down cannot see: it read forward from "chilling injury"
+                            // and picked up the senescence figure instead (7,5 for Green Beans,
+                            // 7 for Cape Gooseberry, where the answers are 5,0 and 4).
+                            const lo = wTxt.replace(/,/g, '.').match(/<\s*(-?[\d.]+)\s*°?\s*C/i);
+                            if (lo && !nfMinTempText) nfMinTempText = lo[1];
                         }
                     });
                     // Prefer steady-state CO₂ as the MAP target; fall back to burst range
@@ -1627,13 +1770,26 @@
                     if (acpMatch) acp = acpMatch[1].replace(',', '.');
                 }
 
-                let minTemp = "";
+                // The parameter table's own warning cell wins when the sheet has one: it is
+                // the product's stated floor rather than a number scraped out of prose.
+                let minTemp = nfMinTempText;
                 // Only match explicit chilling-injury / cold-tolerance keywords — the old `<` alternative
                 // caused false positives from HTML tags like `<strong>0°C` or `<p>Temp: 10-15°C`.
                 // Fallback: use the lowest value of the storage target temp range.
-                let minTempMatch = fullSearchText.match(/(?:chilling injury|koudeschade|koudebederf|vriesschade|freezing)[^0-9]*([\d.,]+)(?:\s*(?:tot|-)\s*([\d.,]+))?\s*°?C/i) || fullSearchText.match(/(?:onder de|below)\s*([\d.,]+)(?:\s*(?:tot|-)\s*([\d.,]+))?\s*°?C/i);
-                if (minTempMatch) minTemp = minTempMatch[1].replace(',', '.');
-                else if (tempRange.min !== "") minTemp = tempRange.min;
+                let minTempMatch = !minTemp && (
+                    // Threshold stated BEFORE the words: "<5,0 °C = chilling injury". Anchored on
+                    // "<" so it cannot match an HTML tag, and the gap is kept short so it cannot
+                    // reach across a sentence into an unrelated figure.
+                    // Character class deliberately ordered ">" before "<". In the other order
+                    // the two brackets sit adjacent, which publish.mjs's tag-balance check
+                    // reads as an opened JSX fragment and refuses the release over. Identical
+                    // character set either way, so the order is the whole point — do not tidy.
+                    fullSearchText.match(/<\s*(-?[\d.,]+)\s*°?\s*C[^.;><]{0,24}?(?:chilling injury|koudeschade|koudebederf)/i)
+                    || fullSearchText.match(/(?:chilling injury|koudeschade|koudebederf|vriesschade|freezing)[^0-9]*([\d.,]+)(?:\s*(?:tot|-)\s*([\d.,]+))?\s*°?C/i)
+                    || fullSearchText.match(/(?:onder de|below)\s*([\d.,]+)(?:\s*(?:tot|-)\s*([\d.,]+))?\s*°?C/i)
+                );
+                if (!minTemp && minTempMatch) minTemp = minTempMatch[1].replace(',', '.');
+                else if (!minTemp && tempRange.min !== "") minTemp = tempRange.min;
 
                 if (!critCO2) {
                     let critCO2Match = fullSearchText.match(/(?:Critical CO2|Max CO2|Kritische CO2|schade)[^0-9]*([\d.,]+)\s*%/i) || fullSearchText.match(/(?:Afwijking|Deviation|Risico)[^0-9>]*>\s*([\d.,]+)\s*%/i) || fullSearchText.match(/(?:Too high CO2|Te hoge CO2)[^0-9]*([\d.,]+)\s*%/i) || fullSearchText.match(/>\s*([\d.,]+)\s*%\s*(?:CO[₂2]|Veroorzaakt|causes|leidt)/i);
@@ -1651,12 +1807,16 @@
                     else ethyleneClass = "Type 4: Producers (High prod / Low sens.)";
                 }
                 
+                // These two land in <select> fields, so the string has to be one of the options
+                // that field renders or the value is simply not selectable and the field shows
+                // blank — data extracted correctly and then thrown away at the last step.
+                // Kept verbatim in sync with the p1-core-1 / p1-core-4 formGroups above.
                 let vpdSens = "Medium";
-                if (ethSources.match(/shrivel|uitdroging|turgor|dehydrat|verschrompel/i)) vpdSens = "Extreme (Shriveling Risk)";
+                if (ethSources.match(/shrivel|uitdroging|turgor|dehydrat|verschrompel/i)) vpdSens = "Extreme (high shriveling risk)";
                 else if (ethSources.match(/verwelk|droogte/i)) vpdSens = "High";
-                
+
                 let condRisk = "Medium";
-                if (ethSources.match(/botrytis|penicillium|schimmel|mold|rot|condens/i)) condRisk = "High (Requires Anti-Fog/High MVTR)";
+                if (ethSources.match(/botrytis|penicillium|schimmel|mold|rot|condens/i)) condRisk = "High — use anti-fog or high-MVTR film";
                 
                 let primaryT = "Discoloration / Browning";
                 let secondaryT = "None";
@@ -1684,25 +1844,13 @@
 
                 // ── New-format defects (.defect-card grid) ──────────────────────────────
                 // Populates defectData only when the old .data-table path found nothing.
+                // Shared with the attach/pull route via psExtractDefects, so a sheet yields
+                // the same defect matrix however it reaches the dashboard.
                 if (hasNewPSFormat && extractedDefectCount === 0) {
-                    const nfDefectCards = doc.querySelectorAll('.defect-card');
-                    if (nfDefectCards.length > 0) {
-                        extractedDefectCount = nfDefectCards.length;
-                        nfDefectCards.forEach((card, idx) => {
-                            defectData[`defect_${idx}_name`]  = getNewFmtEnText(card.querySelector('.defect-name'));
-                            defectData[`defect_${idx}_cause`] = getNewFmtEnText(card.querySelector('.defect-cause'));
-                            const mhpLines = [], mapLines = [];
-                            card.querySelectorAll('.prev-row').forEach(row => {
-                                const tag = row.querySelector('.prev-tag');
-                                const txt = getNewFmtEnText(row.querySelector('.prev-text'));
-                                if (!tag || !txt) return;
-                                const tagLbl = tag.textContent.trim().toUpperCase();
-                                if (tagLbl === 'MHP') mhpLines.push(txt);
-                                else if (tagLbl === 'MAP') mapLines.push(txt);
-                            });
-                            defectData[`defect_${idx}_mhp`] = mhpLines.join(' | ');
-                            defectData[`defect_${idx}_map`] = mapLines.join(' | ');
-                        });
+                    const nfDefects = psExtractDefects(doc);
+                    if (nfDefects.count > 0) {
+                        extractedDefectCount = nfDefects.count;
+                        Object.assign(defectData, nfDefects.data);
                     }
                 }
 
@@ -1775,52 +1923,18 @@
                 }
 
 
-                // Path 5: New-format spec sheet — .resp-row visual bars and respiration table
-                // The new format lists respiration as ml/kg·h; multiply × 24 → ml/kg/24h.
+                // Path 5: 2026 spec sheet — respiration table, with the .resp-row bar visual
+                // filling any temperature the table does not cover. Shared with the
+                // attach/pull route via psExtractRespiration, which reads the gas and the unit
+                // from the column header: these sheets are not consistent about either
+                // ("CO₂ ml/kg·hr" vs "CO₂ mg/kg·hr" plus "O₂ mg/kg·hr"), and the code this
+                // replaced assumed ml and read the gas off the column position, so every mg
+                // sheet imported at roughly twice its real rate.
                 if (!foundRR && hasNewPSFormat) {
-                    // 5a. Visual bar rows (.resp-row / .resp-val) — most reliable source
-                    doc.querySelectorAll('.resp-row').forEach(row => {
-                        const tempEl = row.querySelector('.resp-temp');
-                        const valEl  = row.querySelector('.resp-val');
-                        if (!tempEl || !valEl) return;
-                        const tM = tempEl.textContent.match(/([\d.,]+)/);
-                        if (!tM) return;
-                        const temp  = parseFloat(tM[1].replace(',', '.'));
-                        const vTxt  = valEl.textContent.trim();
-                        const rrM   = vTxt.match(/([\d.,]+)\s*(?:–|-)\s*([\d.,]+)/) || vTxt.match(/([\d.,]+)/);
-                        if (!rrM) return;
-                        const low  = parseFloat(rrM[1].replace(',', '.'));
-                        const high = rrM[2] ? parseFloat(rrM[2].replace(',', '.')) : low;
-                        const avg  = (low + high) / 2;
-                        if (avg > 0 && avg < 500) {          // sanity: ml/kg·h range
-                            foundRR = true;
-                            const rr24h = (avg * 24).toFixed(1);
-                            rrData[`target_temp${temp}_O2`]  = rr24h;
-                            rrData[`target_temp${temp}_CO2`] = rr24h;
-                        }
-                    });
-                    // 5b. Tabular respiration data (first col = temp °C, second col = O₂ ml/kg·h)
-                    if (!foundRR) {
-                        doc.querySelectorAll('table tbody tr').forEach(row => {
-                            const cells = row.querySelectorAll('td');
-                            if (cells.length < 2) return;
-                            const tM = cells[0].textContent.match(/([\d.,]+)\s*°C/);
-                            if (!tM) return;
-                            const temp = parseFloat(tM[1].replace(',', '.'));
-                            if (rrData[`target_temp${temp}_O2`]) return; // already set by 5a
-                            const rrTxt = cells[1].textContent.trim();
-                            const rrM   = rrTxt.match(/([\d.,]+)\s*(?:–|-)\s*([\d.,]+)/) || rrTxt.match(/([\d.,]+)/);
-                            if (!rrM) return;
-                            const low  = parseFloat(rrM[1].replace(',', '.'));
-                            const high = rrM[2] ? parseFloat(rrM[2].replace(',', '.')) : low;
-                            const avg  = (low + high) / 2;
-                            if (avg > 0 && avg < 500) {
-                                foundRR = true;
-                                const rr24h = (avg * 24).toFixed(1);
-                                rrData[`target_temp${temp}_O2`]  = rr24h;
-                                rrData[`target_temp${temp}_CO2`] = rr24h;
-                            }
-                        });
+                    const nfRR = psExtractRespiration(doc);
+                    if (Object.keys(nfRR).length > 0) {
+                        foundRR = true;
+                        Object.assign(rrData, nfRR);
                     }
                 }
 
@@ -2495,22 +2609,65 @@
                 setActiveProductId(target.id);
             }, [deepLinkProductId, products]);
 
-            // Best-effort: activate a concrete product whose name matches `wantName`.
-            const selectProductByName = (wantName) => {
-                if (!wantName) return false;
-                const norm = s => String(s || '').toLowerCase().replace(/[\s\-()\/]+/g, ' ').trim();
-                const stems = s => norm(s).split(' ').map(w => w.replace(/ies$/, 'y').replace(/(es|s)$/, '')).filter(w => w.length >= 3);
-                const wantStems = stems(wantName);
-                const match = products.find(p => {
-                    const cand = [...stems(p.name), ...stems(p.variety || '')];
-                    return cand.some(c => wantStems.some(a => a === c || a.includes(c) || c.includes(a)));
-                });
-                if (match) { setActiveProductId(match.id); return true; }
-                return false;
-            };
 
             const boardImportDoneRef = useRef(false);
-            const runBoardImport = async () => {
+            // ── PENDING IMPORTS FROM THE BOARD ────────────────────────────────
+            // Dragging a card into the Dashboard column no longer opens this app;
+            // it stamps the card and leaves. So on every open, take whatever is
+            // waiting and load it into the product it is linked to. One at a time:
+            // each import switches the active product, and the effect below waits
+            // for that product's form data before writing.
+            const importedForRef = useRef(null);
+            const pendingQueueRef = useRef([]);
+            const [pendingImports, setPendingImports] = useState([]);
+
+            // Clear the flag on ONE card. writeCard respects the rev rule, so this
+            // cannot trample a change someone made to the rest of the card.
+            const clearImportPending = async (projectId) => {
+                if (!projectId) return;
+                try {
+                    const B = window.PerfoTecBoard;
+                    if (!B || !B.readCard || !B.writeCard) return;   // legacy folder: no cards
+                    const card = await B.readCard(projectId);
+                    if (!card || !card.dashboardImportPending) return;
+                    const next = { ...card };
+                    delete next.dashboardImportPending;
+                    await B.writeCard(next, { baseRev: card.rev });
+                } catch (err) { console.warn('Could not clear the pending-import flag:', err); }
+            };
+
+            // Collect what is waiting, once the products are in memory.
+            useEffect(() => {
+                if (db || folderState !== 'ready' || products.length === 0) return;
+                let cancelled = false;
+                (async () => {
+                    try {
+                        const B = window.PerfoTecBoard;
+                        const manifest = await B.readManifest();
+                        const waiting = (manifest.projects || [])
+                            .filter(p => p && p.dashboardImportPending && p.productId)
+                            .map(p => p.id);
+                        if (!cancelled) { pendingQueueRef.current = waiting; setPendingImports(waiting); }
+                    } catch (err) { /* no folder / unreadable — nothing to do */ }
+                })();
+                return () => { cancelled = true; };
+            }, [db, folderState, products.length]);
+
+            // Run them one after another: start the next only when the previous has
+            // released the importer.
+            useEffect(() => {
+                if (pendingImports.length === 0 || pendingBoardFile || boardImport) return;
+                const nextId = pendingQueueRef.current[0];
+                if (!nextId) return;
+                pendingQueueRef.current = pendingQueueRef.current.slice(1);
+                setPendingImports(pendingQueueRef.current);
+                runBoardImport(nextId);
+            }, [pendingImports, pendingBoardFile, boardImport]);
+
+            // `projectId` defaults to the one in the URL, so the banner button keeps
+            // working; the pending queue below passes an id instead.
+            const runBoardImport = async (projectId) => {
+                const importId = projectId || boardProjectId;
                 try {
                     setBoardImport({ status: 'working' });
                     const B = window.PerfoTecBoard;
@@ -2521,23 +2678,34 @@
                         if (!ok) { setBoardImport({ status: 'need-perm' }); return; }
                     }
                     const manifest = await B.readManifest();
-                    const proj = (manifest.projects || []).find(p => p.id === boardProjectId);
-                    const data = await B.readPhaseFile(boardProjectId, 'report');
+                    const proj = (manifest.projects || []).find(p => p.id === importId);
+                    const data = await B.readPhaseFile(importId, 'report');
                     if (!data) {
                         setBoardImport({ status: 'error', msg: 'No report.json found for this project yet.' });
                         return;
                     }
+                    // The trial goes to the product this project is LINKED to, or it
+                    // does not go anywhere. There used to be a name-matching
+                    // fallback, and it matched on any shared word stem, so "Flat
+                    // Bean" happily landed on "Green Beans" — a trial written into
+                    // the wrong product's history is worse than one not imported.
                     const wantName = (proj && proj.product) || (data.project && data.project.productName) || '';
-                    // A project linked to a product carries its id, so the trial
-                    // lands on exactly the right record. Name matching is only the
-                    // fallback for projects created before the link existed.
-                    const linked = proj && proj.productId && products.find(p => p.id === proj.productId);
-                    if (linked) setActiveProductId(linked.id);
-                    else selectProductByName(wantName);
+                    if (!proj || !proj.productId) {
+                        setBoardImport({ status: 'error', msg: 'This project is not linked to a product yet' +
+                            (wantName ? ' ("' + wantName + '")' : '') + '. Open it, pick the product in the header, and move the card here again.' });
+                        return;
+                    }
+                    const linked = products.find(p => p.id === proj.productId);
+                    if (!linked) {
+                        setBoardImport({ status: 'error', msg: 'The product this project is linked to is no longer in the database, so there is nothing to import into.' });
+                        return;
+                    }
+                    setActiveProductId(linked.id);
                     // Defer the actual import to an effect so it runs after the
                     // product selection has propagated (localFormData in sync).
                     const file = new File([JSON.stringify(data)], 'report.json', { type: 'application/json' });
                     boardImportDoneRef.current = false;
+                    importedForRef.current = importId;
                     setPendingBoardFile(file);
                     setBoardImport({ status: 'importing', wantName });
                 } catch (err) {
@@ -2555,6 +2723,9 @@
                 (async () => {
                     await importTrialFiles([pendingBoardFile]);
                     if (cancelled) return;
+                    // Only now is the trial in the product. Clearing the card's flag
+                    // any earlier would lose the import if this failed halfway.
+                    await clearImportPending(importedForRef.current);
                     setPendingBoardFile(null);
                     setBoardImport(null);
                 })();
@@ -2876,12 +3047,24 @@
                     const allFilled = checkFields.length > 0 && checkFields.every(f => String(updatedData[f.id] ?? '').trim() !== '');
                     if (allFilled) {
                         const alreadyDone = (activeProduct.completedTaskIds || []).includes(taskId);
+                        // Collapsing belongs to the MOMENT a section becomes complete,
+                        // not to the state of being complete. It used to run on every
+                        // keystroke while allFilled stayed true, so changing one value
+                        // in a finished section (an ACP % under an already-filled
+                        // "Measure product respiration", say) closed it again on every
+                        // key. Both guards below have to hold:
+                        //   - alreadyDone: the section was already complete, so nothing
+                        //     just happened worth reacting to.
+                        //   - manuallyOpenedRef: the user opened this themselves and
+                        //     is working in it; it closes when they close it.
                         if (!alreadyDone) {
                             const newCompleted = [...(activeProduct.completedTaskIds || []), taskId];
                             if (db) updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', activeProduct.id), { completedTaskIds: newCompleted });
                             else setProducts(prev => prev.map(p => p.id === activeProduct.id ? {...p, completedTaskIds: newCompleted} : p));
+                            if (!manuallyOpenedRef.current.has(taskId)) {
+                                setExpandedTaskIds(prev => { const n = new Set(prev); n.delete(taskId); return n; });
+                            }
                         }
-                        setExpandedTaskIds(prev => { const n = new Set(prev); n.delete(taskId); return n; });
                     }
                 }
                 if (activeProduct) scheduleAutosave(activeProduct.id);
@@ -2931,7 +3114,11 @@
                         const p = norm(row.querySelector('td.t-param')?.textContent);
                         const target = row.querySelector('td.t-target');
                         if (!p || !target) continue;
-                        if (field.row.every(k => p.includes(k))) return target;
+                        // Each key may offer alternatives separated by "|": the parameter is
+                        // labelled "Relative humidity" in this template but plain "RH" in
+                        // older sheets, and subscripts are not dependable either ("O₂" vs
+                        // "O2"). Every key must match; a key matches on any of its variants.
+                        if (field.row.every(k => k.split('|').some(v => p.includes(v)))) return target;
                     }
                 }
                 return null;
@@ -2981,22 +3168,22 @@
                   fmt: v => `${v}×`,
                   apply: () => {} /* Q10 is calculated from respiration data — never overwritten */ },
                 { key: 'storageTemp', label: 'Optimal storage temperature', unit: '°C',
-                  card: ['optimal storage', 'optimale bewaring', 'almacenamiento'], row: ['temperat'],
+                  card: ['optimal storage', 'optimale bewaring', 'almacenamiento'], row: ['temperat|temp'],
                   dash: fd => { const a = fd['p1-core-3']?.storageTempMin, b = fd['p1-core-3']?.storageTempMax; return (a || b) ? `${a ?? '?'} – ${b ?? '?'}` : ''; },
                   fmt: v => `${v} °C`,
                   apply: (fd, nums) => { if (nums.length) fd['p1-core-3'] = { ...(fd['p1-core-3']||{}), storageTempMin: String(nums[0]), storageTempMax: String(nums[1] ?? nums[0]) }; } },
                 { key: 'o2', label: 'O₂ steady-state target', unit: '%',
-                  row: ['o₂', 'steady'],
+                  row: ['o₂|o2', 'steady'],
                   dash: fd => { const a = fd['p1-core-3']?.targetO2Min, b = fd['p1-core-3']?.targetO2Max; return (a || b) ? `${a ?? '?'} – ${b ?? '?'}` : ''; },
                   fmt: v => `${v}%`,
                   apply: (fd, nums) => { if (nums.length) fd['p1-core-3'] = { ...(fd['p1-core-3']||{}), targetO2Min: String(nums[0]), targetO2Max: String(nums[1] ?? nums[0]) }; } },
                 { key: 'co2', label: 'CO₂ steady-state target', unit: '%',
-                  row: ['co₂', 'steady'],
+                  row: ['co₂|co2', 'steady'],
                   dash: fd => { const a = fd['p1-core-3']?.targetCO2Min, b = fd['p1-core-3']?.targetCO2Max; return (a || b) ? `${a ?? '?'} – ${b ?? '?'}` : ''; },
                   fmt: v => `${v}%`,
                   apply: (fd, nums) => { if (nums.length) fd['p1-core-3'] = { ...(fd['p1-core-3']||{}), targetCO2Min: String(nums[0]), targetCO2Max: String(nums[1] ?? nums[0]) }; } },
                 { key: 'rh', label: 'Relative humidity', unit: '%',
-                  row: ['rh'],
+                  row: ['rh|humid|vochtig'],
                   dash: fd => { const a = fd['p1-core-3']?.targetRHMin, b = fd['p1-core-3']?.targetRHMax; return (a || b) ? `${a ?? '?'} – ${b ?? '?'}` : ''; },
                   fmt: v => `${v}% RH`,
                   apply: (fd, nums) => { if (nums.length) fd['p1-core-3'] = { ...(fd['p1-core-3']||{}), targetRHMin: String(nums[0]), targetRHMax: String(nums[1] ?? nums[0]) }; } },
@@ -3146,6 +3333,54 @@
                     r.field.apply(next, nums(r.sheetText));
                     if (JSON.stringify(next) !== before) applied.push(r.field.label);
                 });
+
+                // The eight numbers above are not everything the sheet knows. Its defect grid
+                // and its respiration-vs-temperature table are exactly what the p1-core-4
+                // matrix and the p1-core-2 register are for, and attaching a sheet used to
+                // leave both untouched — the data was sitting in the file the whole time and
+                // only the upload route ever read it. Same readers as that route.
+                const psDoc = new DOMParser().parseFromString(sheet.html, 'text/html');
+
+                const sheetDefects = psExtractDefects(psDoc);
+                if (sheetDefects.count > 0) {
+                    const c4 = { ...(next['p1-core-4'] || {}) };
+                    // Fill per row, so a matrix that already carries curated defects keeps them
+                    // and only genuinely empty rows are seeded.
+                    let seeded = 0;
+                    for (let i = 0; i < sheetDefects.count; i++) {
+                        if ((c4[`defect_${i}_name`] || '').trim() && onlyEmpty) continue;
+                        ['name', 'cause', 'mhp', 'map'].forEach(part => {
+                            const v = sheetDefects.data[`defect_${i}_${part}`];
+                            if (v) c4[`defect_${i}_${part}`] = v;
+                        });
+                        seeded++;
+                    }
+                    if (seeded > 0) {
+                        c4.defectCount = Math.max(parseInt(c4.defectCount, 10) || 0, sheetDefects.count);
+                        next['p1-core-4'] = c4;
+                        applied.push(`Defect matrix (${seeded} row${seeded === 1 ? '' : 's'})`);
+                    }
+                }
+
+                const sheetRR = psExtractRespiration(psDoc);
+                const rrKeys = Object.keys(sheetRR);
+                if (rrKeys.length > 0) {
+                    const c2 = { ...(next['p1-core-2'] || {}) };
+                    let seeded = 0;
+                    rrKeys.forEach(k => {
+                        // These are target_* keys: the sheet is research, so it never overwrites
+                        // a measured temp*_ value, and a curated target stands unless the user
+                        // asked for a full overwrite.
+                        if (onlyEmpty && String(c2[k] ?? '').trim()) return;
+                        c2[k] = sheetRR[k];
+                        seeded++;
+                    });
+                    if (seeded > 0) {
+                        next['p1-core-2'] = c2;
+                        applied.push(`Respiration targets (${seeded} value${seeded === 1 ? '' : 's'})`);
+                    }
+                }
+
                 if (!applied.length) { setSheetMsg(onlyEmpty ? 'Nothing to pull — every dashboard field already has a value.' : 'Nothing to pull.'); setTimeout(() => setSheetMsg(''), 6000); return; }
                 next['product-sheet'] = { ...sheet, lastSyncedAt: new Date().toISOString() };
                 await psWriteFormData(next);
@@ -3186,6 +3421,19 @@
                 const diffs = rows.filter(r => r.inSheet && r.inDash && !r.same);
                 const pushable = rows.filter(r => r.inDash && !r.same).map(r => r.field.key);
                 const pullable = rows.filter(r => r.inSheet && !r.inDash);
+                // The comparison table covers the eight shared numbers, but the pull also seeds
+                // the defect matrix and the respiration targets. Count those as pullable or the
+                // button sits disabled on a sheet whose only remaining offer is its defect grid.
+                const psSheetDoc = new DOMParser().parseFromString(sheet.html, 'text/html');
+                const extraPullable = (() => {
+                    const c4 = localFormData['p1-core-4'] || {}, c2 = localFormData['p1-core-2'] || {};
+                    const d = psExtractDefects(psSheetDoc);
+                    let n = 0;
+                    for (let i = 0; i < d.count; i++) if (!(c4[`defect_${i}_name`] || '').trim()) n++;
+                    Object.keys(psExtractRespiration(psSheetDoc)).forEach(k => { if (!String(c2[k] ?? '').trim()) n++; });
+                    return n;
+                })();
+                const pullCount = pullable.length + extraPullable;
                 const synced = sheet.lastSyncedAt ? new Date(sheet.lastSyncedAt).toLocaleDateString() : 'never';
 
                 if (compact) {
@@ -3231,10 +3479,10 @@
                                 title="Write the dashboard's trial-validated values into the sheet">
                                 <RefreshCw size={13}/> Update sheet with practice data{pushable.length ? ` (${pushable.length})` : ''}
                             </button>
-                            <button onClick={() => handlePullFromSheet(true)} disabled={!pullable.length || activeProduct.isAverage}
-                                className={`flex items-center gap-2 text-xs font-bold font-spartan uppercase tracking-widest px-4 py-2.5 rounded-lg border transition-colors ${pullable.length && !activeProduct.isAverage ? 'border-[#084BCD] text-[#084BCD] hover:bg-blue-50' : 'border-slate-200 text-slate-400 cursor-not-allowed'}`}
+                            <button onClick={() => handlePullFromSheet(true)} disabled={!pullCount || activeProduct.isAverage}
+                                className={`flex items-center gap-2 text-xs font-bold font-spartan uppercase tracking-widest px-4 py-2.5 rounded-lg border transition-colors ${pullCount && !activeProduct.isAverage ? 'border-[#084BCD] text-[#084BCD] hover:bg-blue-50' : 'border-slate-200 text-slate-400 cursor-not-allowed'}`}
                                 title="Fill empty dashboard fields from the sheet's research values">
-                                <Download size={13}/> Fill empty dashboard fields from sheet{pullable.length ? ` (${pullable.length})` : ''}
+                                <Download size={13}/> Fill empty dashboard fields from sheet{pullCount ? ` (${pullCount})` : ''}
                             </button>
                             {sheetMsg && <span className="text-xs font-bold text-slate-700 flex-1 min-w-[200px]">{sheetMsg}</span>}
                         </div>
@@ -4241,6 +4489,15 @@
                         <h2 className="text-xl font-bold font-spartan mb-2 text-slate-900">{title}</h2>
                         <p className="text-slate-500 text-sm leading-relaxed mb-6">{desc}</p>
                         {children}
+                        {/* These gate screens render INSTEAD of the header, so the header's
+                            Board button is not on the page yet. Without this the first-run
+                            dashboard has no way back — which is exactly the gap the old
+                            floating bar used to cover. Nothing is loaded here, so there is
+                            nothing to flush: a plain link is enough. */}
+                        <a href="board.html" className="mt-6 inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors" title="Back to the Project Board">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
+                            Board
+                        </a>
                     </div>
                 </div>
             );
@@ -4723,10 +4980,40 @@
                         </div>
                     )}
 
-                    <header className="bg-white/90 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40 shadow-sm">
-                        <div className="max-w-[1600px] w-full mx-auto px-6 h-20 flex items-center justify-between">
-                            <div className="flex items-center gap-4 min-w-0 flex-1">
-                                <img src="data:image/png;base64,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" alt="PerfoTec" className="h-7 sm:h-8 lg:h-10 w-auto shrink-0 object-contain"/>
+                    <header className="bg-white/90 backdrop-blur-md border-b border-blue-600/40 sticky top-0 z-40">
+                        {/* py-3 and a h-9 logo, so the masthead stands the same
+                            height as the board's and the three tools'. It was a
+                            fixed h-20 with a taller logo. */}
+                        <div className="max-w-[1600px] w-full mx-auto px-4 md:px-6 py-3 flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
+                                <img src="data:image/png;base64,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" alt="PerfoTec" className="h-7 md:h-9 w-auto shrink-0 object-contain"/>
+                                {/* Back to the board — same button, same place, on every page. A
+                                    button rather than a link because the tools autosave on a debounce:
+                                    goToBoard() flushes pending work first, so the last edit before
+                                    leaving is not dropped. Falls back to a plain navigation if the
+                                    shared layer failed to load. */}
+                                <button type="button"
+                                  onClick={() => {
+                                    const B = window.PerfoTecBoard;
+                                    if (B && B.goToBoard) B.goToBoard();
+                                    else window.location.assign('board.html');
+                                  }}
+                                  className="bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-800 p-2 xl:px-3 xl:py-2 rounded-lg text-xs font-bold transition-all border border-slate-200 flex items-center gap-1.5 whitespace-nowrap shrink-0" title="Back to the Project Board">
+                                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24"><path d="M19 12H5"/><path d="m12 19-7-7 7-7"/></svg>
+                                  <span className="hidden xl:inline">Board</span>
+                                </button>
+                                {/* Page title. Every other tool in the workflow names
+                                    itself here — logo, Board button, a rule, then the
+                                    title in Ink over a tracked uppercase caption. The
+                                    dashboard was the only page that went straight from
+                                    the logo into a control, which is the single thing
+                                    that made it read as a different application. */}
+                                <div className="hidden lg:flex min-w-0 shrink-0 border-l-2 border-slate-200 pl-3 xl:pl-4">
+                                    <div className="min-w-0">
+                                        <h1 className="font-extrabold text-base lg:text-lg xl:text-xl tracking-tight leading-tight truncate text-slate-900">Product Dashboard</h1>
+                                        <p className="text-[10px] xl:text-xs text-slate-500 font-bold uppercase tracking-widest mt-0.5 truncate">Product research &amp; validation</p>
+                                    </div>
+                                </div>
                                 <div className="hidden md:block h-8 w-px bg-slate-200"></div>
                                 <div className="flex items-center gap-3 relative min-w-0">
                                     {showProductPicker && <div className="fixed inset-0 z-[99]" onClick={() => { setShowProductPicker(false); setProductSearch(''); }}/>}
@@ -4803,37 +5090,26 @@
 
                                 <div className="h-6 w-px bg-slate-200 mx-1 hidden xl:block"></div>
 
-                                <button onClick={() => setShowMergeModal(true)} className="hidden xl:flex items-center gap-2 text-sm font-bold font-spartan tracking-widest uppercase text-slate-900 hover:text-blue-600 transition-colors bg-white px-3 py-2 border border-slate-200 shadow-sm rounded-lg hover:bg-slate-50" title="Manually Merge Pipelines">
-                                    <Merge size={16} /> <span className="hidden 2xl:inline">Merge</span>
-                                </button>
-
-                                {/* Where the data lives. The shared folder is the live store;
-                                    it falls back to the legacy linked-file indicator when no
-                                    folder is bound (e.g. opened outside the PerfoTec server). */}
-                                {!db && (
-                                    folderState === 'ready' ? (
-                                        <button onClick={persistProducts}
-                                            className={`hidden lg:flex items-center gap-1.5 text-xs font-bold px-2.5 py-2 rounded-lg border transition-colors ${fileSaveState === 'error' ? 'text-red-700 bg-red-50 border-red-200' : fileSaveState === 'needs-permission' ? 'text-amber-700 bg-amber-50 border-amber-200 hover:bg-amber-100' : fileSaveState === 'saving' ? 'text-slate-500 bg-slate-50 border-slate-200' : 'text-green-700 bg-green-50 border-green-200'}`}
-                                            title={fileSaveState === 'error' ? `Saving to ${folderName} failed — click to retry` : `Products and projects share one database. Changes save automatically to ${folderName}.`}>
-                                            {fileSaveState === 'saving' ? <Loader2 size={14} className="animate-spin"/> : fileSaveState === 'error' || fileSaveState === 'needs-permission' ? <AlertCircle size={14}/> : <FolderOpen size={14}/>}
-                                            <span className="hidden 2xl:inline max-w-[140px] truncate">{fileSaveState === 'error' ? 'Retry save' : folderName}</span>
-                                        </button>
-                                    ) : dbFileHandle ? (
-                                        <button onClick={writeDbToFile}
-                                            className={`hidden lg:flex items-center gap-1.5 text-xs font-bold px-2.5 py-2 rounded-lg border transition-colors ${fileSaveState === 'error' ? 'text-red-700 bg-red-50 border-red-200' : fileSaveState === 'needs-permission' ? 'text-amber-700 bg-amber-50 border-amber-200 hover:bg-amber-100' : fileSaveState === 'saving' ? 'text-slate-500 bg-slate-50 border-slate-200' : 'text-green-700 bg-green-50 border-green-200'}`}
-                                            title={fileSaveState === 'needs-permission' ? `Click to allow automatic saving to ${dbFileHandle.name}` : fileSaveState === 'error' ? `Saving to ${dbFileHandle.name} failed — click to retry` : `Changes save automatically to ${dbFileHandle.name}`}>
-                                            {fileSaveState === 'saving' ? <Loader2 size={14} className="animate-spin"/> : fileSaveState === 'needs-permission' || fileSaveState === 'error' ? <AlertCircle size={14}/> : <CheckCircle2 size={14}/>}
-                                            <span className="hidden 2xl:inline max-w-[140px] truncate">{fileSaveState === 'needs-permission' ? 'Allow auto-save' : fileSaveState === 'error' ? 'Retry save' : dbFileHandle.name}</span>
-                                        </button>
-                                    ) : (
-                                        <span className="hidden 2xl:flex items-center gap-1.5 text-xs font-medium text-slate-400 px-2" title="Load a database (JSON) or use Save As... to link a file — changes then save automatically">
-                                            <AlertCircle size={13}/> No file linked
-                                        </span>
-                                    )
-                                )}
-                                <button onClick={handleSaveDBAs} className="hidden xl:flex items-center gap-2 text-sm font-bold font-spartan tracking-widest uppercase text-slate-900 hover:text-green-700 transition-colors bg-slate-100 px-3 py-2 border border-slate-200 rounded-lg hover:bg-slate-200" title="Save Database As... (after this, changes save to the file automatically)">
-                                    <Download size={16} /> <span className="hidden 2xl:inline">Save As...</span>
-                                </button>
+                                {/* Only what you act on stays in the header: the product you are
+                                    looking at, search, and Import. Where the data lives and how it
+                                    saves is STATUS, and Merge and Save As are reached for rarely —
+                                    all three moved in here so the bar reads at a glance. Same
+                                    arrangement as the Project Board. */}
+                                <div className="relative shrink-0">
+                                    <button onClick={() => setShowDashInfo(v => !v)} title="Database & status"
+                                        className={`p-2 rounded-lg border transition-colors ${showDashInfo ? 'bg-slate-200 border-slate-300 text-slate-800' : 'bg-slate-100 border-slate-200 text-slate-500 hover:bg-slate-200'}`}>
+                                        <Info size={16} />
+                                    </button>
+                                    {showDashInfo && (
+                                        <DashInfoPanel
+                                            folderName={folderName} fileSaveState={fileSaveState}
+                                            dbFileHandle={dbFileHandle} usingFirebase={!!db}
+                                            onRetry={persistProducts}
+                                            onSaveAs={() => { setShowDashInfo(false); handleSaveDBAs(); }}
+                                            onMerge={() => { setShowDashInfo(false); setShowMergeModal(true); }}
+                                            onClose={() => setShowDashInfo(false)} />
+                                    )}
+                                </div>
 
                                 <button onClick={() => { resetModal(); setShowCreateModal(true); }} className="flex items-center gap-2 text-sm font-bold font-spartan tracking-widest uppercase text-white transition-colors bg-blue-600 hover:bg-blue-700 px-3 xl:px-4 py-2 border border-blue-600 rounded-lg shadow-sm shrink-0" title="Import Data">
                                     <UploadCloud size={16} /> <span className="hidden sm:inline">Import Data</span>
@@ -4842,9 +5118,11 @@
                         </div>
                     </header>
 
-                    <div className="bg-metal-gradient text-white relative overflow-hidden py-12">
-                        <div className="absolute inset-0 dot-pattern opacity-10"></div>
-                        <div className={`absolute -right-20 top-0 w-[500px] h-full opacity-20 shape-80deg blur-3xl z-0 pointer-events-none transition-colors duration-1000 ${activeProduct?.state === 'processed' ? 'bg-blue-600' : 'bg-green-600'}`}></div>
+                    {/* Solid blue feature panel. The gradient, the dot-pattern
+                        overlay and the blurred colour glow that used to sit here
+                        were all retired by brand v2.0, and nothing else in the
+                        workflow carries an effect like them. */}
+                    <div className="pf-hero text-white relative overflow-hidden py-12">
                         <div className="max-w-[1600px] w-full mx-auto px-6 relative z-10">
                             <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-8">
                                 <div className="md:w-2/3">
@@ -4867,7 +5145,11 @@
                                     <h2 className="text-3xl md:text-5xl font-spartan font-extrabold mb-4 tracking-tight leading-[1.08] text-white">
                                         {activeProduct ? `${activeProduct.name} — ${activeProduct.state === 'whole' ? 'Whole' : 'Processed'}` : 'No Product Selected'}
                                         {activeProduct && !activeProduct.isAverage && activeProduct.variety ? <span className="text-white/60 font-bold text-2xl md:text-3xl"> · {activeProduct.variety}</span> : ''} <br/>
-                                        <span className={activeProduct?.state === 'processed' ? 'text-blue-300 drop-shadow-md' : 'text-green-300'}>{activeTab === 'dashboard' ? 'Product Dashboard.' : activeTab === 'database' ? 'Database Editor.' : 'Validation Workflow.'}</span>
+                                        {/* One tint for both states. The guide forbids green
+                                            type on blue outright, and the state is already said
+                                            twice above — in the badge and in the heading itself —
+                                            so colour-coding this line carried nothing. */}
+                                        <span className="text-white/75">{activeTab === 'dashboard' ? 'Product Dashboard.' : activeTab === 'database' ? 'Database Editor.' : 'Validation Workflow.'}</span>
                                     </h2>
                                     <div className="flex items-center gap-4 mt-6 text-sm font-spartan uppercase tracking-widest">
                                         <span className="text-white/70">Pipeline Progress:</span>
@@ -4980,7 +5262,7 @@
                                                         return (
                                                             <React.Fragment key={step.id}>
                                                                 {idx > 0 && <div className={`flex-1 h-0.5 mx-2 rounded ${done ? 'bg-[#008837]' : 'bg-slate-200'}`}></div>}
-                                                                <button onClick={() => setActiveStepId(isOpen ? null : step.id)} className="flex flex-col items-center gap-1.5 group shrink-0" title={step.title}>
+                                                                <button onClick={() => selectStep(isOpen ? null : step.id)} className="flex flex-col items-center gap-1.5 group shrink-0" title={step.title}>
                                                                     <span className={`w-9 h-9 rounded-full border-2 flex items-center justify-center text-sm font-spartan font-bold transition-colors group-hover:border-[#084BCD] ${circleCls}`}>
                                                                         {done ? <CheckCircle2 size={18}/> : idx + 1}
                                                                     </span>
@@ -5002,7 +5284,7 @@
 
                                                     return (
                                                         <div key={step.id} className={`relative flex flex-col xl:flex-row bg-white border transition-all duration-300 rounded-xl overflow-hidden ${isActive ? 'confident-overlap' : 'hover:bg-slate-50 border-slate-200 shadow-sm'}`} style={{ borderColor: isActive ? `${themeHex}40` : '' }}>
-                                                            <div className={`xl:w-[20%] p-6 xl:p-8 flex flex-col cursor-pointer border-b xl:border-b-0 xl:border-r border-slate-200/60 shrink-0`} onClick={() => setActiveStepId(isActive ? null : step.id)}>
+                                                            <div className={`xl:w-[20%] p-6 xl:p-8 flex flex-col cursor-pointer border-b xl:border-b-0 xl:border-r border-slate-200/60 shrink-0`} onClick={() => selectStep(isActive ? null : step.id)}>
                                                                 <div className="flex items-center gap-4 mb-5">
                                                                     <div className={`flex items-center justify-center w-12 h-12 shape-80deg shrink-0 transition-colors ${isFullyCompleted ? `${themeBgClass} text-white` : isActive ? 'bg-[#084BCD] text-white' : 'bg-slate-200 text-slate-900'}`}><div className="shape-80deg-reverse">{isFullyCompleted ? <CheckCircle2 size={20} /> : (() => { const IconCmp = step.icon; return <IconCmp size={20} />; })()}</div></div>
                                                                     <div className="flex-1"><span className={`text-[10px] font-spartan font-bold uppercase tracking-widest block mb-1 ${isFullyCompleted ? themeColorClass : 'text-slate-500'}`}>Phase 0{stepIdx + 1}</span><h3 className={`text-lg font-spartan font-bold tracking-tight leading-tight text-slate-900`}>{step.title}</h3></div>
@@ -5029,7 +5311,14 @@
 
                                                                                             return (
                                                                                                 <div key={task.id} className={`flex flex-col border rounded-xl transition-all ${isTaskDone ? 'bg-white shadow-md' : 'bg-white border-slate-200 hover:border-slate-400'}`} style={{ borderColor: isTaskDone ? `${themeHex}40` : '' }}>
-                                                                                                    <div onClick={() => setExpandedTaskIds(prev => { const n = new Set(prev); n.has(task.id) ? n.delete(task.id) : n.add(task.id); return n; })} className="flex items-start gap-4 p-4 cursor-pointer hover:bg-black/5 transition-colors">
+                                                                                                    <div onClick={() => setExpandedTaskIds(prev => {
+                                                                                                        const n = new Set(prev);
+                                                                                                        // Remember that this open/close was the user's doing, so
+                                                                                                        // auto-complete leaves the section alone while they work.
+                                                                                                        if (n.has(task.id)) { n.delete(task.id); manuallyOpenedRef.current.delete(task.id); }
+                                                                                                        else { n.add(task.id); manuallyOpenedRef.current.add(task.id); }
+                                                                                                        return n;
+                                                                                                    })} className="flex items-start gap-4 p-4 cursor-pointer hover:bg-black/5 transition-colors">
                                                                                                         <div onClick={(e) => { e.stopPropagation(); toggleTaskCompletion(task.id, e); }} className={`mt-0.5 shrink-0 hover:scale-110 transition-transform ${isTaskDone ? themeColorClass : 'text-slate-200'}`}>{isTaskDone ? <CheckSquare size={20} /> : <Square size={20} />}</div>
                                                                                                         <div className={`flex flex-col transition-colors ${isTaskDone ? 'opacity-70' : ''}`}><span className={`text-sm font-bold mb-1 ${isTaskDone ? `${themeColorClass} line-through` : 'text-slate-900'}`}>{task.title}</span><span className={`text-sm leading-relaxed ${isTaskDone ? `${themeColorClass} line-through` : 'text-slate-500'}`}>{task.detail}</span></div>
                                                                                                         <div className="ml-auto mt-0.5 flex items-center gap-1.5 shrink-0">
