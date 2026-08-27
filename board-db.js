@@ -492,7 +492,63 @@
         });
     }
 
+    // Tombstone a product: keep the record, stamp it, drop it from the index. It
+    // stops appearing everywhere the index feeds (board, pickers, dashboard) but
+    // the trial history is still on disk and restoreProduct brings it back.
+    // purgeProduct below is the only thing that really erases one.
     function deleteProduct(id) {
+        return readProduct(id).then(function (rec) {
+            if (!rec) return null;
+            rec.deletedAt = new Date().toISOString();
+            return writeProductRecord(rec);
+        }).then(function () {
+            return readProductIndex();
+        }).then(function (idx) {
+            idx.products = (idx.products || []).filter(function (p) { return p.id !== id; });
+            return writeProductIndex(idx);
+        });
+    }
+
+    function restoreProduct(id) {
+        return readProduct(id).then(function (rec) {
+            if (!rec) return null;
+            // Remove the key rather than nulling it, so a restored product is
+            // indistinguishable from one that was never deleted.
+            delete rec.deletedAt;
+            return writeProductRecord(rec).then(function () { return rec; });
+        }).then(function (rec) {
+            if (!rec) return null;
+            return readProductIndex().then(function (idx) {
+                var list = (idx.products || []).filter(function (p) { return p.id !== id; });
+                list.push(productSummary(rec));
+                idx.products = list;
+                return writeProductIndex(idx);
+            });
+        });
+    }
+
+    // Everything in the recycle bin, newest first.
+    function readDeletedProducts() {
+        return listProductIds().then(function (ids) {
+            var out = [];
+            function step(i) {
+                if (i >= ids.length) {
+                    out.sort(function (a, b) { return String(b.deletedAt || '').localeCompare(String(a.deletedAt || '')); });
+                    return out;
+                }
+                return readProduct(ids[i]).then(function (rec) {
+                    if (rec && rec.id && rec.deletedAt) out.push(rec);
+                    return step(i + 1);
+                });
+            }
+            return Promise.resolve(step(0));
+        });
+    }
+
+    // Really erase a product record. Deliberately explicit and never automatic:
+    // nothing in here expires a tombstone on a timer, because a deleter running
+    // unattended is how the thing you wanted back disappears.
+    function purgeProduct(id) {
         return requireGrantedRoot().then(function (root) {
             return getProductsDir(root, false).then(function (dir) {
                 return dir.removeEntry(id + '.json');
@@ -545,7 +601,10 @@
                 function step(i) {
                     if (i >= ids.length) return out;
                     return readProduct(ids[i]).then(function (rec) {
-                        if (rec && rec.id) out.push(rec);
+                        // Skip tombstones: this function also picks up ids that are
+                        // on disk but missing from the index, which is precisely the
+                        // state a deleted product is in.
+                        if (rec && rec.id && !rec.deletedAt) out.push(rec);
                         return step(i + 1);
                     });
                 }
@@ -664,18 +723,12 @@
     var LEAVE_TEXT = {
         en: {
             label: 'Board', title: 'Back to the Project Board', saving: 'Saving…',
-            next: 'Next: {phase}', nextTitle: 'Finish this phase and continue in {phase}',
-            confirmNext: 'Move this project to {phase}?\n\nThe current data is carried forward and {phase} opens next.'
         },
         nl: {
             label: 'Board', title: 'Terug naar het Project Board', saving: 'Opslaan…',
-            next: 'Volgende: {phase}', nextTitle: 'Deze fase afronden en verder in {phase}',
-            confirmNext: 'Dit project naar {phase} verplaatsen?\n\nDe huidige data gaat mee en {phase} wordt geopend.'
         },
         es: {
             label: 'Board', title: 'Volver al Project Board', saving: 'Guardando…',
-            next: 'Siguiente: {phase}', nextTitle: 'Terminar esta fase y continuar en {phase}',
-            confirmNext: '¿Mover este proyecto a {phase}?\n\nLos datos actuales se transfieren y se abrirá {phase}.'
         }
     };
     function leaveText() {
@@ -730,10 +783,13 @@
         return here === 'board.html';
     }
 
-    // ---- Phase handoff ------------------------------------------------------
-    // Finishing a phase used to mean: go back to the board and drag the card.
-    // These helpers let a tool advance the project itself, which is where the
-    // user actually is when the phase is done.
+    // ---- Phase helpers ------------------------------------------------------
+    // Moving a project to the next phase is deliberately ONLY possible on the
+    // board, by dragging the card. The tools used to offer a "Next: <phase>"
+    // button that did it from here too, which meant a phase could change from
+    // two places under two sets of rules. The board owns that decision now.
+    // What is left below are pure helpers: they answer questions, they move
+    // nothing.
 
     function decodeSeg(s) {
         try { return decodeURIComponent(s); } catch (e) { return s; }
@@ -768,59 +824,6 @@
     function currentProjectId() {
         try { return new URLSearchParams(window.location.search).get('boardProject'); }
         catch (e) { return null; }
-    }
-
-    // Carry this phase's data into the next phase, move the card, and open the
-    // next tool. Mirrors the board's own drag-and-drop handoff (copy forward only
-    // when the target has no real content yet) and stamps phaseChangedAt, which
-    // the Pipedrive conflict rule depends on.
-    function advanceToNextPhase() {
-        var cur = currentPhaseKey();
-        var next = cur ? nextPhaseOf(cur) : null;
-        var projectId = currentProjectId();
-        if (!cur || !next || !projectId) return Promise.resolve(false);
-
-        return flushPendingWork(3000).then(function () {
-            // The dashboard imports from the report file; it owns no phase file.
-            if (next.key === 'dashboard') return { fileKey: null };
-            return readPhaseFile(projectId, next.key).then(function (existing) {
-                // Never overwrite a target that already holds real data.
-                if (existing && hasContent(existing)) return { fileKey: next.key };
-                return readProjectData(projectId, cur).then(function (src) {
-                    if (!src || !hasContent(src)) return { fileKey: existing ? next.key : null };
-                    return writePhaseFile(projectId, next.key, src).then(function () {
-                        return { fileKey: next.key };
-                    });
-                });
-            });
-        }).then(function (res) {
-            return readManifest().then(function (manifest) {
-                var list = manifest.projects || [];
-                var idx = -1;
-                for (var i = 0; i < list.length; i++) { if (list[i].id === projectId) { idx = i; break; } }
-                if (idx < 0) return null;
-                var p = list[idx];
-                var files = Object.assign({}, p.files || {});
-                if (res && res.fileKey) files[res.fileKey] = true;
-                var stamp = new Date().toISOString();
-                list[idx] = Object.assign({}, p, {
-                    phase: next.key,
-                    files: files,
-                    phaseChangedAt: stamp,
-                    updatedAt: stamp
-                });
-                manifest.projects = list;
-                return writeManifest(manifest);
-            });
-        }).then(function () {
-            window.location.assign(toolUrl(next, projectId));
-            return true;
-        }).catch(function () {
-            // Never strand the user on a failed handoff: fall back to the board,
-            // where the card can still be dragged by hand.
-            window.location.assign(boardUrl());
-            return false;
-        });
     }
 
     // Flush unsaved work, then navigate to the board.
@@ -858,15 +861,11 @@
             '[data-perfotec-back-to-board]{background:#084BCD;padding-left:13px;' +
             'box-shadow:0 6px 20px rgba(8,75,205,.35)}' +
             '[data-perfotec-back-to-board]:hover{background:#0640ad;box-shadow:0 8px 26px rgba(8,75,205,.45);transform:translateY(-1px)}' +
-            '[data-perfotec-next-phase]{background:#008837;padding-right:13px;' +
-            'box-shadow:0 6px 20px rgba(0,136,55,.35)}' +
-            '[data-perfotec-next-phase]:hover{background:#016b2c;box-shadow:0 8px 26px rgba(0,136,55,.45);transform:translateY(-1px)}' +
-            '[data-ptb-bar] button:focus-visible{outline:3px solid #211A1A;outline-offset:2px}' +
+            '[data-ptb-bar] button:focus-visible{outline:3px solid #1A1B1F;outline-offset:2px}' +
             '[data-ptb-bar] button[disabled]{cursor:progress;opacity:.75;transform:none}' +
             '@media print{[data-ptb-bar],[data-ptb-style]{display:none !important}}' +
             '@media (max-width:520px){[data-ptb-bar]{left:12px;bottom:12px}' +
-            '[data-ptb-bar] button{padding:9px 13px;font-size:12px}' +
-            '[data-perfotec-next-phase] [data-ptb-label]{display:none}}';
+            '[data-ptb-bar] button{padding:9px 13px;font-size:12px}}';
         document.head.appendChild(style);
 
         var bar = document.createElement('div');
@@ -888,45 +887,6 @@
         btn.addEventListener('click', function () { goToBoard(); });
         bar.appendChild(btn);
         document.body.appendChild(bar);
-
-        maybeMountNextPhaseButton(bar, txt);
-    }
-
-    // The forward handoff only makes sense for a board-linked project that still
-    // has a phase to go to, and only once we know the folder is reachable.
-    function maybeMountNextPhaseButton(bar, txt) {
-        var cur = currentPhaseKey();
-        var next = cur ? nextPhaseOf(cur) : null;
-        var projectId = currentProjectId();
-        if (!next || !projectId) return;
-
-        permissionState().then(function (state) {
-            if (state !== 'granted') return;
-            if (bar.querySelector('[data-perfotec-next-phase]')) return;
-
-            var label = txt.next.replace('{phase}', next.label);
-            var title = txt.nextTitle.replace('{phase}', next.label);
-
-            var nb = document.createElement('button');
-            nb.setAttribute('data-perfotec-next-phase', '');
-            nb.setAttribute('type', 'button');
-            nb.className = 'no-print';
-            nb.title = title;
-            nb.setAttribute('aria-label', title);
-            nb.innerHTML =
-                '<span data-ptb-label></span>' +
-                '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
-                'stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-                '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>';
-            nb.querySelector('[data-ptb-label]').textContent = label;
-            nb.addEventListener('click', function () {
-                if (!window.confirm(txt.confirmNext.split('{phase}').join(next.label))) return;
-                nb.disabled = true;
-                nb.querySelector('[data-ptb-label]').textContent = txt.saving;
-                advanceToNextPhase();
-            });
-            bar.appendChild(nb);
-        }).catch(function () { /* no folder → no handoff button */ });
     }
 
     function autoMount() {
@@ -1111,6 +1071,9 @@
     // ---- cards --------------------------------------------------------------
     function cardPath(id) { return [CARDS_DIR, id + '.json']; }
 
+    // Conflict copies found during the last read, so the board can warn instead
+    // of pretending the folder is clean.
+    var _lastArtefacts = [];
     function listCardIds() {
         return IO.list([CARDS_DIR]).then(function (entries) {
             var ids = [], artefacts = [];
@@ -1124,9 +1087,6 @@
         });
     }
 
-    // Conflict copies found during the last read, so the board can warn instead
-    // of pretending the folder is clean.
-    var _lastArtefacts = [];
     function lastSyncArtefacts() { return _lastArtefacts.slice(); }
 
     function readCard(id) {
@@ -1139,15 +1099,38 @@
             return Promise.all(ids.map(function (id) {
                 return readCard(id).then(function (c) {
                     if (!c) return null;
-                    if (!c.id) c.id = id;   // heal a hand-copied file
+                    if (!c.id) { c.id = id; return c; }   // heal a hand-copied file
+                    // A card file is named after the id inside it. When it is not,
+                    // this is not that card — it is a copy of it. SharePoint names
+                    // conflict copies after the PERSON ("p_x-Elisa.json"), which no
+                    // machine-name pattern can catch, and the copy keeps the
+                    // original id. Loading it gave two cards with one id: the
+                    // snapshot could match only one, so the other looked changed on
+                    // every save, was written to the shared id on every save, and
+                    // dragged every unrelated edit into a conflict on that card.
+                    if (c.id !== id) { _lastArtefacts.push(id + '.json'); return null; }
                     return c;
                 }).catch(function () { return null; });
             }));
         }).then(function (cards) {
-            return cards.filter(function (c) {
-                if (!c) return false;
-                return includeDeleted ? true : !c.deletedAt;
+            var byId = {}, kept = [];
+            cards.forEach(function (c) {
+                if (!c) return;
+                if (!includeDeleted && c.deletedAt) return;
+                var prev = byId[c.id];
+                if (!prev) { byId[c.id] = c; kept.push(c); return; }
+                // Belt and braces: two files claiming one id must never both reach
+                // the board, whatever produced them. Keep the newer and report the
+                // other, rather than letting two payloads fight over one file.
+                _lastArtefacts.push(c.id + '.json (duplicate id)');
+                var prevAt = Date.parse(prev.updatedAt || 0) || 0;
+                var thisAt = Date.parse(c.updatedAt || 0) || 0;
+                if (thisAt > prevAt || (thisAt === prevAt && Number(c.rev || 0) > Number(prev.rev || 0))) {
+                    kept[kept.indexOf(prev)] = c;
+                    byId[c.id] = c;
+                }
             });
+            return kept;
         });
     }
 
@@ -1194,8 +1177,19 @@
     function restoreCard(id) {
         return readCard(id).then(function (c) {
             if (!c) return null;
-            c.deletedAt = null;
+            // Remove the key rather than nulling it, so a restored card is
+            // indistinguishable from one that was never deleted.
+            delete c.deletedAt;
             return writeCard(c, { baseRev: c.rev, force: true });
+        });
+    }
+
+    // Tombstoned cards, newest first. The phase files under projects/<id>/ are
+    // never touched by a delete, so a restored card comes back with its work.
+    function readDeletedCards() {
+        return readCards(true).then(function (cards) {
+            return cards.filter(function (c) { return c && c.deletedAt; })
+                .sort(function (a, b) { return String(b.deletedAt).localeCompare(String(a.deletedAt)); });
         });
     }
 
@@ -1295,6 +1289,112 @@
         return IO.remove([PROJECTS_DIR, projectId, LOCK_FILE]).catch(function () { /* best effort */ });
     }
 
+    /* ---- presence -----------------------------------------------------------
+     * Who else has this database open. The advisory lock above answers "is
+     * someone in THIS card"; this answers "who is working in here at all", from
+     * any of the tools, because every page loads this file.
+     *
+     * ONE SMALL FILE PER SESSION, never a shared one. Two people writing the
+     * same file on a OneDrive/SharePoint folder is precisely what produces
+     * conflict copies — the reason cards were split up in schema 2.0. Each
+     * session only ever writes its own file, so there is nothing to collide.
+     *
+     * This is "recently active", NOT real time. A synced folder hands a write to
+     * the other side when it gets round to it, which can be seconds or minutes.
+     * The UI has to say so rather than imply a live user list.
+     * ---------------------------------------------------------------------- */
+    var PRESENCE_DIR = '.presence';
+    var PRESENCE_BEAT_MS = 45 * 1000;
+    var PRESENCE_STALE_MS = 150 * 1000;              // ~3 missed beats
+    var PRESENCE_PRUNE_MS = 24 * 60 * 60 * 1000;     // abandoned file, safe to delete
+    var _presenceTimer = null;
+    var _sessionId = null;
+
+    // Per TAB, and stable across navigation within it, so walking board -> report
+    // -> board stays one presence rather than three. sessionStorage is the only
+    // store with exactly that lifetime.
+    function sessionId() {
+        if (_sessionId) return _sessionId;
+        var rnd = 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+        try {
+            _sessionId = window.sessionStorage.getItem('perfotec_session_id');
+            if (!_sessionId) { _sessionId = rnd; window.sessionStorage.setItem('perfotec_session_id', _sessionId); }
+        } catch (e) { _sessionId = rnd; }
+        return _sessionId;
+    }
+
+    function presencePage() {
+        var here = decodeSeg((window.location.pathname || '').split('/').pop());
+        return here || 'board.html';
+    }
+
+    function touchPresence() {
+        var user = getUserLabel();
+        // No name, no entry: an "unknown" in the list is noise, not information.
+        if (!user) return Promise.resolve(false);
+        return IO.writeJSON([PRESENCE_DIR, sessionId() + '.json'], {
+            user: user, sessionId: sessionId(), page: presencePage(), at: new Date().toISOString()
+        }).then(function () { return true; }).catch(function () { return false; });
+    }
+
+    // Everyone seen recently, ourselves included (the caller decides how to show
+    // that). Never rejects: presence is a nicety and must not break a board load.
+    function readPresence() {
+        return IO.list([PRESENCE_DIR]).then(function (entries) {
+            var files = entries.filter(function (e) { return e.kind === 'file' && /.json$/i.test(e.name); });
+            return Promise.all(files.map(function (f) {
+                return IO.readJSON([PRESENCE_DIR, f.name])
+                    .then(function (rec) { return (rec && rec.at) ? { rec: rec, file: f.name } : null; })
+                    .catch(function () { return null; });
+            }));
+        }).then(function (rows) {
+            var now = Date.now(), live = [], abandoned = [];
+            rows.filter(Boolean).forEach(function (r) {
+                var age = now - new Date(r.rec.at).getTime();
+                if (!(age >= 0)) age = 0;                       // clock skew: treat as now
+                if (age > PRESENCE_PRUNE_MS) { abandoned.push(r.file); return; }
+                if (age > PRESENCE_STALE_MS) return;
+                live.push({
+                    user: r.rec.user || 'unknown', page: r.rec.page || '', at: r.rec.at,
+                    ageMs: age, self: r.rec.sessionId === sessionId()
+                });
+            });
+            // Only files a full day old are swept, so a session on a machine with
+            // a badly set clock can never be deleted out from under someone.
+            abandoned.forEach(function (n) { IO.remove([PRESENCE_DIR, n]).catch(function () { }); });
+            live.sort(function (a, b) { return a.user.localeCompare(b.user) || a.ageMs - b.ageMs; });
+            return live;
+        }).catch(function () { return []; });
+    }
+
+    function releasePresence() {
+        return IO.remove([PRESENCE_DIR, sessionId() + '.json']).catch(function () { /* best effort */ });
+    }
+
+    function startPresence() {
+        if (_presenceTimer) return;
+        var beat = function () {
+            permissionState().then(function (state) {
+                if (state !== 'granted') return;   // no folder bound yet, nothing to announce
+                return touchPresence();
+            }).catch(function () { /* never surface */ });
+        };
+        beat();
+        _presenceTimer = setInterval(beat, PRESENCE_BEAT_MS);
+        // Closing the tab should take the entry with it. Unload writes are not
+        // guaranteed to land, which is what PRESENCE_STALE_MS is really for.
+        window.addEventListener('pagehide', function () { releasePresence(); });
+    }
+
+    function stopPresence() {
+        if (_presenceTimer) { clearInterval(_presenceTimer); _presenceTimer = null; }
+        return releasePresence();
+    }
+
+    // Announce from every page that loads this file, so the list covers the board
+    // AND the tools. Deferred to a task so the module has finished evaluating.
+    setTimeout(startPresence, 0);
+
     // ---- migration: board.json -> cards/ -----------------------------------
     // Idempotent: does nothing once meta.json exists. The original board.json is
     // renamed, not deleted, so a mistake here is recoverable by hand.
@@ -1373,15 +1473,21 @@
                         productManagers: people.productManagers || []
                     })
                 };
-                cards.forEach(function (c) { snap.cards[c.id] = { rev: c.rev, json: JSON.stringify(c) }; });
-                _lastRead = snap;
                 var manifest = {
                     schemaVersion: DB_SCHEMA,
                     isPerfoTecBoard: true,
                     projects: cards,
                     people: { commercials: people.commercials, productManagers: people.productManagers }
                 };
-                return migratePhases(manifest);
+                // migratePhases rewrites phases IN PLACE on these very objects, so
+                // the snapshot has to be taken after it. Taken before, a migrated
+                // card differed from its snapshot from the moment it was read, and
+                // was rewritten on every single save — the same never-converging
+                // write as the duplicate-id case above.
+                migratePhases(manifest);
+                cards.forEach(function (c) { snap.cards[c.id] = { rev: c.rev, json: JSON.stringify(c) }; });
+                _lastRead = snap;
+                return manifest;
             });
         });
     }
@@ -1401,7 +1507,7 @@
                 // Compare without the write-stamped fields, otherwise every card
                 // looks changed on every save.
                 if (before && sameCardPayload(before.json, p)) return;
-                jobs.push(writeCard(p, { baseRev: before ? before.rev : p.rev })
+                jobs.push(writeCardRebasing(p, before)
                     .catch(function (err) {
                         if (err && err.code === 'CONFLICT') { conflicts.push(err); return null; }
                         throw err;
@@ -1423,27 +1529,36 @@
             if (peopleChanged) jobs.push(writePeople(manifest.people, snap.peopleRev));
 
             return trackWrite(Promise.all(jobs).then(function () {
-                if (conflicts.length) {
-                    var e = new Error(conflicts.length === 1
-                        ? conflicts[0].message + '. Reload the board to see their version.'
-                        : conflicts.length + ' cards were changed by someone else while you were editing. Reload the board.');
-                    e.code = 'CONFLICTS';
-                    e.conflicts = conflicts;
-                    throw e;
-                }
-                // Refresh the snapshot so a second save in the same session
-                // diffs against what is now on disk.
-                return readManifest().then(function () { return true; });
+                // Refresh the snapshot BEFORE deciding the outcome. A partly
+                // successful write still moved the folder on: some cards were
+                // written, and people.json may have been too. Throwing without
+                // re-reading left _lastRead describing a folder that no longer
+                // exists, so the NEXT save diffed against stale revs (another
+                // self-conflict) and — worse — writePeople took its rev-mismatch
+                // branch, which merges additively by name: a person just deleted
+                // came back, and a rename left both spellings in the list.
+                return readManifest().then(function () {
+                    if (conflicts.length) {
+                        var e = new Error(conflicts.length === 1
+                            ? conflicts[0].message + '. Reload the board to see their version.'
+                            : conflicts.length + ' cards were changed by someone else while you were editing. Reload the board.');
+                        e.code = 'CONFLICTS';
+                        e.conflicts = conflicts;
+                        throw e;
+                    }
+                    return true;
+                });
             }));
         });
     }
 
     // Field-level compare that ignores the bookkeeping writeCard() stamps.
+    var STAMP_FIELDS = { rev: 1, updatedAt: 1, updatedBy: 1 };
     function sameCardPayload(beforeJson, after) {
         function strip(o) {
             var c = {};
             Object.keys(o || {}).forEach(function (k) {
-                if (k === 'rev' || k === 'updatedAt' || k === 'updatedBy') return;
+                if (STAMP_FIELDS[k]) return;
                 c[k] = o[k];
             });
             return JSON.stringify(c);
@@ -1451,6 +1566,58 @@
         var before;
         try { before = JSON.parse(beforeJson); } catch (e) { return false; }
         return strip(before) === strip(after);
+    }
+
+    // Which fields actually differ between two versions of a card, ignoring the
+    // write stamps. `set` are fields to write, `removed` are fields to drop.
+    function cardFieldDiff(before, after) {
+        var set = {}, removed = [];
+        Object.keys(after || {}).forEach(function (k) {
+            if (STAMP_FIELDS[k]) return;
+            if (JSON.stringify(after[k]) !== JSON.stringify((before || {})[k])) set[k] = after[k];
+        });
+        Object.keys(before || {}).forEach(function (k) {
+            if (STAMP_FIELDS[k]) return;
+            if (!(k in (after || {}))) removed.push(k);
+        });
+        return { set: set, removed: removed, keys: Object.keys(set).concat(removed) };
+    }
+
+    /* Write a card, and REBASE instead of giving up when it moved on disk.
+     *
+     * Every board write is a field-level patch — rename a person on this card,
+     * move its phase, tick an action — never a whole-document replacement. So a
+     * card that changed underneath us is usually not a real conflict: the
+     * Pipedrive sync runs on a schedule and stamps crmSyncedAt/pipedriveDealUrl
+     * on cards nobody is looking at, and the board's snapshot is from whenever it
+     * last read the folder. Failing there produced the worst possible outcome:
+     * the user's edit was dropped AND they were told "someone else was faster —
+     * <their own name> changed this", which nobody can act on.
+     *
+     * So: replay only OUR changed fields onto the version now on disk and write
+     * again against its rev. A genuine conflict — both sides changing the SAME
+     * field — still surfaces, because that is the only case where a person has to
+     * choose. Exactly one retry, so a busy folder cannot spin here.
+     */
+    function writeCardRebasing(card, before) {
+        var baseRev = before ? before.rev : card.rev;
+        return writeCard(card, { baseRev: baseRev }).catch(function (err) {
+            if (!err || err.code !== 'CONFLICT' || !before || !err.theirs) throw err;
+            var beforeObj;
+            try { beforeObj = JSON.parse(before.json); } catch (e) { throw err; }
+            var theirs = err.theirs;
+            var mine = cardFieldDiff(beforeObj, card);
+            if (!mine.keys.length) return theirs;          // nothing of ours to apply
+            var theirChange = cardFieldDiff(beforeObj, theirs);
+            var collides = mine.keys.some(function (k) { return theirChange.keys.indexOf(k) !== -1; });
+            if (collides) throw err;                        // a real disagreement
+            var merged = {};
+            Object.keys(theirs).forEach(function (k) { merged[k] = theirs[k]; });
+            Object.keys(mine.set).forEach(function (k) { merged[k] = mine.set[k]; });
+            mine.removed.forEach(function (k) { delete merged[k]; });
+            merged.id = card.id;
+            return writeCard(merged, { baseRev: Number(theirs.rev || 0) });
+        });
     }
 
     /* ========================================================================
@@ -1566,6 +1733,7 @@
     function skipFromFullCopy(name, kind) {
         if (name === BACKUP_DIR) return true;
         if (name === LOCK_FILE) return true;
+        if (name === PRESENCE_DIR) return true;   // who was online last month is not data
         if (kind === 'file' && isSyncArtefact(name)) return true;
         return false;
     }
@@ -1814,6 +1982,13 @@
         touchLock: touchLock,
         readLock: readLock,
         releaseLock: releaseLock,
+        // Presence: who else has this database open
+        readPresence: readPresence,
+        touchPresence: touchPresence,
+        startPresence: startPresence,
+        stopPresence: stopPresence,
+        sessionId: sessionId,
+        PRESENCE_STALE_MS: PRESENCE_STALE_MS,
         readLegacyManifest: readLegacyManifest,
         // Backups
         BACKUP_DIR: BACKUP_DIR,
@@ -1845,6 +2020,10 @@
         writeProduct: writeProduct,
         writeProductRecord: writeProductRecord,
         deleteProduct: deleteProduct,
+        restoreProduct: restoreProduct,
+        readDeletedProducts: readDeletedProducts,
+        purgeProduct: purgeProduct,
+        readDeletedCards: readDeletedCards,
         listProductIds: listProductIds,
         hasProductStore: hasProductStore,
         importProductBackup: importProductBackup,
@@ -1860,7 +2039,6 @@
         // Phase handoff
         currentPhaseKey: currentPhaseKey,
         nextPhaseOf: nextPhaseOf,
-        toolUrl: toolUrl,
-        advanceToNextPhase: advanceToNextPhase
+        toolUrl: toolUrl
     };
 })();
