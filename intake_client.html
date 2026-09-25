@@ -24,7 +24,7 @@
     
     <!-- LOAD CENTRAL STYLING & CONFIGURATION -->
     <link rel="stylesheet" href="style.css?v=e8637b4c">
-    <script src="config.js?v=8d659a19"></script>
+    <script src="config.js?v=7b34913e"></script>
 
     <!-- Print rules live in style.css so Intake, Proposal and Report share one source. -->
 </head>
@@ -36,7 +36,7 @@
         </div>
     </div>
 
-    <script type="text/babel" data-type="module">
+    <script type="text/babel" data-type="module" data-presets="react">
         import React, { useState, useRef, useEffect } from 'https://esm.sh/react@18.2.0';
         import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
         import { 
@@ -251,6 +251,10 @@
           ? globalConfig.convertValue.bind(globalConfig)
           : ((val) => val);
 
+        // One decimal at most, without floating-point noise: 0.25+0.5+0.2+0.6
+        // is 1.5499999999999998 in binary and used to print in full. Read as the
+        // 1.55 it is, it rounds to 1.6 (toPrecision(12) drops the noise first).
+        const round1 = (n) => Math.round(Number((n * 10).toPrecision(12))) / 10;
         // --- COMPONENT: PRODUCT SUPPLY CHAIN FLOW (Visualizer for PDF) ---
         const ProductSupplyChainFlow = ({ chain, unitSystem, t, lang }) => {
           if (!chain || chain.length === 0) return null;
@@ -272,7 +276,8 @@
                 cumulativeMin += minD;
                 cumulativeMax += maxD;
                 
-                const cumStr = cumulativeMin === cumulativeMax ? `${cumulativeMin}` : `${cumulativeMin}-${cumulativeMax}`;
+                const shownMin = round1(cumulativeMin), shownMax = round1(cumulativeMax);
+                const cumStr = shownMin === shownMax ? `${shownMin}` : `${shownMin}-${shownMax}`;
 
                 return (
                   <React.Fragment key={idx}>
@@ -339,10 +344,15 @@
               const url = URL.createObjectURL(blob);
               const downloadLink = document.createElement("a");
               document.body.appendChild(downloadLink);
-              downloadLink.href = URL.createObjectURL(blob);
+              downloadLink.href = url;
               downloadLink.download = `Intake_${clientInfo.companyName || 'Client'}.doc`;
               downloadLink.click();
               document.body.removeChild(downloadLink);
+              // Release it: an object URL pins the whole blob in memory until
+              // the page unloads, and this print-content blob carries the logo and
+              // every product photo as base64. The JSON export a few lines down
+              // already revokes; this one made TWO urls and freed neither.
+              URL.revokeObjectURL(url);
           };
 
           return (

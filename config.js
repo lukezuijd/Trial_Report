@@ -100,6 +100,68 @@ window.PERFOTEC_CONFIG = {
         { stroke: '#00A346', fill: '#D0F0DE', name: 'Light Green Accent' }
     ],
 
+    // === RICH TEXT SANITISER ===
+    // Proposal and Report both render stored rich text through React's
+    // dangerouslySetInnerHTML, which does not sanitise anything. React performs a
+    // plain innerHTML assignment on a live node, so a bare <script> stays inert
+    // but every event-handler attribute fires: `<img src=x onerror=...>` and
+    // `<details open ontoggle=...>` both execute (verified, not assumed).
+    //
+    // That matters because proposal and report JSON live in a SHARED OneDrive
+    // folder. Anyone who can write a file there can plant markup that runs in the
+    // next colleague's browser — a browser holding a granted File System Access
+    // handle to the whole database folder. The usual way it gets in is not malice
+    // but PASTE: contentEditable inserts the clipboard's HTML verbatim, so
+    // pasting from a web page drags that page's markup in with it.
+    //
+    // The editor toolbar offers exactly four commands — bold, italic, underline,
+    // insertUnorderedList — so the allowlist below costs nothing a user could
+    // actually have typed.
+    //
+    // Allowed elements are rebuilt WITHOUT attributes (that is what kills the
+    // handlers); disallowed elements are unwrapped so their text survives; only
+    // script/style/frame-like elements are dropped whole. Idempotent, so running
+    // it on both write and read is safe.
+    RICH_TEXT_ALLOWED_TAGS: { B: 1, STRONG: 1, I: 1, EM: 1, U: 1, UL: 1, OL: 1, LI: 1, BR: 1, P: 1, DIV: 1, SPAN: 1 },
+    RICH_TEXT_DROP_WHOLE: { SCRIPT: 1, STYLE: 1, IFRAME: 1, OBJECT: 1, EMBED: 1, TEMPLATE: 1, NOSCRIPT: 1 },
+
+    sanitizeRichText: function (html) {
+        if (html == null || html === '') return '';
+        const ALLOWED = this.RICH_TEXT_ALLOWED_TAGS;
+        const DROP = this.RICH_TEXT_DROP_WHOLE;
+
+        // DOMParser builds an inert document: nothing loads, nothing fires while
+        // we inspect it. Assigning to a detached div's innerHTML would NOT be
+        // safe here — the image request starts as soon as it parses.
+        const doc = new DOMParser().parseFromString('<body>' + String(html) + '</body>', 'text/html');
+        const out = doc.createElement('div');
+
+        (function walk(from, to) {
+            let node = from.firstChild;
+            while (node) {
+                const next = node.nextSibling;
+                if (node.nodeType === 3) {
+                    to.appendChild(doc.createTextNode(node.nodeValue));
+                } else if (node.nodeType === 1) {
+                    const tag = node.tagName;
+                    if (DROP[tag]) {
+                        // dropped with its subtree
+                    } else if (ALLOWED[tag]) {
+                        const clean = doc.createElement(tag.toLowerCase());
+                        to.appendChild(clean);
+                        walk(node, clean);
+                    } else {
+                        walk(node, to);   // unwrap: keep the words, lose the tag
+                    }
+                }
+                // comments and anything else: dropped
+                node = next;
+            }
+        })(doc.body, out);
+
+        return out.innerHTML;
+    },
+
     // === 1b. SHARED UI CLASS STRINGS (Tailwind) ===
     // Single source of truth for input/label classes across Intake, Proposal,
     // and Report. Pages alias these into their local `inputClass` / `labelClass`

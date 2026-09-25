@@ -33,6 +33,151 @@
     // is silently skipped instead of crashing the import. Returns a
     // partial-update object that the caller merges into project state.
 
+    // Parse the restricted object-literal subset a product sheet's
+    // `const translations = {...}` actually uses — nested objects, identifier
+    // or quoted keys, single/double/backtick strings, numbers, booleans, null,
+    // arrays, trailing commas, // and /* */ comments — and nothing else.
+    //
+    // This exists so an imported sheet is treated as DATA. Anything outside
+    // that subset (a function call, a template interpolation, a getter, a bare
+    // identifier, a statement after the object) throws instead of running.
+    // Returns a plain object, so every consumer behaves exactly as it did when
+    // this was eval'd; `__proto__` is the one key never assigned, which is the
+    // only one that could reach Object.prototype.
+    const parseObjectLiteral = (src) => {
+        let i = 0;
+        const err = (m) => { throw new SyntaxError(m + ' at index ' + i); };
+
+        const ws = () => {
+            for (;;) {
+                while (i < src.length && /\s/.test(src[i])) i++;
+                if (src[i] === '/' && src[i + 1] === '/') { while (i < src.length && src[i] !== '\n') i++; continue; }
+                if (src[i] === '/' && src[i + 1] === '*') {
+                    i += 2;
+                    while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) i++;
+                    if (i >= src.length) err('unterminated comment');
+                    i += 2; continue;
+                }
+                return;
+            }
+        };
+
+        const ESC = { n: '\n', t: '\t', r: '\r', b: '\b', f: '\f', v: '\v', '0': '\0' };
+
+        const readString = () => {
+            const q = src[i++];
+            let out = '';
+            while (i < src.length) {
+                const c = src[i];
+                if (c === '\\') {
+                    const e = src[i + 1];
+                    if (e === 'u') {
+                        if (src[i + 2] === '{') {
+                            const end = src.indexOf('}', i + 3);
+                            if (end === -1) err('bad unicode escape');
+                            out += String.fromCodePoint(parseInt(src.slice(i + 3, end), 16));
+                            i = end + 1;
+                        } else {
+                            out += String.fromCharCode(parseInt(src.substr(i + 2, 4), 16));
+                            i += 6;
+                        }
+                        continue;
+                    }
+                    if (e === 'x') { out += String.fromCharCode(parseInt(src.substr(i + 2, 2), 16)); i += 4; continue; }
+                    if (e === '\n') { i += 2; continue; }   // line continuation
+                    out += (e in ESC) ? ESC[e] : e;
+                    i += 2; continue;
+                }
+                if (c === q) { i++; return out; }
+                // `${...}` inside a template literal is code, not data.
+                if (q === '`' && c === '$' && src[i + 1] === '{') err('template interpolation is not allowed');
+                out += c; i++;
+            }
+            err('unterminated string');
+        };
+
+        const readIdent = () => {
+            const start = i;
+            while (i < src.length && /[A-Za-z0-9_$]/.test(src[i])) i++;
+            if (i === start) err('expected a key');
+            return src.slice(start, i);
+        };
+
+        const readNumber = () => {
+            const start = i;
+            if (src[i] === '+' || src[i] === '-') i++;
+            while (i < src.length && /[0-9a-fA-FxXoObB.eE+_]/.test(src[i])) i++;
+            const raw = src.slice(start, i).replace(/_/g, '');
+            const n = Number(raw);
+            if (Number.isNaN(n)) err('bad number "' + raw + '"');
+            return n;
+        };
+
+        let depth = 0;
+        const MAX_DEPTH = 64;   // a real sheet nests 2 deep; this only stops a hostile file
+
+        const value = () => {
+            ws();
+            if (i >= src.length) err('unexpected end of input');
+            const c = src[i];
+            if (c === '{') return object();
+            if (c === '[') return array();
+            if (c === '"' || c === "'" || c === '`') return readString();
+            if (/[0-9+\-.]/.test(c)) return readNumber();
+            if (src.startsWith('true', i)) { i += 4; return true; }
+            if (src.startsWith('false', i)) { i += 5; return false; }
+            if (src.startsWith('null', i)) { i += 4; return null; }
+            if (src.startsWith('undefined', i)) { i += 9; return undefined; }
+            err('unexpected character "' + c + '"');
+        };
+
+        const array = () => {
+            if (++depth > MAX_DEPTH) err('nesting too deep');
+            i++;
+            const out = [];
+            for (;;) {
+                ws();
+                if (src[i] === ']') { i++; depth--; return out; }
+                out.push(value());
+                ws();
+                if (src[i] === ',') { i++; continue; }
+                if (src[i] === ']') { i++; depth--; return out; }
+                err('expected "," or "]"');
+            }
+        };
+
+        const object = () => {
+            if (++depth > MAX_DEPTH) err('nesting too deep');
+            i++;
+            const out = {};
+            for (;;) {
+                ws();
+                if (src[i] === '}') { i++; depth--; return out; }
+                let key;
+                const c = src[i];
+                if (c === '"' || c === "'" || c === '`') key = readString();
+                else if (/[0-9]/.test(c)) key = String(readNumber());
+                else key = readIdent();
+                ws();
+                if (src[i] !== ':') err('expected ":" after key "' + key + '"');
+                i++;
+                const v = value();
+                if (key !== '__proto__') out[key] = v;
+                ws();
+                if (src[i] === ',') { i++; continue; }
+                if (src[i] === '}') { i++; depth--; return out; }
+                err('expected "," or "}"');
+            }
+        };
+
+        ws();
+        if (src[i] !== '{') err('expected an object literal');
+        const result = object();
+        ws();
+        if (i !== src.length) err('trailing characters after the object');
+        return result;
+    };
+
     // Extract the inline `const translations = { nl: {}, en: {...}, es: {...} };`
     // object literal from the product-sheet script. Uses balanced-brace
     // walking so we don't trip over nested objects, and skips over
@@ -61,9 +206,16 @@
       }
       const objLit = htmlText.substring(braceStart, i);
       try {
-        // Object literal evaluation — the source is user-supplied but
-        // local to their machine; same trust level as the imported file.
-        return new Function('return ' + objLit)();
+        // Parsed as data, never executed. This used to be
+        // new Function('return ' + objLit)(), which runs whatever the file
+        // contains: a sheet that had picked up `{a:(function(){...})()}`
+        // — from a compromised template, a mail attachment, or an edit by
+        // anyone with write access to the Product Sheets folder — got the
+        // same privileges as the tool itself, including the user's granted
+        // handle to the whole database folder. parseObjectLiteral accepts
+        // only the literal subset a real sheet uses and throws on anything
+        // else, which lands in the same catch as before.
+        return parseObjectLiteral(objLit);
       } catch (e) {
         return null;
       }
@@ -73,9 +225,15 @@
     // <span>, <br>, …). Returns plain text with whitespace collapsed.
     const stripHtml = (html) => {
       if (!html) return '';
-      const tmp = document.createElement('div');
-      tmp.innerHTML = String(html);
-      return tmp.textContent.replace(/\s+/g, ' ').trim();
+      // DOMParser builds an inert document: no scripts run and no resources
+      // load, so an <img src=x onerror=...> smuggled into a translation value
+      // stays text. Assigning to a detached div's innerHTML does NOT protect
+      // against that — the image request starts on parse and fires onerror even
+      // though the node was never appended. Every other sheet reader in this
+      // app (dashboard.html, the V2 path below) already uses DOMParser; this
+      // was the one outlier.
+      const doc = new DOMParser().parseFromString(String(html), 'text/html');
+      return (doc.body.textContent || '').replace(/\s+/g, ' ').trim();
     };
 
     // Sheets write numbers in Dutch notation with en-dash ranges
@@ -345,6 +503,30 @@
         return out;
     }
 
+    // Letters and digits only, so "Bimi®Broccolini" and "bimi broccolini" are
+    // the same name.
+    function normName(s) {
+        return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    }
+
+    // Alternative product names, cleaned for use: trimmed, no blanks, no
+    // duplicates, never a repeat of the product's own name. Mirrors
+    // board-db.js's cleanAliases — this file also runs without the board layer
+    // (file:// fallback), so it cannot borrow it.
+    function cleanAliases(list, ownName) {
+        var seen = {};
+        var own = normName(ownName);
+        if (own) seen[own] = true;
+        return (Array.isArray(list) ? list : []).map(function (a) {
+            return String(a || '').trim();
+        }).filter(function (a) {
+            var k = normName(a);
+            if (!k || seen[k]) return false;
+            seen[k] = true;
+            return true;
+        });
+    }
+
     // Flatten a stored product record into what a form needs. Everything the
     // dashboard validated through trials lives under formData.
     function normaliseProduct(p) {
@@ -358,6 +540,9 @@
             id: p.id,
             label: label,
             name: p.name || '',
+            // The other names this product is sold under. Searched everywhere,
+            // displayed nowhere: the label above stays what the form shows.
+            aliases: cleanAliases(p.aliases, p.name),
             variety: p.variety || '',
             state: p.state || '',
             hasSheet: !!sheet.html,
@@ -373,12 +558,31 @@
         };
     }
 
+    // An alternative name belongs to the PRODUCT, not to one of its varieties:
+    // "Flat Beans" means Romano Beans whichever variety was typed up. So every
+    // record sharing a name answers to the union of that name's aliases, even
+    // if they were only ever entered on one variety row.
+    function shareAliasesPerName(list) {
+        var byName = {};
+        list.forEach(function (p) {
+            var k = normName(p.name);
+            if (!k) return;
+            byName[k] = (byName[k] || []).concat(p.aliases || []);
+        });
+        return list.map(function (p) {
+            var pooled = byName[normName(p.name)];
+            if (!pooled || !pooled.length) return p;
+            p.aliases = cleanAliases(pooled, p.name);
+            return p;
+        });
+    }
+
     // "All varieties" is a read-only aggregate in the dashboard, never a real
     // product — it has no data of its own to offer.
     function usableProducts(list) {
-        return (list || [])
+        return shareAliasesPerName((list || [])
             .filter(function (p) { return p && p.id && !p.isAverage; })
-            .map(normaliseProduct)
+            .map(normaliseProduct))
             .sort(function (a, b) {
                 if (a.hasSheet !== b.hasSheet) return a.hasSheet ? -1 : 1;
                 return a.label.localeCompare(b.label);
@@ -417,22 +621,79 @@
      * MATCHING & CREATION
      * ==================================================================== */
 
-    function normName(s) {
-        return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-    }
-
     // Does this typed name correspond to a product in the list? Compares on
     // letters and digits only, so "Bimi®Broccolini" and "bimi broccolini" are
-    // the same product. Full label first, then the bare name.
+    // the same product. Full label first, then the bare name, then the product's
+    // alternative names — with and without the variety, so both "Flat Beans"
+    // and "Flat Beans Marconi" find Romano Beans Marconi.
+    //
+    // The product comes back whole, so the caller goes on to show its MAIN name:
+    // an alias gets you to the product, it never becomes what the form says.
     function matchProduct(name, list) {
         var want = normName(name);
         if (!want) return null;
-        var byLabel = null, byName = null;
+        var byLabel = null, byName = null, byAlias = null;
         (list || []).forEach(function (p) {
             if (!byLabel && normName(p.label) === want) byLabel = p;
             if (!byName && normName(p.name) === want) byName = p;
+            if (!byAlias) {
+                var variety = normName(p.variety);
+                (p.aliases || []).forEach(function (a) {
+                    if (byAlias) return;
+                    var alias = normName(a);
+                    if (alias && (alias === want || alias + variety === want)) byAlias = p;
+                });
+            }
         });
-        return byLabel || byName || null;
+        return byLabel || byName || byAlias || null;
+    }
+
+    // Which of a product's names did this text match? Empty when it matched the
+    // main name (or nothing) — the forms use it to say "recognised X as Y".
+    function matchedAlias(name, prod) {
+        var want = normName(name);
+        if (!want || !prod) return '';
+        if (want === normName(prod.label) || want === normName(prod.name)) return '';
+        var variety = normName(prod.variety);
+        var hit = '';
+        (prod.aliases || []).forEach(function (a) {
+            if (hit) return;
+            var alias = normName(a);
+            if (alias && (alias === want || alias + variety === want)) hit = a;
+        });
+        return hit;
+    }
+
+    // Every name a product answers to, main name first — what a picker or a
+    // datalist offers the user.
+    function productNames(prod) {
+        return [(prod && prod.name) || ''].concat((prod && prod.aliases) || []).filter(Boolean);
+    }
+
+    // The extra rows a product picker lists beneath the products themselves: one
+    // per alternative name, each pointing back at the product it belongs to. A
+    // datalist filters on the option VALUE, so the alias has to be the value for
+    // typing "Flat Beans" to surface anything at all — the label then says which
+    // product it will actually select, and picking it fills in that product's
+    // own name.
+    //
+    // One row per alias per product NAME — not per variety. An alias belongs to
+    // the product, so listing "Flat Beans" once for every variety of Romano
+    // Beans would bury the list, and naming one of those varieties in the row
+    // would be picking one arbitrarily. Two DIFFERENT products claiming the same
+    // alias both stay, so the clash is visible instead of silently resolved.
+    function aliasEntries(list) {
+        var seen = {};
+        var out = [];
+        (list || []).forEach(function (p) {
+            (p.aliases || []).forEach(function (a) {
+                var key = normName(a) + '|' + normName(p.name);
+                if (!a || seen[key]) return;
+                seen[key] = true;
+                out.push({ key: key, alias: a, name: p.name });
+            });
+        });
+        return out.sort(function (a, b) { return a.alias.localeCompare(b.alias); });
     }
 
     // Add a product to the shared database and return it normalised. Requires a
@@ -548,6 +809,10 @@
         usableProducts: usableProducts,
         // Selection
         matchProduct: matchProduct,
+        matchedAlias: matchedAlias,
+        productNames: productNames,
+        aliasEntries: aliasEntries,
+        cleanAliases: cleanAliases,
         createProduct: createProduct,
         identityPatch: identityPatch,
         targetPatch: targetPatch,

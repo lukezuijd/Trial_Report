@@ -55,6 +55,15 @@ perfotec_proposal_*.json
 perfotec_report_*.json
 _backups/
 
+# Import files the trial-import skill builds from legacy trial documents.
+# Customer data twice over: the trial results inside, and the customer names in
+# the filenames themselves ("Fair Fruit Report No.06", "Bpack Mr Lucky HEB").
+# They are derived — the source documents are on the K drive — so committing
+# them would put customer data in the history permanently, and history is the
+# one place it cannot be taken out of again, to preserve something that can
+# simply be generated a second time.
+dashboard-import/
+
 # --- OS / editor noise ----------------------------------------------------
 desktop.ini
 Thumbs.db
@@ -75,3 +84,10 @@ node_modules/
 *-fakefs.js
 *-old.html
 *-test.html
+
+# --- Local document copies ------------------------------------------------
+# Working copies of the blank intake form (NL/EN/ES). Not customer data — these
+# are the empty templates — but they are binary .docx that belong with the
+# documents rather than in a repository of static pages, and a copy tracked here
+# would quietly go stale against the one people actually send out.
+Klant-intakeformulieren/

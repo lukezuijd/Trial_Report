@@ -52,6 +52,17 @@
     var PHASES = [
         { key: 'intake',       label: 'Intake',        file: 'intake.json',        tool: 'intake.html' },
         { key: 'proposal',     label: 'Proposal',      file: 'proposal.json',      tool: 'proposal.html' },
+        // Proposal signed off by the client, but the trial has not started and
+        // often has no start date yet. Deliberately shares report.json with the
+        // Report phase and opens the same tool: a card here IS the report the
+        // trial will produce, it just has not begun. Sharing the file is what
+        // makes "clicking a tile shows exactly the Report phase" true without a
+        // second document to keep in step.
+        //
+        // Safe against the drop handler's forward-copy: moving Accepted → Report
+        // finds report.json already has content, so it takes the `else` branch and
+        // only sets the flag — it never copies the file onto itself.
+        { key: 'accepted',     label: 'Accepted',      file: 'report.json',        tool: 'report.html' },
         { key: 'report',       label: 'Report',        file: 'report.json',        tool: 'report.html' },
         { key: 'dashboard',    label: 'Dashboard',     file: 'dashboard.json',
           tool: 'dashboard.html' }
@@ -173,6 +184,8 @@
         _metaCache = null;
         _lastRead = null;
         _lastArtefacts = [];
+        _lastProductArtefacts = [];
+        _lastRootArtefacts = [];
     }
 
     // Prompt the user to pick a folder (must run inside a user gesture) and
@@ -299,6 +312,81 @@
         return false;
     }
 
+    // ---- Quality of one measurement day --------------------------------------
+    // One rule for every page that shows or passes on a day's quality: the
+    // report (its table, charts, PDF and export) and the dashboard's trial
+    // import. Two copies of it would drift, and then the dashboard would store
+    // a different score than the report printed.
+    //
+    //   * the "score quality" checkbox switched off -> no quality, whatever is
+    //     left in the fields. That is how a user says "not assessed today" —
+    //     but only on a row a current tool has saved (it carries a
+    //     `legacyQuality` key). Before, the box only opened the criteria
+    //     panel: the per-row dropdown WAS the quality, whatever the box said,
+    //     the trial-import skill writes `false` beside real scores, and an old
+    //     loader wrote false for every missing flag. On such a row the flag
+    //     means nothing; the report ticks it when it first loads the row.
+    //   * criterion scores entered -> their mean, one decimal. A blank
+    //     criterion does not count, nor does a number outside the 1-10 scale
+    //     (firmness readings typed into "Texture / Firmness" were found in
+    //     real data).
+    //   * no criterion scores, but an older overall score -> that score.
+    //   * otherwise -> no quality.
+    //
+    // Returns { value, legacy, count } or null. `legacy` marks an overall score
+    // rather than an average, so the report can show it differently.
+    function round1(n) { return Math.round(Number((n * 10).toPrecision(12))) / 10; }
+
+    function scoreIn(v, min) {
+        if (v === null || v === undefined || typeof v === 'object') return NaN;
+        var s = String(v).trim().replace(',', '.');
+        if (s === '') return NaN;
+        var n = Number(s);
+        return isFinite(n) && n >= min && n <= 10 ? n : NaN;
+    }
+
+    // The criterion scores of a row that count: filled in and on the 1-10 scale.
+    function criterionScores(m) {
+        var params = Array.isArray(m.qualityParams) ? m.qualityParams : [];
+        var scores = [];
+        params.forEach(function (q) {
+            var n = scoreIn(q && q.score, 1);
+            if (!isNaN(n)) scores.push(n);
+        });
+        return scores;
+    }
+
+    // The overall score a row carried before quality became the average of its
+    // criteria: the former per-row dropdown, or the trial-import skill. Once a
+    // tool has normalised the row it sits in `legacyQuality` (possibly '').
+    // Before that it is `quality` — but only as a STRING: the dropdown and the
+    // import both write strings, while a NUMBER there is a placeholder the code
+    // seeded (9, or 10 on day 0) that nobody ever chose. A row that already has
+    // criterion scores keeps no older score: the average replaces it, and
+    // keeping it would bring the old dropdown value back the moment someone
+    // cleared those scores.
+    function measurementLegacyQuality(m) {
+        if (!m || typeof m !== 'object') return '';
+        if (m.legacyQuality !== undefined && m.legacyQuality !== null) return String(m.legacyQuality).trim();
+        if (criterionScores(m).length) return '';
+        return typeof m.quality === 'string' ? m.quality.trim() : '';
+    }
+
+    function measurementQuality(m) {
+        if (!m || typeof m !== 'object') return null;
+        var normalised = m.legacyQuality !== undefined && m.legacyQuality !== null;
+        if (m.evaluateQuality === false && normalised) return null;
+        var scores = criterionScores(m);
+        if (scores.length) {
+            var sum = scores.reduce(function (a, n) { return a + n; }, 0);
+            return { value: round1(sum / scores.length), legacy: false, count: scores.length };
+        }
+        // The trial-import skill uses a 0-10 scale for its overall score.
+        var legacy = scoreIn(measurementLegacyQuality(m), 0);
+        if (!isNaN(legacy)) return { value: round1(legacy), legacy: true, count: 0 };
+        return null;
+    }
+
     // Read a project's data, preferring `preferPhase`'s file but falling back to
     // the most-advanced phase file that has REAL content (newest → oldest). This
     // makes a tool open with the latest meaningful content even when its own phase
@@ -401,15 +489,72 @@
      * as more sheets get attached. Per-record files keep each write
      * proportional to what actually changed.
      *
-     *     products.json              index: [{id,name,variety,state,…}]
      *     products/<productId>.json  full record incl. formData
+     *
+     * There is deliberately NO shared index file any more. products.json used to
+     * hold one summary per product, and every session rewrote it WHOLE from the
+     * list it happened to be holding — so a session that had never seen a product
+     * someone else added wrote an index without it. The record file survived on
+     * disk while the product vanished from the dashboard, the board and every
+     * picker, silently. That is the same single-file lost update §3 of
+     * TEAM_TEST_ARCHITECTUUR.md describes, and cards were split per file to avoid
+     * it; products were left behind. The index is now DERIVED from a directory
+     * listing, exactly as the board's card list is, so there is no longer a file
+     * that everyone writes to.
+     *
+     * PRODUCT_INDEX is kept only to recognise the stale file left by the old
+     * scheme. Nothing reads it for data and nothing writes it.
      * ==================================================================== */
 
     var PRODUCTS_DIR = 'products';
     var PRODUCT_INDEX = 'products.json';
+    // Where a write that lost a race is parked. Losing a race must never mean
+    // losing the work: the other version is on disk, this one is here.
+    var PRODUCT_CONFLICT_DIR = '_conflicts';
 
     function emptyProductIndex() {
         return { schemaVersion: '1.0', isPerfoTecProducts: true, products: [] };
+    }
+
+    /* ----------------------------------------------------------------------
+     * ALTERNATIVE PRODUCT NAMES ("aliases")
+     * ----------------------------------------------------------------------
+     * The same produce is sold under several names — Romano Beans, Flat Beans
+     * and Italian Green Beans are one product. Each record therefore carries an
+     * `aliases` list next to its `name`, and every place that searches for a
+     * product searches those too. Only `name` is ever DISPLAYED: an alias is a
+     * way in, never a second identity, so a trial found under "Flat Beans"
+     * still lands on Romano Beans everywhere.
+     * -------------------------------------------------------------------- */
+
+    // Letters and digits only, so "Bimi®Broccolini" and "bimi broccolini" are
+    // the same name. Shared by every product lookup in this file.
+    function normaliseProductName(s) {
+        return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    }
+
+    // Clean an alias list for storage: trimmed, no blanks, no duplicates, and
+    // never the product's own name — an alias that repeats the main name would
+    // just be a second row saying nothing.
+    function cleanAliases(list, ownName) {
+        var seen = {};
+        var own = normaliseProductName(ownName);
+        if (own) seen[own] = true;
+        return (Array.isArray(list) ? list : []).map(function (a) {
+            return String(a || '').trim();
+        }).filter(function (a) {
+            var k = normaliseProductName(a);
+            if (!k || seen[k]) return false;
+            seen[k] = true;
+            return true;
+        });
+    }
+
+    // Every name this product answers to, main name first. Accepts a record or
+    // an index summary — both carry `name` and `aliases`.
+    function productNames(p) {
+        return [(p && p.name) || ''].concat(cleanAliases(p && p.aliases, p && p.name))
+            .filter(Boolean);
     }
 
     // The listing fields the board needs — deliberately without formData, so
@@ -420,12 +565,21 @@
         return {
             id: record.id,
             name: record.name || '',
+            // Carried into the index so the board's product picker can search
+            // the alternative names without reading every record file.
+            aliases: cleanAliases(record.aliases, record.name),
             variety: record.variety || '',
             state: record.state || '',
             imageUrl: record.imageUrl || '',
             hasSheet: !!sheet.html,
             sheetFileName: sheet.fileName || '',
-            updatedAt: record.updatedAt || null
+            // Provenance. These used to be here in name only: the summary read
+            // `record.updatedAt`, and nothing ever set it, so every entry said
+            // null. writeProductRecord stamps all three now, which is what makes
+            // a lost edit diagnosable after the fact instead of deniable.
+            rev: Number(record.rev || 0),
+            updatedAt: record.updatedAt || null,
+            updatedBy: record.updatedBy || ''
         };
     }
 
@@ -439,19 +593,35 @@
         return root.getDirectoryHandle(PRODUCTS_DIR, { create: !!create });
     }
 
+    // The product list, derived from the records on disk. No file backs this:
+    // callers get the same shape they always did, built fresh from a directory
+    // listing, so two people adding a product at the same time cannot write each
+    // other's away.
     function readProductIndex() {
-        return requireGrantedRoot().then(function (root) {
-            return readJSONFromDir(root, PRODUCT_INDEX).then(function (idx) {
-                if (idx && Array.isArray(idx.products)) return idx;
-                return emptyProductIndex();
-            });
+        return readAllProducts().then(function (records) {
+            return buildProductIndex(records);
         });
     }
 
-    function writeProductIndex(idx) {
-        return trackWrite(requireGrantedRoot().then(function (root) {
-            return writeJSONToDir(root, PRODUCT_INDEX, idx || emptyProductIndex());
-        }));
+    // Deliberately does nothing. The index is derived (see readProductIndex), and
+    // a shared file that every session rewrites whole is exactly the data loss
+    // this change removes. Kept so a page still running the previous version of
+    // this file — a tab left open, a cached copy — degrades to a no-op instead of
+    // throwing, and so it cannot resurrect the stale products.json.
+    function writeProductIndex() {
+        return Promise.resolve(null);
+    }
+
+    // Is the superseded products.json still lying in the root? It is no longer
+    // read or written, so it can only mislead: whoever opens the folder sees a
+    // 400 KB file that looks like the product list and is frozen at the day this
+    // change landed. Surfaced so the dashboard can say so rather than leave it.
+    function legacyProductIndexPresent() {
+        return requireGrantedRoot().then(function (root) {
+            return readJSONFromDir(root, PRODUCT_INDEX);
+        }).then(function (idx) {
+            return !!(idx && Array.isArray(idx.products));
+        }).catch(function () { return false; });
     }
 
     function readProduct(id) {
@@ -465,47 +635,93 @@
         });
     }
 
-    // Write the record file only. Bulk callers use this and then write the
-    // index once, instead of rewriting the index per product.
-    function writeProductRecord(record) {
+    function productConflictError(id, theirs) {
+        var e = new Error('Product ' + id + ' was changed by ' +
+            ((theirs && theirs.updatedBy) || 'someone else') + ' while you were editing it');
+        e.code = 'CONFLICT';
+        e.productId = id;
+        e.theirs = theirs;
+        return e;
+    }
+
+    // Park a record that lost a race under _conflicts/, named after the person
+    // and the moment, so "their version won" never means "your work is gone".
+    // Best effort on purpose: a failure to park must not swallow the conflict.
+    function saveProductConflictCopy(record) {
+        var who = String(getUserLabel() || 'me').replace(/[^A-Za-z0-9._-]+/g, '-');
+        var stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        return requireGrantedRoot().then(function (root) {
+            return root.getDirectoryHandle(PRODUCT_CONFLICT_DIR, { create: true });
+        }).then(function (dir) {
+            return writeJSONToDir(dir, record.id + '--' + who + '--' + stamp + '.json', record);
+        }).catch(function () { return null; });
+    }
+
+    // Write one product record under optimistic concurrency — the contract
+    // writeCard has had all along and this never did. Without it, the dashboard
+    // (which loads once and holds its list for the whole session) wrote a stale
+    // snapshot straight over a colleague's finished trial data, with no error and
+    // no trace.
+    //   opts.baseRev  the rev this edit started from (default: record.rev)
+    //   opts.force    write anyway, keeping the higher rev (user chose "mine")
+    // Rejects with code 'CONFLICT' when the copy on disk moved on, having first
+    // parked the caller's version under _conflicts/.
+    // A rev that is not a finite number counts as 0. JSON.stringify turns NaN
+    // into null, so one bad value would persist as "no rev" and quietly disable
+    // conflict detection for that product from then on — the exact failure this
+    // function exists to prevent.
+    function revOf(v) {
+        var n = Number(v);
+        return isFinite(n) && n >= 0 ? n : 0;
+    }
+
+    function writeProductRecord(record, opts) {
+        opts = opts || {};
         if (!record || !record.id) return Promise.reject(new Error('Product needs an id'));
-        return trackWrite(requireGrantedRoot().then(function (root) {
-            return getProductsDir(root, true).then(function (dir) {
-                return writeJSONToDir(dir, record.id + '.json', record);
-            });
+        var baseRev = (opts.baseRev != null) ? revOf(opts.baseRev) : revOf(record.rev);
+        // trackWrite spans the whole read-modify-write, not just the write: the
+        // refresh-on-focus check in the dashboard asks hasPendingWrites() whether
+        // it is safe to re-read, and re-reading between the read and the write
+        // here would show the file as it was before the change.
+        return trackWrite(readProduct(record.id).then(function (onDisk) {
+            var diskRev = onDisk ? revOf(onDisk.rev) : 0;
+            if (onDisk && diskRev !== baseRev && !opts.force) {
+                return saveProductConflictCopy(record).then(function () {
+                    throw productConflictError(record.id, onDisk);
+                });
+            }
+            var next = {};
+            Object.keys(record).forEach(function (k) { next[k] = record[k]; });
+            next.rev = Math.max(diskRev, baseRev) + 1;
+            next.updatedAt = new Date().toISOString();
+            next.updatedBy = getUserLabel() || next.updatedBy || '';
+            return requireGrantedRoot().then(function (root) {
+                return getProductsDir(root, true);
+            }).then(function (dir) {
+                return writeJSONToDir(dir, next.id + '.json', next);
+            }).then(function () { return next; });
         }));
     }
 
-    // Single-product save: record file plus its index entry.
-    function writeProduct(record) {
-        return writeProductRecord(record).then(function () {
-            return readProductIndex();
-        }).then(function (idx) {
-            var list = idx.products || [];
-            var found = false;
-            for (var i = 0; i < list.length; i++) {
-                if (list[i].id === record.id) { list[i] = productSummary(record); found = true; break; }
-            }
-            if (!found) list.push(productSummary(record));
-            idx.products = list;
-            return writeProductIndex(idx);
-        });
+    // Single-product save. There is no index entry to keep in step any more —
+    // the list is derived from the records themselves.
+    function writeProduct(record, opts) {
+        return writeProductRecord(record, opts);
     }
 
     // Tombstone a product: keep the record, stamp it, drop it from the index. It
     // stops appearing everywhere the index feeds (board, pickers, dashboard) but
     // the trial history is still on disk and restoreProduct brings it back.
     // purgeProduct below is the only thing that really erases one.
+    // The tombstone is what hides the product now — readAllProducts filters on
+    // deletedAt — so there is no index entry left to remove. force, because the
+    // record was just read from disk and the delete is the user's decision, not
+    // an edit racing someone else's.
     function deleteProduct(id) {
         return readProduct(id).then(function (rec) {
             if (!rec) return null;
             rec.deletedAt = new Date().toISOString();
-            return writeProductRecord(rec);
-        }).then(function () {
-            return readProductIndex();
-        }).then(function (idx) {
-            idx.products = (idx.products || []).filter(function (p) { return p.id !== id; });
-            return writeProductIndex(idx);
+            return writeProductRecord(rec, { baseRev: rec.rev, force: true });
         });
     }
 
@@ -515,15 +731,7 @@
             // Remove the key rather than nulling it, so a restored product is
             // indistinguishable from one that was never deleted.
             delete rec.deletedAt;
-            return writeProductRecord(rec).then(function () { return rec; });
-        }).then(function (rec) {
-            if (!rec) return null;
-            return readProductIndex().then(function (idx) {
-                var list = (idx.products || []).filter(function (p) { return p.id !== id; });
-                list.push(productSummary(rec));
-                idx.products = list;
-                return writeProductIndex(idx);
-            });
+            return writeProductRecord(rec, { baseRev: rec.rev, force: true });
         });
     }
 
@@ -556,94 +764,144 @@
                 if (err && err.name === 'NotFoundError') return; // already gone
                 throw err;
             });
-        }).then(function () {
-            return readProductIndex();
-        }).then(function (idx) {
-            idx.products = (idx.products || []).filter(function (p) { return p.id !== id; });
-            return writeProductIndex(idx);
         });
     }
 
-    // Enumerate the record files on disk. Used to heal an index that drifted
-    // (a write that failed halfway, or files copied in by hand).
-    function listProductIds() {
+    // Cheap staleness probe: size and mtime of every record file, without
+    // reading a byte of content. The dashboard holds its product list for a whole
+    // session, so it needs a way to notice the folder moved under it that does
+    // not cost 2 MB of reads every time the tab regains focus.
+    function readProductStamps() {
         return requireGrantedRoot().then(function (root) {
             return getProductsDir(root, false).then(function (dir) {
-                var ids = [];
+                var out = {};
                 var it = dir.values();
                 function step() {
                     return it.next().then(function (res) {
-                        if (res.done) return ids;
+                        if (res.done) return out;
+                        var e = res.value;
+                        if (e.kind !== 'file' || !/\.json$/i.test(e.name) || isSyncArtefact(e.name)) return step();
+                        return e.getFile().then(function (f) {
+                            out[e.name.replace(/\.json$/i, '')] = f.size + ':' + f.lastModified;
+                            return step();
+                        }).catch(function () { return step(); });
+                    });
+                }
+                return step();
+            }).catch(function (err) {
+                if (err && err.name === 'NotFoundError') return {};
+                throw err;
+            });
+        });
+    }
+
+    // Conflict copies seen during the last products/ listing, so the dashboard
+    // can warn instead of pretending the folder is clean. The cards side has had
+    // this since the split; products had nothing, which is why the OneDrive copy
+    // already sitting in this database was only ever found by hand.
+    var _lastProductArtefacts = [];
+
+    // Enumerate the record files on disk. This is now the source of truth for
+    // which products exist — there is no index to heal.
+    function listProductIds() {
+        return requireGrantedRoot().then(function (root) {
+            return getProductsDir(root, false).then(function (dir) {
+                var ids = [], artefacts = [];
+                var it = dir.values();
+                function step() {
+                    return it.next().then(function (res) {
+                        if (res.done) { _lastProductArtefacts = artefacts; return ids; }
                         var entry = res.value;
                         if (entry.kind === 'file' && /\.json$/i.test(entry.name)) {
-                            ids.push(entry.name.replace(/\.json$/i, ''));
+                            if (isSyncArtefact(entry.name)) artefacts.push(PRODUCTS_DIR + '/' + entry.name);
+                            else ids.push(entry.name.replace(/\.json$/i, ''));
                         }
                         return step();
                     });
                 }
                 return step();
             }).catch(function (err) {
-                if (err && err.name === 'NotFoundError') return [];
+                if (err && err.name === 'NotFoundError') { _lastProductArtefacts = []; return []; }
                 throw err;
             });
         });
     }
 
-    // Every full product record. Reads the index first; when it is missing or
-    // has drifted from what is on disk, falls back to the directory listing so
-    // a damaged index never hides real data.
-    function readAllProducts() {
-        return readProductIndex().then(function (idx) {
-            var ids = (idx.products || []).map(function (p) { return p.id; });
-            return listProductIds().then(function (onDisk) {
-                onDisk.forEach(function (id) { if (ids.indexOf(id) === -1) ids.push(id); });
-                var out = [];
-                function step(i) {
-                    if (i >= ids.length) return out;
-                    return readProduct(ids[i]).then(function (rec) {
-                        // Skip tombstones: this function also picks up ids that are
-                        // on disk but missing from the index, which is precisely the
-                        // state a deleted product is in.
-                        if (rec && rec.id && !rec.deletedAt) out.push(rec);
-                        return step(i + 1);
-                    });
+    // Every full product record, straight from the directory listing. This is
+    // the primitive the derived index is built on; it no longer consults a file
+    // that could hide real data.
+    //
+    // Read one at a time rather than with Promise.all: product records carry
+    // formData, embedded photos and sometimes a whole product sheet, so they are
+    // an order of magnitude bigger than a card, and firing them all at a synced
+    // folder at once is how a slow read turns into a timeout.
+    function readAllProducts(includeDeleted) {
+        return listProductIds().then(function (ids) {
+            var byId = {}, kept = [];
+            function keep(rec, fileId) {
+                if (!rec) return;
+                if (!rec.id) rec.id = fileId;            // heal a hand-copied file
+                // A record file is named after the id inside it. When it is not,
+                // this is not that product — it is a copy of it. SharePoint names
+                // conflict copies after the PERSON ("apple-Elisa.json"), which no
+                // machine-name pattern catches, and the copy keeps the original
+                // id. Loading it gave two records with one id, and every save
+                // then fought over one file.
+                if (rec.id !== fileId) { _lastProductArtefacts.push(PRODUCTS_DIR + '/' + fileId + '.json'); return; }
+                if (!includeDeleted && rec.deletedAt) return;
+                var prev = byId[rec.id];
+                if (!prev) { byId[rec.id] = rec; kept.push(rec); return; }
+                // Two files claiming one id must never both reach the dashboard.
+                // Keep the newer and report the other.
+                _lastProductArtefacts.push(PRODUCTS_DIR + '/' + rec.id + '.json (duplicate id)');
+                var prevAt = Date.parse(prev.updatedAt || 0) || 0;
+                var thisAt = Date.parse(rec.updatedAt || 0) || 0;
+                if (thisAt > prevAt || (thisAt === prevAt && Number(rec.rev || 0) > Number(prev.rev || 0))) {
+                    kept[kept.indexOf(prev)] = rec;
+                    byId[rec.id] = rec;
                 }
-                return Promise.resolve(step(0));
-            });
+            }
+            function step(i) {
+                if (i >= ids.length) return kept;
+                return readProduct(ids[i]).then(function (rec) {
+                    keep(rec, ids[i]);
+                    return step(i + 1);
+                }).catch(function () { return step(i + 1); });
+            }
+            return Promise.resolve(step(0));
         });
     }
 
     // Has this root been set up for products yet? Drives the dashboard's
     // one-time migration prompt.
     function hasProductStore() {
-        return requireGrantedRoot().then(function (root) {
-            return readJSONFromDir(root, PRODUCT_INDEX);
-        }).then(function (idx) {
-            return !!(idx && Array.isArray(idx.products));
+        return listProductIds().then(function (ids) {
+            if (ids.length > 0) return true;
+            // An existing database whose products/ is momentarily unreadable must
+            // not be mistaken for a fresh folder and offered the one-time import,
+            // so the superseded index still counts as proof the store exists.
+            return legacyProductIndexPresent();
         }).catch(function () { return false; });
     }
 
     // Migrate a PerfoTec_Database.json payload ({products:[…]}) into the store.
     // Existing records with the same id are overwritten; anything already there
     // under a different id is left alone. Returns the number written.
+    //
+    // force, because a backup file carries no rev: without it every record that
+    // already exists here would read as a conflict against itself. Restoring a
+    // backup over live data is the user's explicit decision, and the version it
+    // replaces is parked by the normal conflict path only when they did not ask
+    // for it — so the overwrite is stated plainly in the dashboard's prompt.
     function importProductBackup(backup) {
         var records = (backup && Array.isArray(backup.products)) ? backup.products : [];
         var usable = records.filter(function (r) { return r && r.id && !r.isAverage; });
         if (usable.length === 0) return Promise.resolve(0);
-        return readProductIndex().then(function (idx) {
-            function step(i) {
-                if (i >= usable.length) return Promise.resolve();
-                return writeProductRecord(usable[i]).then(function () { return step(i + 1); });
-            }
-            return step(0).then(function () {
-                var merged = (idx.products || []).filter(function (p) {
-                    return !usable.some(function (r) { return r.id === p.id; });
-                });
-                usable.forEach(function (r) { merged.push(productSummary(r)); });
-                idx.products = merged;
-                return writeProductIndex(idx);
-            });
-        }).then(function () { return usable.length; });
+        function step(i) {
+            if (i >= usable.length) return Promise.resolve(usable.length);
+            return writeProductRecord(usable[i], { force: true }).then(function () { return step(i + 1); });
+        }
+        return step(0);
     }
 
     // Build the id the Product Dashboard would give this product, so a product
@@ -668,6 +926,7 @@
         return {
             id: makeProductId({ name: name, variety: variety, state: state }, existingIds),
             name: name,
+            aliases: cleanAliases(prod.aliases, name),
             variety: variety,
             state: state,
             targets: [],
@@ -682,11 +941,9 @@
     // Match a free-text product name against the store, so existing board
     // projects (which only carry `product` as text) can be linked without
     // retyping. Compares on letters and digits only, so "Bimi®Broccolini" and
-    // "bimi broccolini" resolve to the same product.
-    function normaliseProductName(s) {
-        return String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
-    }
-
+    // "bimi broccolini" resolve to the same product. Alternative names count as
+    // fully as the main one — a project typed up as "Flat Beans" links to
+    // Romano Beans.
     function resolveProductId(name, index) {
         var want = normaliseProductName(name);
         if (!want) return Promise.resolve(null);
@@ -694,10 +951,14 @@
             var list = (idx && idx.products) || [];
             var exact = null, partial = null;
             for (var i = 0; i < list.length; i++) {
-                var cand = normaliseProductName(list[i].name + list[i].variety);
-                var bare = normaliseProductName(list[i].name);
-                if (cand === want || bare === want) { exact = list[i].id; break; }
-                if (!partial && (bare.indexOf(want) === 0 || want.indexOf(bare) === 0) && bare.length > 2) partial = list[i].id;
+                var names = productNames(list[i]);
+                var variety = normaliseProductName(list[i].variety);
+                for (var n = 0; n < names.length; n++) {
+                    var bare = normaliseProductName(names[n]);
+                    if (bare + variety === want || bare === want) { exact = list[i].id; break; }
+                    if (!partial && (bare.indexOf(want) === 0 || want.indexOf(bare) === 0) && bare.length > 2) partial = list[i].id;
+                }
+                if (exact) break;
             }
             return exact || partial || null;
         };
@@ -723,12 +984,15 @@
     var LEAVE_TEXT = {
         en: {
             label: 'Board', title: 'Back to the Project Board', saving: 'Saving…',
+            unsaved: 'Your last changes have not been saved yet — the database folder is not responding.\n\nLeave anyway and lose them?\n\nCancel to stay on this page and try again.',
         },
         nl: {
             label: 'Board', title: 'Terug naar het Project Board', saving: 'Opslaan…',
+            unsaved: 'Je laatste wijzigingen zijn nog niet opgeslagen — de databasemap reageert niet.\n\nToch weggaan en ze kwijtraken?\n\nAnnuleer om op deze pagina te blijven en het opnieuw te proberen.',
         },
         es: {
             label: 'Board', title: 'Volver al Project Board', saving: 'Guardando…',
+            unsaved: 'Tus últimos cambios aún no se han guardado — la carpeta de la base de datos no responde.\n\n¿Salir de todos modos y perderlos?\n\nCancela para quedarte en esta página e intentarlo de nuevo.',
         }
     };
     function leaveText() {
@@ -751,11 +1015,15 @@
 
     // Resolve once every in-flight write has drained (bounded, so a stuck write
     // can never trap the user on the page).
+    // Resolves true when the queue actually drained, false when the deadline
+    // ran out with writes still in flight. The caller needs to know which:
+    // navigating away on `false` discards those writes.
     function waitForWrites(maxMs) {
         var deadline = Date.now() + (maxMs || 3000);
         return new Promise(function (resolve) {
             (function poll() {
-                if (_pendingWrites <= 0 || Date.now() > deadline) return resolve();
+                if (_pendingWrites <= 0) return resolve(true);
+                if (Date.now() > deadline) return resolve(false);
                 setTimeout(poll, 60);
             })();
         });
@@ -763,12 +1031,38 @@
 
     // Run every registered flush, then wait for the resulting writes. Always
     // resolves — navigation must never be blocked by a failing save.
+    //
+    // Resolves { ok: true } only when every handler succeeded AND the write
+    // queue drained inside the deadline. It used to resolve undefined in all
+    // cases, which hid two ways of losing an edit: a flush handler that
+    // rejected (permission lapsed, folder gone) was swallowed by the bare
+    // .catch, and a slow folder that outran the guard let the caller navigate
+    // with writes still in flight — tearing the page down mid-write. Neither is
+    // hypothetical here: this data lives on OneDrive/SharePoint, where a sync
+    // lock can block a write for several seconds.
+    //
+    // The bound itself stays. Trapping the user on a hung write would be worse;
+    // the caller just has to stop pretending the save succeeded.
     function flushPendingWork(maxMs) {
+        var handlerFailed = false;
         var jobs = _flushHandlers.map(function (fn) {
-            try { return Promise.resolve(fn()); } catch (e) { return Promise.resolve(); }
+            try {
+                return Promise.resolve(fn()).catch(function () { handlerFailed = true; });
+            } catch (e) {
+                handlerFailed = true;
+                return Promise.resolve();
+            }
         });
-        var settled = Promise.all(jobs).catch(function () { }).then(function () { return waitForWrites(maxMs); });
-        var guard = new Promise(function (resolve) { setTimeout(resolve, (maxMs || 3000) + 1200); });
+        var settled = Promise.all(jobs).then(function () {
+            return waitForWrites(maxMs);
+        }).then(function (drained) {
+            return { ok: drained && !handlerFailed, reason: !drained ? 'timeout' : (handlerFailed ? 'handler-failed' : null) };
+        });
+        // Outer guard: even waitForWrites' own deadline can be outlived by a
+        // handler that never settles.
+        var guard = new Promise(function (resolve) {
+            setTimeout(function () { resolve({ ok: false, reason: 'timeout' }); }, (maxMs || 3000) + 1200);
+        });
         return Promise.race([settled, guard]);
     }
 
@@ -835,7 +1129,22 @@
             var lbl = btn.querySelector('[data-ptb-label]');
             if (lbl) lbl.textContent = leaveText().saving;
         }
-        return flushPendingWork(3000).then(function () {
+        return flushPendingWork(3000).then(function (res) {
+            // The save is bounded so a hung folder cannot trap anyone here. But
+            // if it did not finish, navigating now throws the edit away — and
+            // the button has been showing "Saving…" the whole time, so the user
+            // would have every reason to think it landed. Ask instead.
+            if (res && res.ok === false) {
+                var stay = !window.confirm(leaveText().unsaved);
+                if (stay) {
+                    if (btn) {
+                        btn.disabled = false;
+                        btn.style.opacity = '';
+                        if (lbl) lbl.textContent = leaveText().label;
+                    }
+                    return;
+                }
+            }
             window.location.assign(boardUrl());
         });
     }
@@ -1087,7 +1396,33 @@
         });
     }
 
-    function lastSyncArtefacts() { return _lastArtefacts.slice(); }
+    // Everything the last read found that should not be there: conflict copies in
+    // cards/, in products/, and now in the root as well. The root was the gap
+    // that mattered most — a "products - Copy.json" beside the database was the
+    // one artefact nothing looked for, because nothing ever listed the root.
+    function lastSyncArtefacts() {
+        return _lastArtefacts.concat(_lastProductArtefacts, _lastRootArtefacts);
+    }
+
+    var _lastRootArtefacts = [];
+
+    // List the root itself for sync artefacts. Cheap (a dozen entries) and the
+    // only way a conflict copy of a shared root file gets noticed at all.
+    function scanRootArtefacts() {
+        return requireGrantedRoot().then(function (root) {
+            var found = [];
+            var it = root.values();
+            function step() {
+                return it.next().then(function (res) {
+                    if (res.done) { _lastRootArtefacts = found; return found; }
+                    var e = res.value;
+                    if (e.kind === 'file' && isSyncArtefact(e.name)) found.push(e.name);
+                    return step();
+                });
+            }
+            return step();
+        }).catch(function () { _lastRootArtefacts = []; return []; });
+    }
 
     function readCard(id) {
         return IO.readJSON(cardPath(id));
@@ -1306,7 +1641,7 @@
     var PRESENCE_DIR = '.presence';
     var PRESENCE_BEAT_MS = 45 * 1000;
     var PRESENCE_STALE_MS = 150 * 1000;              // ~3 missed beats
-    var PRESENCE_PRUNE_MS = 24 * 60 * 60 * 1000;     // abandoned file, safe to delete
+
     var _presenceTimer = null;
     var _sessionId = null;
 
@@ -1348,22 +1683,42 @@
                     .catch(function () { return null; });
             }));
         }).then(function (rows) {
-            var now = Date.now(), live = [], abandoned = [];
+            var now = Date.now();
+            // ONE lasting record per person, not per session. Files are per session
+            // (that is what keeps them collision-free on a synced folder), so a
+            // colleague who has opened the board twenty times leaves twenty files.
+            // Keep their newest and sweep the rest: what matters is "when was this
+            // person last here", and that is never deleted.
+            var newest = {}, superseded = [];
             rows.filter(Boolean).forEach(function (r) {
-                var age = now - new Date(r.rec.at).getTime();
-                if (!(age >= 0)) age = 0;                       // clock skew: treat as now
-                if (age > PRESENCE_PRUNE_MS) { abandoned.push(r.file); return; }
-                if (age > PRESENCE_STALE_MS) return;
-                live.push({
-                    user: r.rec.user || 'unknown', page: r.rec.page || '', at: r.rec.at,
-                    ageMs: age, self: r.rec.sessionId === sessionId()
-                });
+                var name = String(r.rec.user || '').trim() || 'unknown';
+                var t = new Date(r.rec.at).getTime();
+                if (!(t > 0)) return;                          // unreadable stamp, ignore
+                var prev = newest[name];
+                if (!prev) { newest[name] = { rec: r.rec, file: r.file, t: t }; return; }
+                if (t > prev.t) { superseded.push(prev.file); newest[name] = { rec: r.rec, file: r.file, t: t }; }
+                else superseded.push(r.file);
             });
-            // Only files a full day old are swept, so a session on a machine with
-            // a badly set clock can never be deleted out from under someone.
-            abandoned.forEach(function (n) { IO.remove([PRESENCE_DIR, n]).catch(function () { }); });
-            live.sort(function (a, b) { return a.user.localeCompare(b.user) || a.ageMs - b.ageMs; });
-            return live;
+            var me = String(getUserLabel() || '').trim();
+            var entries = Object.keys(newest).map(function (name) {
+                var b = newest[name];
+                var age = now - b.t;
+                if (!(age >= 0)) age = 0;                      // clock skew: treat as now
+                return {
+                    user: name, page: b.rec.page || '', at: b.rec.at,
+                    ageMs: age, online: age <= PRESENCE_STALE_MS,
+                    self: b.rec.sessionId === sessionId() || (!!me && name === me)
+                };
+            });
+            // Only a person's SUPERSEDED files are swept. Their most recent record
+            // is never removed, however old — that is the whole point. Nothing is
+            // lost: a superseded file is by definition older than one we keep.
+            superseded.forEach(function (f) { IO.remove([PRESENCE_DIR, f]).catch(function () { }); });
+            entries.sort(function (a, b) {
+                if (a.online !== b.online) return a.online ? -1 : 1;
+                return a.user.localeCompare(b.user) || a.ageMs - b.ageMs;
+            });
+            return entries;
         }).catch(function () { return []; });
     }
 
@@ -1381,14 +1736,18 @@
         };
         beat();
         _presenceTimer = setInterval(beat, PRESENCE_BEAT_MS);
-        // Closing the tab should take the entry with it. Unload writes are not
-        // guaranteed to land, which is what PRESENCE_STALE_MS is really for.
-        window.addEventListener('pagehide', function () { releasePresence(); });
+        // Closing the tab deliberately does NOT delete the record. It is the only
+        // trace that a colleague was ever in here: someone who is in no picklist
+        // and has written no card vanished completely the moment they closed the
+        // board. The record stays and becomes their "last seen"; PRESENCE_STALE_MS
+        // is what turns it from online into offline, ~2.5 minutes later.
     }
 
     function stopPresence() {
         if (_presenceTimer) { clearInterval(_presenceTimer); _presenceTimer = null; }
-        return releasePresence();
+        // Stop announcing, but keep the record: it is this person's last-seen.
+        // releasePresence() stays exported for a deliberate "forget me".
+        return Promise.resolve();
     }
 
     // Announce from every page that loads this file, so the list covers the board
@@ -1709,7 +2068,7 @@
             readPeople(),
             readCards(true),          // tombstones included: a restore must not resurrect deleted cards
             readProductIndex(),
-            readAllProducts().catch(function () { return []; }),
+            readAllProducts(true).catch(function () { return []; }),   // same for products
             buildPhaseIndex().catch(function () { return []; })
         ]).then(function (r) {
             return {
@@ -1934,12 +2293,19 @@
             if (!bundle.people) return null;
             return writePeople(bundle.people, null);
         }).then(function () {
+            // force, for the same reason the cards above are forced: a restore is
+            // an overwrite by definition, and a bundle's records carry the revs
+            // they had when it was taken — every one of them would otherwise read
+            // as a conflict against the newer copy it is meant to replace, and the
+            // restore would stop at the first product.
             return (bundle.products || []).reduce(function (chain, p) {
-                return chain.then(function () { return writeProductRecord(p); });
+                return chain.then(function () { return writeProductRecord(p, { force: true }); });
             }, Promise.resolve());
         }).then(function () {
-            if (!bundle.productIndex) return null;
-            return writeProductIndex(bundle.productIndex);
+            // bundle.productIndex is not restored: the list is derived from the
+            // records just written. Older bundles still carry the field and are
+            // read fine — it is simply no longer a thing that can be out of step.
+            return null;
         }).then(function () {
             return { cards: cards.length, products: (bundle.products || []).length };
         });
@@ -1977,11 +2343,17 @@
         readPeople: readPeople,
         writePeople: writePeople,
         lastSyncArtefacts: lastSyncArtefacts,
+        scanRootArtefacts: scanRootArtefacts,
         getUserLabel: getUserLabel,
         setUserLabel: setUserLabel,
         touchLock: touchLock,
         readLock: readLock,
         releaseLock: releaseLock,
+        // True while a write is still on its way to disk. The board checks this
+        // before an automatic refresh: re-reading mid-write would show the file
+        // as it was before the change and undo it on screen.
+        hasPendingWrites: function () { return _pendingWrites > 0; },
+
         // Presence: who else has this database open
         readPresence: readPresence,
         touchPresence: touchPresence,
@@ -2004,6 +2376,8 @@
         readPhaseFile: readPhaseFile,
         readProjectData: readProjectData,
         hasContent: hasContent,
+        measurementQuality: measurementQuality,
+        measurementLegacyQuality: measurementLegacyQuality,
         writePhaseFile: writePhaseFile,
         deleteProjectFiles: deleteProjectFiles,
         newId: newId,
@@ -2014,7 +2388,10 @@
         productSummary: productSummary,
         buildProductIndex: buildProductIndex,
         readProductIndex: readProductIndex,
+        // Deprecated no-op, kept so an older cached page degrades quietly. The
+        // product list is derived; nothing writes an index file.
         writeProductIndex: writeProductIndex,
+        legacyProductIndexPresent: legacyProductIndexPresent,
         readProduct: readProduct,
         readAllProducts: readAllProducts,
         writeProduct: writeProduct,
@@ -2025,11 +2402,15 @@
         purgeProduct: purgeProduct,
         readDeletedCards: readDeletedCards,
         listProductIds: listProductIds,
+        readProductStamps: readProductStamps,
         hasProductStore: hasProductStore,
         importProductBackup: importProductBackup,
         resolveProductId: resolveProductId,
         makeProductId: makeProductId,
         newProductRecord: newProductRecord,
+        normaliseProductName: normaliseProductName,
+        cleanAliases: cleanAliases,
+        productNames: productNames,
         // Navigation / unsaved-work coordination
         registerFlush: registerFlush,
         goToBoard: goToBoard,

@@ -26,13 +26,13 @@
     
     <!-- LOAD CENTRAL STYLING & CONFIGURATION -->
     <link rel="stylesheet" href="style.css?v=e8637b4c">
-    <script src="config.js?v=8d659a19"></script>
+    <script src="config.js?v=7b34913e"></script>
     <!-- This page renders its own Board button in the header, so the shared
          floating bar that board-db.js injects would be a second, redundant way
          back. Pages WITHOUT a header button (the Product Dashboard) still get it. -->
     <script>window.PERFOTEC_NO_BACK_BUTTON = true;</script>
-    <script src="board-db.js?v=2371f8df"></script>
-    <script src="product-tools.js?v=eca36103"></script>
+    <script src="board-db.js?v=b978be9b"></script>
+    <script src="product-tools.js?v=5916a60f"></script>
 
     <!-- Print rules live in style.css so Intake, Proposal and Report share one source. -->
 </head>
@@ -44,7 +44,7 @@
         </div>
     </div>
 
-    <script type="text/babel" data-type="module">
+    <script type="text/babel" data-type="module" data-presets="react">
         import React, { useState, useRef, useEffect } from 'https://esm.sh/react@18.2.0';
         import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
         import { 
@@ -106,6 +106,7 @@
             productPickHint: 'Choose one of {n} products, or type a new name.',
             productLinked: 'Linked to the product database',
             productNotLinked: 'Not in the product database yet.',
+            productAliasMatched: 'found under "{alias}"',
             productCreate: 'Add as new product',
             productCreateAs: 'add as',
             productStateWhole: 'Whole',
@@ -159,6 +160,7 @@
             productPickHint: 'Kies uit {n} producten, of typ een nieuwe naam.',
             productLinked: 'Gekoppeld aan de productendatabase',
             productNotLinked: 'Nog niet in de productendatabase.',
+            productAliasMatched: 'gevonden onder "{alias}"',
             productCreate: 'Als nieuw product toevoegen',
             productCreateAs: 'toevoegen als',
             productStateWhole: 'Heel',
@@ -212,6 +214,7 @@
             productPickHint: 'Elija entre {n} productos, o escriba un nombre nuevo.',
             productLinked: 'Vinculado a la base de datos de productos',
             productNotLinked: 'Aún no está en la base de datos de productos.',
+            productAliasMatched: 'encontrado como "{alias}"',
             productCreate: 'Añadir como producto nuevo',
             productCreateAs: 'añadir como',
             productStateWhole: 'Entero',
@@ -294,6 +297,10 @@
           ? globalConfig.convertValue.bind(globalConfig)
           : ((val) => val);
 
+        // One decimal at most, without floating-point noise: 0.25+0.5+0.2+0.6
+        // is 1.5499999999999998 in binary and used to print in full. Read as the
+        // 1.55 it is, it rounds to 1.6 (toPrecision(12) drops the noise first).
+        const round1 = (n) => Math.round(Number((n * 10).toPrecision(12))) / 10;
         // --- COMPONENT: PRODUCT SUPPLY CHAIN FLOW (Visualizer for PDF) ---
         const ProductSupplyChainFlow = ({ chain, unitSystem, t, lang }) => {
           if (!chain || chain.length === 0) return null;
@@ -315,7 +322,8 @@
                 cumulativeMin += minD;
                 cumulativeMax += maxD;
                 
-                const cumStr = cumulativeMin === cumulativeMax ? `${cumulativeMin}` : `${cumulativeMin}-${cumulativeMax}`;
+                const shownMin = round1(cumulativeMin), shownMax = round1(cumulativeMax);
+                const cumStr = shownMin === shownMax ? `${shownMin}` : `${shownMin}-${shownMax}`;
 
                 return (
                   <React.Fragment key={idx}>
@@ -382,10 +390,15 @@
               const url = URL.createObjectURL(blob);
               const downloadLink = document.createElement("a");
               document.body.appendChild(downloadLink);
-              downloadLink.href = URL.createObjectURL(blob);
+              downloadLink.href = url;
               downloadLink.download = `Intake_${clientInfo.companyName || 'Client'}.doc`;
               downloadLink.click();
               document.body.removeChild(downloadLink);
+              // Release it: an object URL pins the whole blob in memory until
+              // the page unloads, and this print-content blob carries the logo and
+              // every product photo as base64. The JSON export a few lines down
+              // already revokes; this one made TWO urls and freed neither.
+              URL.revokeObjectURL(url);
           };
 
           return (
@@ -692,6 +705,10 @@
           const [dashProducts, setDashProducts] = useState([]);
           const [dashState, setDashState] = useState('loading'); // loading | ready | unavailable
           const [dashMsg, setDashMsg] = useState({});            // keyed by product row id
+          // Which of a product's OTHER names a row was matched on, keyed by row id.
+          // The row itself always shows the product's main name, so this explains
+          // why the field says something other than what was typed.
+          const [aliasNote, setAliasNote] = useState({});
           const [creatingProduct, setCreatingProduct] = useState(null); // row id being created
 
           useEffect(() => {
@@ -741,6 +758,7 @@
                 : { ...p, name, productId: '', ...(p.productId ? { type: '' } : {}) }
             )));
             setDashMsg(m => ({ ...m, [rowId]: '' }));
+            setAliasNote(m => ({ ...m, [rowId]: hit ? Products.matchedAlias(name, hit) : '' }));
           };
 
           // The state is passed in explicitly rather than read from the row's
@@ -1081,7 +1099,16 @@
                        transportMode: pr.transportMode || base.transportMode || '',
                        qualityCriteria: (pr.criteria && pr.criteria.length ? pr.criteria : base.qualityCriteria) || [],
                        photo: pr.startImage || pr.coverImage || base.photo || null,
-                       packagings: (pr.packagings && pr.packagings.length ? pr.packagings : base.packagings) || [],
+                       // Proposal and report call the net weight `startWeight`; the intake
+                       // field is `weight`. Copied as-is the weight showed empty here, and
+                       // the stale startWeight then beat a re-typed weight on the way
+                       // forward again.
+                       packagings: (pr.packagings && pr.packagings.length
+                         ? pr.packagings.map(({ startWeight, ...pkg }) => ({ ...pkg, weight: startWeight || pkg.weight || '' }))
+                         : (pr.packagingType
+                             ? [{ id: 1, packagingType: pr.packagingType, material: pr.material || '', length: pr.length || '', width: pr.width || '', height: pr.height || '', weight: pr.startWeight || '' }]
+                             : base.packagings)) || [],
+                       productId: pr.productId || base.productId || '',
                        supplyChain: (Array.isArray(data.supplyChain) && data.supplyChain.length ? data.supplyChain : base.supplyChain) || []
                      }, ...prev.slice(1)];
                    });
@@ -1584,12 +1611,22 @@
                                   {dashProducts.map(dp => (
                                     <option key={dp.id} value={dp.label}>{dp.state}{dp.hasSheet ? ' · ' + t.dashWithSheet : ''}</option>
                                   ))}
+                                  {/* The other names each product is sold under. Picking one
+                                      links the product and the field then shows its MAIN name. */}
+                                  {Products.aliasEntries(dashProducts).map(a => (
+                                    <option key={a.key} value={a.alias}>→ {a.name}</option>
+                                  ))}
                                 </datalist>
 
                                 <div className="mt-2 min-h-[24px]">
                                   {prod.productId ? (
-                                    <span className="text-xs font-bold text-green-700 flex items-center gap-1.5">
+                                    <span className="text-xs font-bold text-green-700 flex flex-wrap items-center gap-1.5">
                                       <Check size={13} />{t.productLinked}
+                                      {aliasNote[prod.id] && (
+                                        <span className="font-medium text-slate-500">
+                                          · {(t.productAliasMatched || 'found under "{alias}"').replace('{alias}', aliasNote[prod.id])}
+                                        </span>
+                                      )}
                                     </span>
                                   ) : (prod.name || '').trim() ? (
                                     /* The state is chosen here, not taken from the toggle

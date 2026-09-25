@@ -22,8 +22,8 @@
     <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
 
     <link rel="stylesheet" href="style.css?v=e8637b4c">
-    <script src="config.js?v=8d659a19"></script>
-    <script src="board-db.js?v=2371f8df"></script>
+    <script src="config.js?v=7b34913e"></script>
+    <script src="board-db.js?v=b978be9b"></script>
 </head>
 <body class="bg-[var(--pf-mist)] text-[var(--pf-charcoal)]">
     <a href="#main-content" class="skip-to-content">Skip to content</a>
@@ -32,7 +32,7 @@
         <div class="pf-loading" role="status">Loading the board…</div>
     </div>
 
-    <script type="text/babel" data-type="module">
+    <script type="text/babel" data-type="module" data-presets="react">
         import React, { useState, useEffect, useMemo, useCallback, useRef } from 'https://esm.sh/react@18.2.0';
         import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
         import {
@@ -41,7 +41,8 @@
             Package, Briefcase, ArrowRight, Check, LayoutDashboard,
             ClipboardList, FileText, BarChart3, UserCog, Lock, CloudOff,
             Image as ImageIcon, Upload, Settings, ChevronLeft, ChevronRight, List,
-            Archive, RotateCcw, Search, Users, Info
+            Archive, RotateCcw, Search, Users, Info,
+            PauseCircle, Ban, Copy
         } from 'https://esm.sh/lucide-react@0.292.0';
 
         const Board = window.PerfoTecBoard;
@@ -51,6 +52,7 @@
         // literals below are the fallback for a page opened without config.js.
         const BRAND = {
             green: '#008837', blue: '#084BCD', orange: '#ea580c',
+            lightBlue: '#5A85E7',   // Accepted column — the v2.0 Light Blue Accent
             black: '#1A1B1F', gray: '#E4EBF3', lightGray: '#F7F7F7', white: '#FFFFFF',
             logo: (window.PERFOTEC_CONFIG && window.PERFOTEC_CONFIG.BRAND && window.PERFOTEC_CONFIG.BRAND.logos && window.PERFOTEC_CONFIG.BRAND.logos.default)
                 || 'https://cdn.prod.website-files.com/68b594c756c22085ddc6c1ea/68b59ba2f027bfeecd25261b_PerfoTec%20logo.png',
@@ -62,12 +64,17 @@
         const PHASE_COLORS = {
             intake: BRAND.green,
             proposal: BRAND.blue,
+            // Accepted sits between proposal and report and is a WAITING state, so it
+            // gets its own hue rather than repeating a neighbour: the column is meant
+            // to catch the eye when cards linger in it.
+            accepted: BRAND.lightBlue,
             report: BRAND.green,
             dashboard: BRAND.orange
         };
         const PHASE_ICONS = {
             intake: ClipboardList,
             proposal: FileText,
+            accepted: Check,
             report: BarChart3,
             dashboard: LayoutDashboard
         };
@@ -100,11 +107,13 @@
                 whoDesc: 'The team shares one database. Your name is stamped on every change so everyone can see who moved a card — and so the board can show when a colleague is already working on a project.',
                 whoPlaceholder: 'e.g. Luke',
                 whoSave: 'Save', whoChange: 'Change name',
-                whoOnline: 'Working in this database', whoOnlineNone: 'Nobody else right now', whoOnlineYou: 'you',
+                whoOnline: 'Working in this database', whoOnlineNone: 'Nobody here yet', whoOnlineYou: 'you',
+                whoOnlineGroup: 'Online now', whoOfflineGroup: 'Also connected', whoNeverSeen: 'not seen yet',
+                whoSeenHours: '{n} h ago', whoSeenDays: '{n} d ago',
                 whoOnlineHint: 'Refreshed about once a minute. On a synced folder a colleague can take a moment to appear or disappear.',
                 whoOnlineNoName: 'Set your name to appear here yourself.',
                 whoSeenNow: 'just now', whoSeenMin: '{n} min ago',
-                infoTitle: 'Database & status', infoFolder: 'Database folder', infoBackup: 'Last backup', infoSync: 'Last CRM sync',
+                infoTitle: 'Database & status', infoFolder: 'Database folder', infoBackup: 'Last backup', infoSync: 'Last CRM sync', infoRefreshed: 'Board refreshed',
                 migrateTitle: 'Convert to the shared format',
                 migrateDesc: 'This folder still uses the single-user format: one board.json holding every project. On a shared folder that loses changes — two people saving at the same time overwrite each other. Converting gives every project its own file. Your board.json is kept as board.json.pre-split.',
                 migrateBtn: 'Convert now', migrateBusy: 'Converting…',
@@ -161,6 +170,48 @@
                 productArchived: '{n} archived', productUpdated: 'Updated', productOpen: 'Open in the dashboard',
                 // Archive — finished projects are parked, never deleted.
                 archiveProject: 'Archive this project',
+                // A project that stops before the finish is not the same thing as a
+                // finished one, so it gets its own words and its own tab.
+                haltProject: 'Put this project on hold or cancel it',
+                haltTitle: 'Stopped projects',
+                haltDesc: 'Projects that are not running: parked for later, or called off. Everything is kept — the phase, the documents and the CRM link — so a project on hold can be picked back up exactly where it stopped. Finished trials live in the Archive instead.',
+                haltCount: '{n} projects',
+                haltEmpty: 'Nothing is on hold and nothing has been cancelled.',
+                haltNoMatch: 'No stopped project matches that.',
+                haltSearch: 'Search stopped projects',
+                haltGroupHold: 'On hold',
+                haltGroupCancelled: 'Cancelled',
+                haltKindHold: 'On hold',
+                haltKindCancelled: 'Cancelled',
+                haltedOn: 'Stopped',
+                haltedBy: 'by',
+                haltModalTitle: 'Stop this project',
+                haltModalDesc: 'It leaves the board but nothing is thrown away. Say which one it is, so the board can tell a project that is waiting from one that is off the table.',
+                haltPickHold: 'On hold',
+                haltPickHoldDesc: 'Paused for now. Expected to continue.',
+                haltPickCancelled: 'Cancelled',
+                haltPickCancelledDesc: 'Not going ahead. Kept for the record.',
+                haltReason: 'Reason (optional)',
+                haltReasonPlaceholder: 'e.g. client postponed until the new season',
+                haltSave: 'Stop project',
+                haltCancelBtn: 'Never mind',
+                resume: 'Put this project back on the board',
+                resumeShort: 'Resume',
+                haltToCancelled: 'Mark as cancelled',
+                haltToHold: 'Move back to on hold',
+                viewHalted: 'Stopped',
+                viewArchiveHub: 'Archive',
+                hubDone: 'Completed',
+                hubStopped: 'Stopped',
+                hubDoneHint: 'Trials that ran to the end.',
+                hubStoppedHint: 'On hold or cancelled before the finish.',
+                haltNoteLabel: 'Reason',
+                // Accepted column: how long a card has been waiting to start.
+                waitingToday: 'since today', waitingOneDay: '1 day waiting',
+                waitingDays: '{n} days waiting', waitingUnknown: 'waiting',
+                waitingTitle: 'Accepted by the client on {date} — still no start',
+                copyProject: 'Duplicate this project',
+                copiedFromLabel: 'copy',
                 confirmArchive: 'Archive "{name}"?\n\nThe card leaves the board for the whole team but nothing is deleted: it stays under the Archive tab, keeps its documents, and can be put back at any time.',
                 archiveTitle: 'Archived projects',
                 archiveDesc: 'Finished projects, parked out of the board. Everything is still here — open the dashboard, or put a card back on the board.',
@@ -186,6 +237,7 @@
                 photoError: 'Could not read that image.',
                 confirmDelete: 'Delete this project and all its files? This cannot be undone.',
                 confirmDeleteShared: 'Remove this project from the board?\n\nThe card is removed for the whole team. Its documents (intake / proposal / report) are kept in the folder, so nothing is lost and a colleague who has one open is not cut off.',
+                filesNotRemoved: 'The card is gone from the board, but its documents could not be deleted from the folder. They are still on disk — remove them by hand if you meant to.',
                 all: 'All', search: 'Search…',
                 emptyColumn: 'Drop a card or JSON file here', noProjects: 'No projects yet — click a phase header to start a document, or use “New project”.',
                 notJson: 'Only .json files can be imported.', importFailed: 'Could not import',
@@ -212,11 +264,13 @@
                 whoDesc: 'Het team werkt op één database. Je naam wordt bij elke wijziging vastgelegd, zodat iedereen ziet wie een kaart heeft verplaatst — en zodat het board kan laten zien wanneer een collega al in een project werkt.',
                 whoPlaceholder: 'bijv. Luke',
                 whoSave: 'Opslaan', whoChange: 'Naam wijzigen',
-                whoOnline: 'Werkt in deze database', whoOnlineNone: 'Op dit moment niemand anders', whoOnlineYou: 'jij',
+                whoOnline: 'Werkt in deze database', whoOnlineNone: 'Nog niemand hier', whoOnlineYou: 'jij',
+                whoOnlineGroup: 'Nu online', whoOfflineGroup: 'Ook gekoppeld', whoNeverSeen: 'nog niet gezien',
+                whoSeenHours: '{n} uur geleden', whoSeenDays: '{n} dagen geleden',
                 whoOnlineHint: 'Ongeveer eens per minuut ververst. Op een gesynchroniseerde map kan het even duren voordat een collega verschijnt of verdwijnt.',
                 whoOnlineNoName: 'Stel je naam in om hier zelf te verschijnen.',
                 whoSeenNow: 'nu', whoSeenMin: '{n} min geleden',
-                infoTitle: 'Database & status', infoFolder: 'Databasemap', infoBackup: 'Laatste back-up', infoSync: 'Laatste CRM-sync',
+                infoTitle: 'Database & status', infoFolder: 'Databasemap', infoBackup: 'Laatste back-up', infoSync: 'Laatste CRM-sync', infoRefreshed: 'Board verversd',
                 migrateTitle: 'Omzetten naar het gedeelde formaat',
                 migrateDesc: 'Deze map gebruikt nog het formaat voor één gebruiker: één board.json met alle projecten erin. Op een gedeelde map gaan daarmee wijzigingen verloren — twee mensen die tegelijk opslaan overschrijven elkaar. Na omzetten heeft elk project zijn eigen bestand. Je board.json blijft bewaard als board.json.pre-split.',
                 migrateBtn: 'Nu omzetten', migrateBusy: 'Bezig met omzetten…',
@@ -273,6 +327,45 @@
                 productArchived: '{n} gearchiveerd', productUpdated: 'Bijgewerkt', productOpen: 'Openen in het dashboard',
                 // Archief — afgeronde projecten worden geparkeerd, nooit verwijderd.
                 archiveProject: 'Dit project archiveren',
+                haltProject: 'Dit project on hold zetten of annuleren',
+                haltTitle: 'Gestopte projecten',
+                haltDesc: 'Projecten die niet lopen: geparkeerd voor later, of afgeblazen. Alles blijft bewaard — de fase, de documenten en de CRM-koppeling — zodat een project dat on hold staat precies daar verder kan waar het stopte. Afgeronde testen staan in het Archief.',
+                haltCount: '{n} projecten',
+                haltEmpty: 'Er staat niets on hold en er is niets geannuleerd.',
+                haltNoMatch: 'Geen gestopt project dat daarop past.',
+                haltSearch: 'Zoek in gestopte projecten',
+                haltGroupHold: 'On hold',
+                haltGroupCancelled: 'Geannuleerd',
+                haltKindHold: 'On hold',
+                haltKindCancelled: 'Geannuleerd',
+                haltedOn: 'Gestopt',
+                haltedBy: 'door',
+                haltModalTitle: 'Dit project stopzetten',
+                haltModalDesc: 'Het verdwijnt van het board, maar er gaat niets weg. Geef aan wat het is, zodat het board een project dat wacht kan onderscheiden van een project dat van de baan is.',
+                haltPickHold: 'On hold',
+                haltPickHoldDesc: 'Even gepauzeerd. Gaat naar verwachting verder.',
+                haltPickCancelled: 'Geannuleerd',
+                haltPickCancelledDesc: 'Gaat niet door. Blijft bewaard voor de historie.',
+                haltReason: 'Reden (optioneel)',
+                haltReasonPlaceholder: 'bijv. klant stelt uit tot het nieuwe seizoen',
+                haltSave: 'Project stopzetten',
+                haltCancelBtn: 'Laat maar',
+                resume: 'Dit project terugzetten op het board',
+                resumeShort: 'Hervatten',
+                haltToCancelled: 'Als geannuleerd markeren',
+                haltToHold: 'Terug naar on hold',
+                viewHalted: 'Gestopt',
+                viewArchiveHub: 'Archief',
+                hubDone: 'Afgerond',
+                hubStopped: 'Gestopt',
+                hubDoneHint: 'Testen die helemaal zijn doorlopen.',
+                hubStoppedHint: 'On hold of geannuleerd voor de finish.',
+                haltNoteLabel: 'Reden',
+                waitingToday: 'sinds vandaag', waitingOneDay: '1 dag wachten',
+                waitingDays: '{n} dagen wachten', waitingUnknown: 'wachtend',
+                waitingTitle: 'Geaccepteerd door de klant op {date} — nog geen start',
+                copyProject: 'Dit project dupliceren',
+                copiedFromLabel: 'kopie',
                 confirmArchive: '"{name}" archiveren?\n\nDe kaart verdwijnt van het board voor het hele team, maar er wordt niets verwijderd: hij blijft onder het tabblad Archief staan, houdt zijn documenten en kan altijd worden teruggezet.',
                 archiveTitle: 'Gearchiveerde projecten',
                 archiveDesc: 'Afgeronde projecten, geparkeerd buiten het board. Alles staat er nog — open het dashboard, of zet een kaart terug op het board.',
@@ -298,6 +391,7 @@
                 photoError: 'Kon die afbeelding niet lezen.',
                 confirmDelete: 'Dit project en alle bijbehorende bestanden verwijderen? Dit kan niet ongedaan gemaakt worden.',
                 confirmDeleteShared: 'Dit project van het board halen?\n\nDe kaart verdwijnt voor het hele team. De documenten (intake / proposal / report) blijven in de map staan, dus er gaat niets verloren en een collega die er nu in werkt wordt niet afgesloten.',
+                filesNotRemoved: 'De kaart is van het board verdwenen, maar de documenten konden niet uit de map worden verwijderd. Ze staan nog op schijf — verwijder ze handmatig als dat de bedoeling was.',
                 all: 'Alle', search: 'Zoeken…',
                 emptyColumn: 'Sleep hier een kaart of JSON-bestand', noProjects: 'Nog geen projecten — klik op een fase-header om een document te starten, of gebruik “Nieuw project”.',
                 notJson: 'Alleen .json-bestanden kunnen worden geïmporteerd.', importFailed: 'Kon niet importeren',
@@ -324,11 +418,13 @@
                 whoDesc: 'El equipo comparte una base de datos. Su nombre se registra en cada cambio, para que todos vean quién movió una tarjeta — y para que el panel pueda mostrar cuándo un colega ya está trabajando en un proyecto.',
                 whoPlaceholder: 'ej. Luke',
                 whoSave: 'Guardar', whoChange: 'Cambiar nombre',
-                whoOnline: 'Trabajando en esta base de datos', whoOnlineNone: 'Ahora mismo nadie más', whoOnlineYou: 'tú',
+                whoOnline: 'Trabajando en esta base de datos', whoOnlineNone: 'Todavía no hay nadie', whoOnlineYou: 'tú',
+                whoOnlineGroup: 'En línea ahora', whoOfflineGroup: 'También conectados', whoNeverSeen: 'aún no visto',
+                whoSeenHours: 'hace {n} h', whoSeenDays: 'hace {n} d',
                 whoOnlineHint: 'Se actualiza aproximadamente cada minuto. En una carpeta sincronizada, un colega puede tardar en aparecer o desaparecer.',
                 whoOnlineNoName: 'Escriba su nombre para aparecer aquí.',
                 whoSeenNow: 'ahora', whoSeenMin: 'hace {n} min',
-                infoTitle: 'Base de datos y estado', infoFolder: 'Carpeta de base de datos', infoBackup: 'Última copia', infoSync: 'Última sincronización CRM',
+                infoTitle: 'Base de datos y estado', infoFolder: 'Carpeta de base de datos', infoBackup: 'Última copia', infoSync: 'Última sincronización CRM', infoRefreshed: 'Panel actualizado',
                 migrateTitle: 'Convertir al formato compartido',
                 migrateDesc: 'Esta carpeta usa todavía el formato de un solo usuario: un board.json con todos los proyectos. En una carpeta compartida eso pierde cambios — dos personas que guardan a la vez se sobrescriben. Al convertir, cada proyecto tiene su propio archivo. Su board.json se conserva como board.json.pre-split.',
                 migrateBtn: 'Convertir ahora', migrateBusy: 'Convirtiendo…',
@@ -385,6 +481,45 @@
                 productArchived: '{n} archivados', productUpdated: 'Actualizado', productOpen: 'Abrir en el panel',
                 // Archivo — los proyectos terminados se aparcan, nunca se eliminan.
                 archiveProject: 'Archivar este proyecto',
+                haltProject: 'Pausar o cancelar este proyecto',
+                haltTitle: 'Proyectos detenidos',
+                haltDesc: 'Proyectos que no están en marcha: aparcados para más adelante, o cancelados. Todo se conserva — la fase, los documentos y el enlace con el CRM — así que un proyecto en pausa puede retomarse justo donde se quedó. Los ensayos terminados están en el Archivo.',
+                haltCount: '{n} proyectos',
+                haltEmpty: 'No hay nada en pausa ni cancelado.',
+                haltNoMatch: 'Ningún proyecto detenido coincide.',
+                haltSearch: 'Buscar proyectos detenidos',
+                haltGroupHold: 'En pausa',
+                haltGroupCancelled: 'Cancelados',
+                haltKindHold: 'En pausa',
+                haltKindCancelled: 'Cancelado',
+                haltedOn: 'Detenido',
+                haltedBy: 'por',
+                haltModalTitle: 'Detener este proyecto',
+                haltModalDesc: 'Sale del panel pero no se descarta nada. Indica de qué se trata, para que el panel distinga un proyecto que espera de uno que ya no sigue.',
+                haltPickHold: 'En pausa',
+                haltPickHoldDesc: 'Pausado por ahora. Se espera continuar.',
+                haltPickCancelled: 'Cancelado',
+                haltPickCancelledDesc: 'No sigue adelante. Se conserva como registro.',
+                haltReason: 'Motivo (opcional)',
+                haltReasonPlaceholder: 'p. ej. el cliente lo aplaza a la nueva temporada',
+                haltSave: 'Detener proyecto',
+                haltCancelBtn: 'Dejarlo',
+                resume: 'Devolver este proyecto al panel',
+                resumeShort: 'Retomar',
+                haltToCancelled: 'Marcar como cancelado',
+                haltToHold: 'Volver a en pausa',
+                viewHalted: 'Detenidos',
+                viewArchiveHub: 'Archivo',
+                hubDone: 'Terminados',
+                hubStopped: 'Detenidos',
+                hubDoneHint: 'Ensayos que llegaron al final.',
+                hubStoppedHint: 'En pausa o cancelados antes del final.',
+                haltNoteLabel: 'Motivo',
+                waitingToday: 'desde hoy', waitingOneDay: '1 día esperando',
+                waitingDays: '{n} días esperando', waitingUnknown: 'esperando',
+                waitingTitle: 'Aceptado por el cliente el {date} — aún sin inicio',
+                copyProject: 'Duplicar este proyecto',
+                copiedFromLabel: 'copia',
                 confirmArchive: '¿Archivar "{name}"?\n\nLa tarjeta sale del panel para todo el equipo, pero no se elimina nada: permanece en la pestaña Archivo, conserva sus documentos y puede devolverse en cualquier momento.',
                 archiveTitle: 'Proyectos archivados',
                 archiveDesc: 'Proyectos terminados, aparcados fuera del panel. Todo sigue aquí — abra el panel, o devuelva una tarjeta al board.',
@@ -410,6 +545,7 @@
                 photoError: 'No se pudo leer esa imagen.',
                 confirmDelete: '¿Eliminar este proyecto y todos sus archivos? No se puede deshacer.',
                 confirmDeleteShared: '¿Quitar este proyecto del panel?\n\nLa tarjeta desaparece para todo el equipo. Sus documentos (intake / proposal / report) se conservan en la carpeta, así no se pierde nada y un colega que lo tenga abierto no queda cortado.',
+                filesNotRemoved: 'La tarjeta ha desaparecido del panel, pero no se han podido eliminar sus documentos de la carpeta. Siguen en el disco — bórralos a mano si esa era la intención.',
                 all: 'Todos', search: 'Buscar…',
                 emptyColumn: 'Suelte una tarjeta o archivo JSON', noProjects: 'Aún no hay proyectos — haga clic en un encabezado de fase para iniciar un documento, o use “Nuevo proyecto”.',
                 notJson: 'Solo se pueden importar archivos .json.', importFailed: 'No se pudo importar',
@@ -456,6 +592,26 @@
 
         // How a product reads in a list: "Carrot Polished", "Bimi®Broccolini".
         const productLabel = (p) => [p && p.name, p && p.variety].filter(Boolean).join(' ').trim();
+
+        // The other names a product is sold under — Romano Beans is also Flat
+        // Beans. Searchable everywhere, never shown in place of the product name.
+        const productAliases = (p) => Board.cleanAliases(p && p.aliases, p && p.name);
+
+        // One datalist row per alternative name, per product NAME — not per
+        // variety. An alias belongs to the product, so the varieties of Romano
+        // Beans share it and naming one of them in the row would be picking one
+        // arbitrarily.
+        const productAliasOptions = (index) => {
+            const seen = new Set();
+            const out = [];
+            (index || []).forEach(p => productAliases(p).forEach(a => {
+                const key = Board.normaliseProductName(a) + '|' + Board.normaliseProductName(p.name);
+                if (seen.has(key)) return;
+                seen.add(key);
+                out.push({ key, alias: a, name: p.name });
+            }));
+            return out.sort((a, b) => a.alias.localeCompare(b.alias));
+        };
 
         // People entries may be legacy strings or { name, email, phone } objects.
         const normPeople = (arr) => (arr || [])
@@ -690,10 +846,20 @@
                                                     onChange={e => {
                                                         const name = e.target.value;
                                                         const hit = (productIndex || []).find(p => productLabel(p) === name);
-                                                        setData(d => ({ ...d, product: name, productId: hit ? hit.id : '' }));
+                                                        if (hit) { setData(d => ({ ...d, product: name, productId: hit.id })); return; }
+                                                        // Typed one of the product's OTHER trade names: link it, and
+                                                        // put its MAIN name in the field — the card must read the
+                                                        // same as the dashboard entry it points at.
+                                                        const viaAlias = (productIndex || []).find(p => productAliases(p).some(a => a === name));
+                                                        if (viaAlias) { setData(d => ({ ...d, product: productLabel(viaAlias), productId: viaAlias.id })); return; }
+                                                        setData(d => ({ ...d, product: name, productId: '' }));
                                                     }} />
                                                 <datalist id="pt-products">
                                                     {(productIndex || []).map(p => <option key={p.id} value={productLabel(p)} />)}
+                                                    {/* The alternative names, each pointing back at its product. */}
+                                                    {productAliasOptions(productIndex).map(a => (
+                                                        <option key={a.key} value={a.alias}>→ {a.name}</option>
+                                                    ))}
                                                 </datalist>
                                                 {(data.product || '').trim() ? (
                                                     data.productId
@@ -791,9 +957,24 @@
             </span>
         ) : null;
 
-        const ProjectCard = ({ t, project, lock, onDragStart, onEdit, onDelete, onArchive, onOpen, onActionOpen, onActionToggle }) => {
+        const ProjectCard = ({ t, project, lock, onDragStart, onEdit, onDelete, onArchive, onHalt, onCopy, onOpen, onActionOpen, onActionToggle }) => {
             const color = PHASE_COLORS[project.phase] || BRAND.blue;
             const isReport = project.phase === 'report';
+            const isAccepted = project.phase === 'accepted';
+            // Days since the card landed in this column. phaseChangedAt is stamped
+            // on every board-side move; older cards predate it, so fall back to
+            // updatedAt and finally to no number at all rather than showing a wrong
+            // one. Thresholds are about chasing the client, not precision: two weeks
+            // is a nudge, a month is overdue.
+            const waiting = (() => {
+                const since = project.phaseChangedAt || project.updatedAt || null;
+                if (!since) return { label: t.waitingUnknown, tone: BRAND.lightBlue, since: null };
+                const days = Math.floor((Date.now() - new Date(since).getTime()) / 86400000);
+                if (!(days >= 0)) return { label: t.waitingUnknown, tone: BRAND.lightBlue, since: null };
+                const label = days === 0 ? t.waitingToday : days === 1 ? t.waitingOneDay : t.waitingDays.replace('{n}', days);
+                const tone = days >= 30 ? '#B91C1C' : days >= 14 ? BRAND.orange : BRAND.lightBlue;
+                return { label, tone, since };
+            })();
             const hasImg = !!project.image;
             const heading = cardHeading(project) || t.untitled;
             const showProductRow = project.product && project.client;
@@ -841,6 +1022,23 @@
                                 onMouseEnter={(e) => { e.currentTarget.style.color = BRAND.blue; }}
                                 onMouseLeave={(e) => { e.currentTarget.style.color = ''; }}><Archive size={12} /></button>
                         )}
+                        {/* Unlike archiving, this is offered in EVERY column: a
+                            project can stall at any phase, and that is exactly when
+                            it needs to come off the board without being thrown away. */}
+                        {onHalt && (
+                            <button type="button" onClick={(e) => { e.stopPropagation(); onHalt(project); }}
+                                className="p-1 rounded-md bg-white/85 backdrop-blur hover:bg-white text-slate-500 shadow-sm"
+                                title={t.haltProject} aria-label={t.haltProject}
+                                onMouseEnter={(e) => { e.currentTarget.style.color = BRAND.blue; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.color = ''; }}><PauseCircle size={12} /></button>
+                        )}
+                        {onCopy && (
+                            <button type="button" onClick={(e) => { e.stopPropagation(); onCopy(project); }}
+                                className="p-1 rounded-md bg-white/85 backdrop-blur hover:bg-white text-slate-500 shadow-sm"
+                                title={t.copyProject} aria-label={t.copyProject}
+                                onMouseEnter={(e) => { e.currentTarget.style.color = BRAND.blue; }}
+                                onMouseLeave={(e) => { e.currentTarget.style.color = ''; }}><Copy size={12} /></button>
+                        )}
                         <button type="button" onClick={(e) => { e.stopPropagation(); onEdit(project); }} className="p-1 rounded-md bg-white/85 backdrop-blur hover:bg-white text-slate-500 hover:text-slate-800 shadow-sm" title={t.editProject} aria-label={t.editProject}><Pencil size={12} /></button>
                         <button type="button" onClick={(e) => { e.stopPropagation(); onDelete(project); }} className="p-1 rounded-md bg-white/85 backdrop-blur hover:bg-white text-slate-500 hover:text-red-600 shadow-sm" title={t.delete} aria-label={t.delete}><Trash2 size={12} /></button>
                     </div>
@@ -852,6 +1050,27 @@
                             <p className="flex items-center gap-1 mt-0.5 text-[11.5px] font-semibold text-slate-700">
                                 <Package size={12} className="shrink-0" style={{ color }} aria-hidden="true" />
                                 <span className="truncate">{project.product}</span>
+                            </p>
+                        )}
+
+                        {/* How long this card has been waiting to start. Only in the
+                            Accepted column, where it is the whole point: the client has
+                            said yes and the clock is running on chasing them for a date.
+                            Elsewhere it would be noise. */}
+                        {/* A duplicate is recognisable even if the edit dialog was
+                            closed without renaming it — two identical tiles side by
+                            side are otherwise a trap. */}
+                        {project.copiedFrom && (
+                            <span className="mt-1.5 mr-1 inline-flex items-center gap-1 rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">
+                                <Copy size={10} className="shrink-0" aria-hidden="true" />{t.copiedFromLabel}
+                            </span>
+                        )}
+                        {isAccepted && (
+                            <p className="mt-1.5 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-bold"
+                                style={{ backgroundColor: waiting.tone + '15', color: waiting.tone }}
+                                title={waiting.since ? t.waitingTitle.replace('{date}', fmtDate(waiting.since)) : t.waitingUnknown}>
+                                <Calendar size={11} className="shrink-0" aria-hidden="true" />
+                                {waiting.label}
                             </p>
                         )}
 
@@ -944,7 +1163,7 @@
         };
 
         // === Column ===
-        const Column = ({ t, phase, projects, locks, onDragStart, onDrop, dragOver, onOpen, onEdit, onDelete, onArchive, onHeaderClick, onActionOpen, onActionToggle }) => {
+        const Column = ({ t, phase, projects, locks, onDragStart, onDrop, dragOver, onOpen, onEdit, onDelete, onArchive, onHalt, onCopy, onHeaderClick, onActionOpen, onActionToggle }) => {
             const [over, setOver] = useState(false);
             const color = PHASE_COLORS[phase.key];
             const PhaseIcon = PHASE_ICONS[phase.key] || Package;
@@ -981,7 +1200,7 @@
                             <p className="text-[11px] text-slate-400 text-center py-5 select-none">{t.emptyColumn}</p>
                         )}
                         {projects.map(p => (
-                            <ProjectCard key={p.id} t={t} project={p} lock={locks && locks[p.id]} onDragStart={onDragStart} onOpen={onOpen} onEdit={onEdit} onDelete={onDelete} onArchive={onArchive} onActionOpen={onActionOpen} onActionToggle={onActionToggle} />
+                            <ProjectCard key={p.id} t={t} project={p} lock={locks && locks[p.id]} onDragStart={onDragStart} onOpen={onOpen} onEdit={onEdit} onDelete={onDelete} onArchive={onArchive} onHalt={onHalt} onCopy={onCopy} onActionOpen={onActionOpen} onActionToggle={onActionToggle} />
                         ))}
                     </div>
                 </div>
@@ -1014,6 +1233,11 @@
                     </div>
                     <div className="p-4 flex flex-col gap-2 flex-1">
                         <h3 className="font-bold text-sm text-slate-900 leading-snug">{label}</h3>
+                        {/* Under the name, never instead of it: these are the other
+                            names the same product is traded as. */}
+                        {productAliases(product).length > 0 && (
+                            <p className="text-[11px] text-slate-400 leading-snug">{productAliases(product).join(' · ')}</p>
+                        )}
                         <div className="flex flex-wrap items-center gap-1.5 mt-auto pt-1">
                             <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md"
                                 style={product.hasSheet
@@ -1351,39 +1575,128 @@
         // === Who are you? ===
         // On a shared database every write is attributed, and the board hides your
         // own advisory lock. Asked once, kept in localStorage per browser.
-        /* Who else has the database open. Grouped by NAME, not by session: two
-           tabs open is still one colleague, and "Rebecca, Rebecca" just looks
-           broken. Worded as "recently active" on purpose — on a synced folder
-           this can never be truly live, and a list implying otherwise is worse
-           than no list at all. */
-        const PresencePanel = ({ t, people, userLabel, onClose }) => {
-            const seen = (ms) => ms < 90000 ? t.whoSeenNow : t.whoSeenMin.replace('{n}', Math.round(ms / 60000));
-            const byName = [];
-            people.forEach(p => {
-                const hit = byName.find(x => x.user === p.user);
-                if (hit) { hit.pages.add(p.page); hit.ageMs = Math.min(hit.ageMs, p.ageMs); hit.self = hit.self || p.self; }
-                else byName.push({ user: p.user, pages: new Set([p.page]), ageMs: p.ageMs, self: p.self });
-            });
+        /* Everyone this database belongs to, split into who is here right now and
+           who is not. Grouped by NAME, not by session: two tabs open is still one
+           colleague, and "Rebecca, Rebecca" just looks broken.
+
+           The offline half is assembled from data that already exists rather than
+           from a new "members" file nobody would maintain:
+             - the people registry (the same commercials / product managers the
+               board already manages), so a colleague appears even if they have
+               never opened the board;
+             - presence files that have gone stale, which carry a real last-seen;
+             - updatedBy on the cards, which is the only evidence for someone who
+               edits from a tool and is not in the registry.
+
+           Worded as "recently active" on purpose — on a synced folder this can
+           never be truly live, and a list implying otherwise is worse than none. */
+        // Database status and the rarely-used database actions, kept out of the
+        // header. This is what the "i" button opens. DashInfoPanel in
+        // dashboard.html is the same idea for that page — the comment there says
+        // it mirrors this one.
+        //
+        // Restored: the call site existed but the component did not, so clicking
+        // "i" asked React to render `undefined`, which throws and takes the whole
+        // board down with it — hence the blank page rather than a broken panel.
+        // Built to the props the call site already passes, and shaped like its
+        // sibling PresencePanel below so the two dropdowns match.
+        const InfoPanel = ({ t, rootName, dbFormat, backupState, backupBusy, syncState,
+                             lastLoadedAt, onChangeFolder, onOpenBackups, onOpenTrash, onClose }) => {
+            // "Last backup" is the newest of the three slots — that is the answer
+            // to the question someone actually opens this panel to ask. ISO
+            // strings sort lexicographically, so a plain sort is enough.
+            const lastBackup = [backupState && backupState.lastDaily,
+                                backupState && backupState.lastWeekly,
+                                backupState && backupState.lastMonthly]
+                .filter(Boolean).sort().pop();
+            const lastSync = syncState && syncState.lastRunAt;
+
+            const Row = ({ icon: Icon, label, value, muted }) => (
+                <li className="flex items-start gap-2 px-2 py-1.5">
+                    <Icon size={14} className="shrink-0 mt-0.5 text-slate-400" aria-hidden="true" />
+                    <span className="flex-1 min-w-0">
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</span>
+                        <span className={`block text-sm truncate ${muted ? 'text-slate-400 italic' : 'font-semibold text-slate-800'}`}>{value}</span>
+                    </span>
+                </li>
+            );
+            const Action = ({ icon: Icon, label, onClick, disabled }) => (
+                <button type="button" onClick={onClick} disabled={!!disabled}
+                    className="flex items-center gap-2 w-full px-2 py-2 rounded-lg text-left text-sm font-bold text-slate-600 hover:bg-slate-50 disabled:opacity-50">
+                    <Icon size={14} className="shrink-0 text-slate-400" aria-hidden="true" />
+                    <span className="truncate">{label}</span>
+                </button>
+            );
+
             return (
                 <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-2xl border border-slate-100 z-40 p-3">
-                    <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center justify-between mb-1">
+                        <span className="font-bold text-sm" style={{ color: BRAND.blue }}>{t.infoTitle}</span>
+                        <button type="button" onClick={onClose} className="p-1 rounded hover:bg-slate-100 text-slate-400"><X size={14} /></button>
+                    </div>
+                    <ul>
+                        <Row icon={FolderOpen} label={t.infoFolder}
+                            value={rootName || '—'} muted={!rootName} />
+                        <Row icon={Lock} label={t.infoBackup}
+                            value={lastBackup ? fmtDateTime(lastBackup) : t.backupNever} muted={!lastBackup} />
+                        <Row icon={RefreshCw} label={t.infoSync}
+                            value={lastSync ? fmtDateTime(lastSync) : t.backupNever} muted={!lastSync} />
+                        {/* Not the CRM sync above — this is when the board last read
+                            the shared folder, which is what decides whether a
+                            colleague's change is on screen yet. */}
+                        <Row icon={Users} label={t.infoRefreshed}
+                            value={lastLoadedAt ? fmtDateTime(lastLoadedAt) : t.backupNever} muted={!lastLoadedAt} />
+                    </ul>
+                    {/* Only worth saying when it is true: a folder still on the
+                        single-file format loses changes when two people save. */}
+                    {dbFormat === 'legacy' && (
+                        <p className="mt-1 mx-2 flex items-start gap-1.5 text-[11px] font-bold leading-snug text-amber-700">
+                            <AlertTriangle size={13} className="shrink-0 mt-px" aria-hidden="true" />
+                            <span>{t.migrateTitle}</span>
+                        </p>
+                    )}
+                    <div className="mt-2 pt-2 border-t border-slate-100">
+                        <Action icon={FolderOpen} label={t.changeFolder} onClick={onChangeFolder} />
+                        <Action icon={Lock} label={t.backupTitle} onClick={onOpenBackups} disabled={!!backupBusy} />
+                        <Action icon={Trash2} label={t.trashTitle} onClick={onOpenTrash} />
+                    </div>
+                </div>
+            );
+        };
+        const PresencePanel = ({ t, people, roster, userLabel, onClose }) => {
+            const online = roster.filter(r => r.online);
+            const offline = roster.filter(r => !r.online);
+            const Row = ({ r }) => (
+                <li className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50">
+                    <span className="w-2 h-2 rounded-full shrink-0"
+                        style={{ backgroundColor: r.online ? BRAND.green : '#cbd5e1' }} aria-hidden="true" />
+                    <span className="flex-1 min-w-0">
+                        <span className={`block text-sm truncate ${r.online ? 'font-semibold text-slate-800' : 'text-slate-500'}`}>
+                            {r.user}{r.self && <span className="ml-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">({t.whoOnlineYou})</span>}
+                        </span>
+                        {r.pages && r.pages.length > 0 && (
+                            <span className="block text-[11px] text-slate-400 truncate">{r.pages.join(', ')}</span>
+                        )}
+                    </span>
+                    <span className="text-[10px] text-slate-400 tabular-nums shrink-0">{r.seenLabel}</span>
+                </li>
+            );
+            const Group = ({ label, rows }) => rows.length === 0 ? null : (
+                <>
+                    <li className="px-2 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</li>
+                    {rows.map(r => <Row key={r.user} r={r} />)}
+                </>
+            );
+            return (
+                <div className="absolute right-0 mt-2 w-72 bg-white rounded-xl shadow-2xl border border-slate-100 z-40 p-3">
+                    <div className="flex items-center justify-between mb-1">
                         <span className="font-bold text-sm" style={{ color: BRAND.blue }}>{t.whoOnline}</span>
                         <button type="button" onClick={onClose} className="p-1 rounded hover:bg-slate-100 text-slate-400"><X size={14} /></button>
                     </div>
-                    {byName.length === 0 && <p className="text-xs text-slate-400 py-2">{t.whoOnlineNone}</p>}
-                    <ul className="space-y-1">
-                        {byName.map(pn => (
-                            <li key={pn.user} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-slate-50">
-                                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: BRAND.green }} aria-hidden="true" />
-                                <span className="flex-1 min-w-0">
-                                    <span className="block text-sm font-semibold text-slate-800 truncate">
-                                        {pn.user}{pn.self && <span className="ml-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">({t.whoOnlineYou})</span>}
-                                    </span>
-                                    <span className="block text-[11px] text-slate-400 truncate">{Array.from(pn.pages).filter(Boolean).join(', ')}</span>
-                                </span>
-                                <span className="text-[10px] text-slate-400 tabular-nums shrink-0">{seen(pn.ageMs)}</span>
-                            </li>
-                        ))}
+                    {roster.length === 0 && <p className="text-xs text-slate-400 py-2">{t.whoOnlineNone}</p>}
+                    <ul className="max-h-72 overflow-auto">
+                        <Group label={t.whoOnlineGroup} rows={online} />
+                        <Group label={t.whoOfflineGroup} rows={offline} />
                     </ul>
                     <p className="mt-2 pt-2 border-t border-slate-100 text-[10px] leading-snug text-slate-400">
                         {!userLabel && <span className="block mb-1 font-bold text-amber-600">{t.whoOnlineNoName}</span>}
@@ -1392,63 +1705,213 @@
                 </div>
             );
         };
-
-        /* The three things that used to sit in the header as permanent chips:
-           which folder is bound, when the last backup ran, when the CRM last
-           synced. They are status, not controls — worth having, not worth a
-           slot each on every screen. The folder stays CHANGEABLE from here,
-           because binding the wrong folder is the one thing you need a way
-           out of. */
-        const InfoPanel = ({ t, rootName, dbFormat, backupState, backupBusy, syncState, onChangeFolder, onOpenBackups, onOpenTrash, onClose }) => {
-            const lastBackup = backupState && backupState.runs && backupState.runs.length
-                ? fmtDateTime(backupState.runs[backupState.runs.length - 1].at) : t.backupNever;
-            const Row = ({ label, children }) => (
-                <div className="px-2 py-2 rounded-lg hover:bg-slate-50">
-                    <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">{label}</span>
-                    {children}
-                </div>
-            );
+        // Stopping a project is not the same as finishing one, and the difference
+        // between "paused" and "called off" matters months later when someone asks
+        // whether that trial is ever coming back. So the board asks which one it is
+        // and offers a place for the reason, rather than silently parking the card.
+        const HaltModal = ({ t, project, onSave, onClose }) => {
+            const [kind, setKind] = useState('hold');
+            const [note, setNote] = useState('');
+            const Pick = ({ value, icon: Icon, label, desc, tone }) => {
+                const on = kind === value;
+                return (
+                    <button type="button" onClick={() => setKind(value)} aria-pressed={on}
+                        className={`flex-1 text-left p-3 rounded-xl border-2 transition-colors ${on ? 'bg-slate-50' : 'border-slate-200 hover:border-slate-300'}`}
+                        style={on ? { borderColor: tone } : {}}>
+                        <span className="flex items-center gap-1.5 font-bold text-sm" style={on ? { color: tone } : {}}>
+                            <Icon size={15} className="shrink-0" aria-hidden="true" />{label}
+                        </span>
+                        <span className="mt-0.5 block text-[11px] leading-snug text-slate-500">{desc}</span>
+                    </button>
+                );
+            };
             return (
-                <div className="absolute right-0 mt-2 w-80 bg-white rounded-xl shadow-2xl border border-slate-100 z-40 p-3">
-                    <div className="flex items-center justify-between mb-1">
-                        <span className="font-bold text-sm" style={{ color: BRAND.blue }}>{t.infoTitle}</span>
-                        <button type="button" onClick={onClose} className="p-1 rounded hover:bg-slate-100 text-slate-400"><X size={14} /></button>
+                <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
+                    <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md p-7" onClick={e => e.stopPropagation()}>
+                        <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-4"
+                            style={{ backgroundColor: BRAND.blue + '15', color: BRAND.blue }}>
+                            <PauseCircle size={24} />
+                        </div>
+                        <h2 className="text-lg font-bold brand-heading mb-1">{t.haltModalTitle}</h2>
+                        <p className="text-sm font-bold text-slate-700 mb-2 truncate">{cardHeading(project) || t.untitled}</p>
+                        <p className="text-sm text-slate-500 leading-relaxed mb-4">{t.haltModalDesc}</p>
+                        <div className="flex gap-2 mb-4">
+                            <Pick value="hold" icon={PauseCircle} label={t.haltPickHold}
+                                desc={t.haltPickHoldDesc} tone={BRAND.blue} />
+                            <Pick value="cancelled" icon={Ban} label={t.haltPickCancelled}
+                                desc={t.haltPickCancelledDesc} tone="#B91C1C" />
+                        </div>
+                        <label className="block mb-4">
+                            <span className="block mb-1.5 text-[11px] font-semibold tracking-[0.14em] text-slate-500 uppercase">{t.haltReason}</span>
+                            <textarea value={note} onChange={e => setNote(e.target.value)} rows={2}
+                                placeholder={t.haltReasonPlaceholder}
+                                className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 resize-y" />
+                        </label>
+                        <div className="flex justify-end gap-2">
+                            <button type="button" onClick={onClose}
+                                className="text-sm font-bold text-slate-500 px-4 py-2 rounded-lg hover:bg-slate-100">{t.haltCancelBtn}</button>
+                            <button type="button" onClick={() => { onSave(kind, note.trim()); onClose(); }}
+                                className="text-sm font-bold text-white px-5 py-2 rounded-lg"
+                                style={{ backgroundColor: kind === 'cancelled' ? '#B91C1C' : BRAND.blue }}>{t.haltSave}</button>
+                        </div>
                     </div>
-                    <Row label={t.infoFolder}>
-                        <div className="flex items-center gap-2">
-                            <FolderOpen size={14} className="shrink-0" style={{ color: BRAND.green }} />
-                            <span className="flex-1 min-w-0 truncate text-sm font-semibold text-slate-800">{rootName || '—'}</span>
-                            <button type="button" onClick={onChangeFolder}
-                                className="shrink-0 text-[11px] font-bold px-2 py-1 rounded-md border border-slate-200 text-slate-600 hover:bg-slate-100">{t.changeFolder}</button>
-                        </div>
-                    </Row>
-                    {dbFormat === 'cards' && (
-                        <Row label={t.infoBackup}>
-                            <div className="flex items-center gap-2">
-                                <Lock size={13} className="shrink-0" style={{ color: BRAND.green }} />
-                                <span className="flex-1 min-w-0 truncate text-sm text-slate-700">{backupBusy || lastBackup}</span>
-                                <button type="button" onClick={onOpenBackups}
-                                    className="shrink-0 text-[11px] font-bold px-2 py-1 rounded-md border border-slate-200 text-slate-600 hover:bg-slate-100">{t.backupTitle}</button>
-                            </div>
-                        </Row>
-                    )}
-                    <Row label={t.viewTrash}>
-                        <div className="flex items-center gap-2">
-                            <Trash2 size={13} className="shrink-0 text-slate-400" />
-                            <span className="flex-1 min-w-0 text-sm text-slate-700">{t.trashInfoLine}</span>
-                            <button type="button" onClick={onOpenTrash}
-                                className="shrink-0 text-[11px] font-bold px-2 py-1 rounded-md border border-slate-200 text-slate-600 hover:bg-slate-100">{t.trashOpen}</button>
-                        </div>
-                    </Row>
-                    <Row label={t.infoSync}>
-                        <div className="flex items-center gap-2">
-                            <RefreshCw size={13} className="shrink-0" style={{ color: BRAND.blue }} />
-                            <span className="text-sm text-slate-700">{syncState && syncState.lastRunAt ? fmtDateTime(syncState.lastRunAt) : t.neverSynced}</span>
-                        </div>
-                    </Row>
                 </div>
             );
         };
+
+        // Stopped projects, kept deliberately separate from the Archive: the
+        // Archive is where finished trials go, this is where unfinished ones wait.
+        // Grouped so "waiting" and "off the table" never blur into one list.
+        const HaltedView = ({ t, projects, onOpen, onResume, onSwitchKind, onDelete }) => {
+            const [q, setQ] = useState('');
+            const needle = q.trim().toLowerCase();
+            const rows = needle
+                ? projects.filter(p => [p.client, p.product, p.commercial, p.productManager, p.title, p.haltedNote]
+                    .filter(Boolean).join(' ').toLowerCase().includes(needle))
+                : projects;
+            const held = rows.filter(p => p.haltedKind !== 'cancelled');
+            const cancelled = rows.filter(p => p.haltedKind === 'cancelled');
+
+            const Item = ({ p }) => {
+                const isCancelled = p.haltedKind === 'cancelled';
+                const tone = isCancelled ? '#B91C1C' : BRAND.blue;
+                const color = PHASE_COLORS[p.phase] || BRAND.blue;
+                const phase = Board.phaseByKey[p.phase];
+                return (
+                    <li className={`group flex items-center gap-3 bg-white rounded-xl border border-slate-200 pl-0 pr-2 py-2 overflow-hidden hover:border-slate-300 ${isCancelled ? 'opacity-75 hover:opacity-100' : ''}`}>
+                        <span className="w-1 self-stretch shrink-0" style={{ backgroundColor: color }} aria-hidden="true" />
+                        {p.image
+                            ? <img src={p.image} alt="" className="w-9 h-9 rounded-lg object-cover shrink-0" />
+                            : <span className="w-9 h-9 rounded-lg bg-slate-100 text-slate-300 flex items-center justify-center shrink-0"><Package size={16} /></span>}
+                        <button type="button" onClick={() => onOpen(p)} title={t.openPhase} className="flex-1 min-w-0 text-left">
+                            <span className={`block font-bold text-[13.5px] leading-tight truncate ${p.client ? 'text-slate-900' : 'text-slate-400 italic'}`}>
+                                {cardHeading(p) || t.untitled}
+                            </span>
+                            <span className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px]">
+                                <MetaRow icon={Package} label={t.fProduct} value={p.product} />
+                                <MetaRow icon={Briefcase} label={t.fCommercial} value={p.commercial} />
+                                <MetaRow icon={UserCog} label={t.fPM} value={p.productManager} />
+                            </span>
+                            {/* The reason is the whole point of keeping these: it is what
+                                tells the next person whether this can be picked back up. */}
+                            {p.haltedNote && (
+                                <span className="mt-1 block text-[11px] italic leading-snug text-slate-500 break-words"
+                                    title={t.haltNoteLabel + ': ' + p.haltedNote}>“{p.haltedNote}”</span>
+                            )}
+                        </button>
+                        <span className="hidden lg:block shrink-0 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md"
+                            style={{ backgroundColor: color + '15', color }}>{phase ? phase.label : p.phase}</span>
+                        <span className="shrink-0 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md"
+                            style={{ backgroundColor: tone + '15', color: tone }}>
+                            {isCancelled ? <Ban size={11} /> : <PauseCircle size={11} />}
+                            <span className="hidden sm:inline">{isCancelled ? t.haltKindCancelled : t.haltKindHold}</span>
+                        </span>
+                        <span className="hidden md:block shrink-0 text-[11px] text-slate-400 tabular-nums text-right"
+                            title={t.haltedOn + ' ' + String(p.haltedAt || '').slice(0, 10) + (p.haltedBy ? ' ' + t.haltedBy + ' ' + p.haltedBy : '')}>
+                            {t.haltedOn} {fmtDate(String(p.haltedAt || '').slice(0, 10))}
+                            {p.haltedBy && <span className="block text-[10px]">{t.haltedBy} {p.haltedBy}</span>}
+                        </span>
+                        <span className="flex items-center gap-0.5 shrink-0">
+                            <button type="button" onClick={() => onResume(p)} title={t.resume} aria-label={t.resume}
+                                className="flex items-center gap-1 text-[11px] font-bold px-2 py-1.5 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50">
+                                <RotateCcw size={13} /><span className="hidden lg:inline">{t.resumeShort}</span>
+                            </button>
+                            {/* Reality changes its mind: a pause becomes a cancellation, or
+                                a cancelled trial comes back on the table. Switching should
+                                not mean resuming and stopping again. */}
+                            <button type="button" onClick={() => onSwitchKind(p, isCancelled ? 'hold' : 'cancelled')}
+                                title={isCancelled ? t.haltToHold : t.haltToCancelled}
+                                aria-label={isCancelled ? t.haltToHold : t.haltToCancelled}
+                                className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+                                {isCancelled ? <PauseCircle size={14} /> : <Ban size={14} />}
+                            </button>
+                            <button type="button" onClick={() => onDelete(p)} title={t.delete} aria-label={t.delete}
+                                className="p-1.5 rounded-lg text-slate-400 hover:bg-red-50 hover:text-red-600"><Trash2 size={14} /></button>
+                        </span>
+                    </li>
+                );
+            };
+
+            const Group = ({ label, icon: Icon, tone, items }) => items.length === 0 ? null : (
+                <section className="mb-6 last:mb-0">
+                    <h3 className="mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider" style={{ color: tone }}>
+                        <Icon size={13} aria-hidden="true" />{label}
+                        <span className="text-slate-400 tabular-nums">{items.length}</span>
+                    </h3>
+                    <ul className="space-y-1.5">{items.map(p => <Item key={p.id} p={p} />)}</ul>
+                </section>
+            );
+
+            return (
+                <div className="max-w-[1100px] mx-auto px-4 md:px-6 pt-6 pb-8">
+                    <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
+                        <div className="min-w-0">
+                            <h2 className="brand-heading text-lg uppercase tracking-tight flex items-center gap-2" style={{ color: BRAND.blue }}>
+                                <PauseCircle size={18} style={{ color: BRAND.green }} />{t.haltTitle}
+                                <span className="text-xs font-bold normal-case tracking-normal text-slate-400">
+                                    {t.haltCount.replace('{n}', projects.length)}
+                                </span>
+                            </h2>
+                            <p className="mt-1 text-sm text-slate-500 max-w-2xl">{t.haltDesc}</p>
+                        </div>
+                        {projects.length > 0 && (
+                            <label className="relative shrink-0">
+                                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+                                <input type="search" value={q} onChange={(e) => setQ(e.target.value)}
+                                    placeholder={t.haltSearch} aria-label={t.haltSearch}
+                                    className="w-64 pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none focus:border-[#008837]" />
+                            </label>
+                        )}
+                    </div>
+                    {projects.length === 0 ? (
+                        <p className="text-sm text-slate-400">{t.haltEmpty}</p>
+                    ) : rows.length === 0 ? (
+                        <p className="text-sm text-slate-400">{t.haltNoMatch}</p>
+                    ) : (
+                        <>
+                            <Group label={t.haltGroupHold} icon={PauseCircle} tone={BRAND.blue} items={held} />
+                            <Group label={t.haltGroupCancelled} icon={Ban} tone="#B91C1C" items={cancelled} />
+                        </>
+                    )}
+                </div>
+            );
+        };
+
+        // One button in the header for everything that is off the board, with the
+        // two kinds side by side underneath. They stay strictly separate — a
+        // finished trial and an abandoned one are different facts — but they are
+        // one destination, so the header keeps three tabs instead of four.
+        const ArchiveHub = ({ t, archived, halted, onOpen, onUnarchive, onResume, onSwitchKind, onDelete }) => {
+            // Land on whichever side has something in it, preferring Completed.
+            const [tab, setTab] = useState(archived.length === 0 && halted.length > 0 ? 'stopped' : 'done');
+            const Pick = ({ id, icon: Icon, label, hint, count }) => {
+                const on = tab === id;
+                return (
+                    <button type="button" role="tab" aria-selected={on} onClick={() => setTab(id)} title={hint}
+                        className={`flex items-center gap-1.5 text-sm font-bold px-3 py-1.5 rounded-md transition-colors ${on ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>
+                        <Icon size={15} style={on ? { color: BRAND.green } : {}} aria-hidden="true" />
+                        {label}
+                        {count > 0 && <span className="text-[10px] font-bold text-slate-400 tabular-nums">{count}</span>}
+                    </button>
+                );
+            };
+            return (
+                <div>
+                    <div className="max-w-[1100px] mx-auto px-4 md:px-6 pt-6">
+                        <div className="inline-flex items-center gap-0.5 bg-slate-100 rounded-lg p-0.5" role="tablist">
+                            <Pick id="done" icon={Archive} label={t.hubDone} hint={t.hubDoneHint} count={archived.length} />
+                            <Pick id="stopped" icon={PauseCircle} label={t.hubStopped} hint={t.hubStoppedHint} count={halted.length} />
+                        </div>
+                    </div>
+                    {/* Each side keeps its own view: the columns, the wording and the
+                        actions genuinely differ (unarchive vs resume / switch kind). */}
+                    {tab === 'done'
+                        ? <ArchiveView t={t} projects={archived} onOpen={onOpen} onUnarchive={onUnarchive} onDelete={onDelete} />
+                        : <HaltedView t={t} projects={halted} onOpen={onOpen} onResume={onResume} onSwitchKind={onSwitchKind} onDelete={onDelete} />}
+                </div>
+            );
+        };
+
         const NameModal = ({ t, initial, onSave, onClose }) => {
             const [name, setName] = useState(initial || '');
             const canSave = !!name.trim();
@@ -1660,8 +2123,11 @@
             // Who else has the database open. Polled, not pushed: a folder cannot
             // notify us, and one small directory listing a minute is cheap.
             const [presence, setPresence] = useState([]);
+            const [lastLoadedAt, setLastLoadedAt] = useState(null);
             const [showPresence, setShowPresence] = useState(false);
             const [showInfo, setShowInfo] = useState(false);
+            // The project the stop dialog is open for, or null.
+            const [haltTarget, setHaltTarget] = useState(null);
 
             // The manifest is mirrored in a ref that is updated SYNCHRONOUSLY on
             // every change. React state alone is not enough here: two edits made
@@ -1677,6 +2143,10 @@
                     const m = await Board.readManifest();
                     applyManifest(m);
                     setError('');
+                    // So the info panel can say how current the board is. Without it
+                    // there is no way to tell a quiet afternoon from a board that
+                    // stopped picking up other people's changes.
+                    setLastLoadedAt(new Date().toISOString());
                     setArtefacts(Board.lastSyncArtefacts ? Board.lastSyncArtefacts() : []);
                     // Written by pipedrive-sync.mjs; absent until the sync has run.
                     Board.readSyncState().then(setSyncState).catch(() => setSyncState(null));
@@ -1723,11 +2193,50 @@
             // vanished). Suppress the focus-reload for a short window around writes.
             const suppressReloadUntil = useRef(0);
             const beginMutation = () => { suppressReloadUntil.current = Date.now() + 2000; };
+            // Everything that must be true before an automatic re-read is safe.
+            // Each guard exists because breaking it loses an edit or fights the
+            // user: mid-write re-reads the pre-change file, a drag would drop the
+            // card being held, and the modal case is the "new person disappeared"
+            // bug described above.
+            const safeToRefresh = () => status === 'ready'
+                && !editingRef.current
+                && !dragId
+                && Date.now() > suppressReloadUntil.current
+                && !(Board.hasPendingWrites && Board.hasPendingWrites());
+
             useEffect(() => {
-                const onFocus = () => { if (status === 'ready' && !editingRef.current && Date.now() > suppressReloadUntil.current) loadManifest(); };
+                const onFocus = () => { if (safeToRefresh()) loadManifest(); };
                 window.addEventListener('focus', onFocus);
-                return () => window.removeEventListener('focus', onFocus);
-            }, [status, loadManifest]);
+                // visibilitychange as well as focus: coming back to a background tab
+                // does not always raise a window focus event, and that tab is exactly
+                // the one holding a stale board.
+                const onVisible = () => { if (!document.hidden && safeToRefresh()) loadManifest(); };
+                document.addEventListener('visibilitychange', onVisible);
+                return () => {
+                    window.removeEventListener('focus', onFocus);
+                    document.removeEventListener('visibilitychange', onVisible);
+                };
+            }, [status, loadManifest, dragId]);
+
+            // A colleague's change has to arrive WITHOUT being asked for. Until now
+            // the manifest was re-read only on focus, on an explicit action, or via
+            // the refresh button — so someone sitting on the board all afternoon,
+            // never leaving the window, saw none of it. Presence was already polled
+            // every minute, which is why the people list moved while the projects
+            // stood still.
+            //
+            // Same cadence as presence, and skipped entirely while the tab is hidden
+            // (the visibilitychange handler above covers coming back). This cannot
+            // make the folder sync any faster: OneDrive still decides when the file
+            // lands on this machine.
+            useEffect(() => {
+                if (status !== 'ready') return;
+                const id = setInterval(() => {
+                    if (document.hidden) return;
+                    if (safeToRefresh()) loadManifest();
+                }, 60000);
+                return () => clearInterval(id);
+            }, [status, loadManifest, dragId]);
 
             useEffect(() => {
                 if (status !== 'ready' || dbFormat !== 'cards') return;
@@ -1951,7 +2460,17 @@
                 if (!window.confirm(shared ? t.confirmDeleteShared : t.confirmDelete)) return;
                 await persist(currentProjects().filter(p => p.id !== project.id));
                 if (shared) return;
-                try { await Board.deleteProjectFiles(project.id); } catch (e) { /* best effort */ }
+                // Still best-effort — the card is already gone and re-adding it
+                // would be worse. But say so: a swallowed failure here leaves the
+                // whole project folder on disk with nothing on the board pointing
+                // at it, so nobody ever finds out it is still there.
+                // deleteProjectFiles() already treats "not found" as success, so
+                // reaching this catch means a real failure (permission, lock).
+                try {
+                    await Board.deleteProjectFiles(project.id);
+                } catch (e) {
+                    setError(t.filesNotRemoved);
+                }
             };
 
             // ---- Archive ----
@@ -1980,6 +2499,52 @@
                 }));
             };
 
+            // ---- On hold / cancelled ----
+            // A project that stops before the finish. It leaves the board, like an
+            // archived one, but lands in its own view: the Archive answers "what did
+            // we deliver", this answers "what is still open but not moving".
+            //
+            // Nothing is destroyed and the phase is untouched, so resuming puts the
+            // card back exactly where it stopped. The CRM sync is unaffected: it
+            // treats a card as gone only when it disappears from manifest.projects
+            // (handleRemovedCards), and a halted project is still in there.
+            const haltProject = async (project, kind, note) => {
+                const at = new Date().toISOString();
+                await persist(currentProjects().map(p => p.id === project.id
+                    ? {
+                        ...p,
+                        haltedAt: at,
+                        haltedBy: userLabel || '',
+                        haltedKind: kind === 'cancelled' ? 'cancelled' : 'hold',
+                        ...(note ? { haltedNote: note } : {}),
+                        updatedAt: at
+                    }
+                    : p));
+            };
+
+            const resumeProject = async (project) => {
+                const at = new Date().toISOString();
+                await persist(currentProjects().map(p => {
+                    if (p.id !== project.id) return p;
+                    // Deleted, not blanked — same reason as unarchiveProject above.
+                    const next = { ...p, updatedAt: at };
+                    delete next.haltedAt;
+                    delete next.haltedBy;
+                    delete next.haltedKind;
+                    delete next.haltedNote;
+                    return next;
+                }));
+            };
+
+            // Hold -> cancelled, or back. Keeps the original stamp and reason: when
+            // it stopped is still true, only the verdict changed.
+            const switchHaltKind = async (project, kind) => {
+                const at = new Date().toISOString();
+                await persist(currentProjects().map(p => p.id === project.id
+                    ? { ...p, haltedKind: kind === 'cancelled' ? 'cancelled' : 'hold', updatedAt: at }
+                    : p));
+            };
+
             // Which tool owns a project in this phase. Dashboard owns none: it is a
             // destination for finished trials, not a per-project editor, so a card
             // sitting there still opens the PROJECT — in the Report form, the last
@@ -1991,6 +2556,7 @@
             const openInTool = (project, phaseKey) => {
                 const phase = toolForPhase(phaseKey);
                 let url = phase.tool + '?boardProject=' + encodeURIComponent(project.id);
+
                 // Claim the advisory lock before leaving, so colleagues see the card
                 // is being worked on. Fire-and-forget: navigation must not wait on
                 // it, and a lock we cannot write is not worth blocking the user.
@@ -2166,6 +2732,7 @@
                 // content instead of a blank form. Don't overwrite a file the target
                 // phase already has, and skip Dashboard (it imports the report file).
                 const files = { ...(project.files || {}) };
+
                 // Only ever copy FORWARD. Moving a card back means "revisit that
                 // earlier phase", and writing the downstream payload into the
                 // upstream file would leave e.g. a report export sitting in
@@ -2178,7 +2745,10 @@
                     try {
                         const existing = await Board.readPhaseFile(project.id, phaseKey);
                         // Copy forward when the target phase has no file, or only a
-                        // blank stub that would otherwise open empty.
+                        // blank stub that would otherwise open empty. A copy reaches
+                        // this with no report document at all, so its report is built
+                        // here from its OWN proposal — the same path a normal project
+                        // takes, with no special case for copies.
                         if (!existing || !Board.hasContent(existing)) {
                             // Source = the latest file WITH content (prefers the phase
                             // we are leaving, else the most-advanced meaningful one).
@@ -2239,11 +2809,74 @@
             // An archived project stays in the manifest — it just stops being part
             // of the board, the agenda and the filter options. Newest first here:
             // the thing you archived by mistake is the thing you come looking for.
-            const activeProjects = useMemo(() => projectsView.filter(p => !p.archivedAt), [projectsView]);
+            // What the board columns show: not finished, and not stopped. A project
+            // on hold is not "active work" — leaving it in a column is exactly the
+            // clutter this feature exists to remove.
+            const activeProjects = useMemo(
+                () => projectsView.filter(p => !p.archivedAt && !p.haltedAt), [projectsView]);
+            // Archived wins over halted if a card somehow carries both stamps, so a
+            // project can never show up in two places at once.
             const archivedProjects = useMemo(() => projectsView
                 .filter(p => p.archivedAt)
                 .sort((a, b) => String(b.archivedAt).localeCompare(String(a.archivedAt)) || compareProjects(a, b)),
                 [projectsView]);
+            const haltedProjects = useMemo(() => projectsView
+                .filter(p => p.haltedAt && !p.archivedAt)
+                .sort((a, b) => String(b.haltedAt).localeCompare(String(a.haltedAt)) || compareProjects(a, b)),
+                [projectsView]);
+
+            // One row per PERSON: everyone the database knows about, marked online
+            // or not. Three sources, best evidence wins for "last seen".
+            const roster = useMemo(() => {
+                const by = new Map();
+                const take = (name) => {
+                    const key = (name || '').trim();
+                    if (!key) return null;
+                    if (!by.has(key)) by.set(key, { user: key, online: false, self: false, pages: [], lastAt: 0 });
+                    return by.get(key);
+                };
+                // 1. The registry — a colleague belongs here even if they have
+                //    never opened the board.
+                [...(people.commercials || []), ...(people.productManagers || [])].forEach(p => take(p.name));
+                // 2. Everyone ASSIGNED to a project, and whoever last wrote it.
+                //    The assignment counts on its own: a colleague can be the
+                //    product manager on a live trial while being in no picklist and
+                //    having written no card. They used to appear only for as long as
+                //    a presence file happened to exist. Assigned but never seen is a
+                //    real state — it shows as "never seen" rather than dropping the
+                //    person off the list altogether.
+                (manifest.projects || []).forEach(p => {
+                    take(p.commercial);
+                    take(p.productManager);
+                    const r = take(p.updatedBy);
+                    if (!r) return;
+                    const ts = Date.parse(p.updatedAt || '');
+                    if (ts && ts > r.lastAt) r.lastAt = ts;
+                });
+                // 3. Presence — authoritative for both online and last seen.
+                presence.forEach(e => {
+                    const r = take(e.user);
+                    if (!r) return;
+                    const ts = Date.parse(e.at || '');
+                    if (ts && ts > r.lastAt) r.lastAt = ts;
+                    if (e.self) r.self = true;
+                    if (e.online) { r.online = true; if (e.page && !r.pages.includes(e.page)) r.pages.push(e.page); }
+                });
+                const now = Date.now();
+                const label = (r) => {
+                    if (!r.lastAt) return t.whoNeverSeen;
+                    const ms = Math.max(0, now - r.lastAt);
+                    if (ms < 90000) return t.whoSeenNow;
+                    if (ms < 3600000) return t.whoSeenMin.replace('{n}', Math.round(ms / 60000));
+                    if (ms < 86400000) return t.whoSeenHours.replace('{n}', Math.round(ms / 3600000));
+                    return t.whoSeenDays.replace('{n}', Math.round(ms / 86400000));
+                };
+                return [...by.values()]
+                    .map(r => ({ ...r, seenLabel: label(r) }))
+                    .sort((x, y) => (x.online === y.online)
+                        ? (y.lastAt - x.lastAt) || x.user.localeCompare(y.user)
+                        : (x.online ? -1 : 1));
+            }, [people, manifest.projects, presence, t]);
 
             const matches = (p) => {
                 if (filters.client && p.client !== filters.client) return false;
@@ -2263,6 +2896,147 @@
             // there may be the resolved product name, and saving that back would
             // overwrite the value Pipedrive owns on CRM cards.
             const editProject = (p) => setEditing(currentProjects().find(x => x.id === p.id) || p);
+
+            // Duplicate a card so the set-up does not have to be retyped: same
+            // client, same product, same supply chain — but a NEW test.
+            //
+            // So the copy carries the documents that describe WHO and WHAT (intake,
+            // proposal) and does NOT carry the finished report. That is the whole
+            // point: a copy is a fresh trial, not a second view of an old one. It
+            // also removes any need to guess later — the report is simply rebuilt
+            // from this card's own proposal when the card reaches that phase, by the
+            // same forward-copy every normal project uses.
+            //
+            // What is deliberately NOT copied:
+            //   * pipedriveDealUrl / crmFlag / crmFlagDetail / crmSyncedAt — the copy
+            //     is not that deal. Two cards pointing at one deal would put a wrong
+            //     "open in Pipedrive" link on the copy, and the sync arbitrates by
+            //     card, so leaving CRM traces on a card it never created is asking
+            //     for trouble. (The deal↔project link itself lives in the sync's own
+            //     state file, keyed by project id, so a new id is already unlinked.)
+            //   * archivedAt / haltedAt and friends — a copy starts on the board, not
+            //     in the archive or on hold.
+            //   * dashboardImportPending — that fires once, for the card that was
+            //     actually dragged into Dashboard.
+            //   * action dates and their done flags — the checklist text carries over
+            //     as a template, but a brand-new project must not claim work that was
+            //     done on the original.
+            // Strip a report document back to its set-up: keep who and what, drop
+            // every measured value and every conclusion. Used only when a copy has
+            // no other document to fall back on.
+            const stripTrialResults = (doc) => {
+                const out = { ...doc };
+                delete out.analysis;      // conclusions, recommendations, next steps
+                delete out.exportDate;    // belongs to the original's export
+                out.groups = (doc.groups || []).map(g => ({
+                    // id, name and specs describe the trial arm — that is set-up.
+                    ...g,
+                    predictedImage: undefined,
+                    measurements: (g.measurements || []).map(m => ({
+                        // Keep the schedule (which day is evaluated) and the sample
+                        // slots, blank what was measured in them.
+                        day: m.day,
+                        samples: (m.samples || []).map(sm => ({ id: sm.id, o2: '', co2: '', weight: '' })),
+                        // qualityParams must stay an array: the report's pencil
+                        // dialog maps over it, and {} blanked the page there. The
+                        // planned evaluation days come along with the schedule.
+                        quality: '', legacyQuality: '', notes: '', images: [], qualityParams: [],
+                        evaluateQuality: Array.isArray(m.evaluate) ? m.evaluate.length > 0 : !!m.evaluateQuality,
+                        measure: m.measure, open: m.open, evaluate: m.evaluate
+                    }))
+                }));
+                return out;
+            };
+
+            const copyProject = async (project) => {
+                const source = currentProjects().find(p => p.id === project.id) || project;
+                const at = new Date().toISOString();
+                const id = Board.newId();
+
+                const copy = { ...source };
+                ['pipedriveDealUrl', 'crmFlag', 'crmFlagDetail', 'crmSyncedAt',
+                 'archivedAt', 'archivedBy',
+                 'haltedAt', 'haltedBy', 'haltedKind', 'haltedNote',
+                 'dashboardImportPending', 'deletedAt', 'updatedBy']
+                    .forEach(k => { delete copy[k]; });
+
+                copy.id = id;
+                copy.actions = (getActions(source) || []).map(a => ({ text: a.text || '' }))
+                    .filter(a => a.text.trim());
+                copy.copiedFrom = source.id;
+                copy.updatedAt = at;
+                copy.phaseChangedAt = at;   // the copy's clock starts now, not the original's
+                copy.files = {};
+
+                beginMutation();
+                // Give the copy its own documents. Set-up documents are carried over
+                // verbatim; a finished report is not.
+                //
+                // A report document (isPerfoTecReport) is a mix: project/clientInfo/
+                // supplyChain describe the set-up, while groups[].measurements[] and
+                // analysis are the previous trial's results. Carrying it over is what
+                // made a copy show the old round's 72 samples.
+                //   * if a set-up document came across too, the report is skipped
+                //     entirely — readProjectData falls back to the proposal, and the
+                //     ordinary forward-copy rebuilds the report from THIS card's
+                //     proposal when it reaches that phase;
+                //   * if the report is the only document there is, it is copied with
+                //     the results stripped, so the client and product details are
+                //     still saved rather than leaving a blank form.
+                const carried = [];
+                let reportKey = null, reportDoc = null;
+                for (const key of Object.keys(source.files || {})) {
+                    if (!Board.phaseByKey[key]) continue;
+                    try {
+                        const data = await Board.readPhaseFile(source.id, key);
+                        if (!data || !Board.hasContent(data)) continue;
+                        if (data.isPerfoTecReport) { reportKey = key; reportDoc = data; continue; }
+                        await Board.writePhaseFile(id, key, data);
+                        copy.files[key] = true;
+                        carried.push(key);
+                    } catch (e) { /* skip this document, keep the rest */ }
+                }
+                if (reportKey && reportDoc && carried.length === 0) {
+                    try {
+                        await Board.writePhaseFile(id, reportKey, stripTrialResults(reportDoc));
+                        copy.files[reportKey] = true;
+                    } catch (e) { /* leave it out rather than write a half document */ }
+                }
+
+                // Post-condition. The loop above is written to never hand the copy
+                // the original's trial, but this bug has been fixed twice, so it is
+                // checked rather than trusted: if any document the copy now owns
+                // describes the same trial as the original's, drop it and let the
+                // ordinary forward-copy rebuild it from this card's own proposal.
+                const trialShape = (d) => {
+                    if (!d) return null;
+                    const g = d.groups || [];
+                    return JSON.stringify([
+                        g.map(x => x.name),
+                        g.flatMap(x => (x.measurements || []).map(m => String(m.day))),
+                        g.flatMap(x => (x.measurements || []).map(m => (m.samples || []).length))
+                    ]);
+                };
+                for (const key of Object.keys(copy.files)) {
+                    try {
+                        const mine = await Board.readPhaseFile(id, key);
+                        if (!mine || !mine.isPerfoTecReport) continue;
+                        const theirs = await Board.readPhaseFile(source.id, key);
+                        const a = trialShape(mine);
+                        if (a && a !== '[[],[],[]]' && a === trialShape(theirs)) {
+                            await Board.writePhaseFile(id, key, {});
+                            delete copy.files[key];
+                            console.warn('copyProject: dropped ' + key + ' — it still described the original trial');
+                        }
+                    } catch (e) { /* a document we cannot read cannot be the original's */ }
+                }
+
+                await persist([...currentProjects(), copy]);
+                // Open the copy straight away: the point of duplicating is to change
+                // something, and two identical tiles side by side are confusing until
+                // one of them is edited.
+                setEditing(copy);
+            };
             const activeFilterCount = (filters.q ? 1 : 0) + FILTER_FIELDS.filter(f => filters[f.key]).length;
 
             // ---- Render gates ----
@@ -2300,7 +3074,10 @@
                                             {[
                                                 { key: 'board', label: t.viewBoard, icon: LayoutDashboard },
                                                 { key: 'products', label: t.viewProducts, icon: Package },
-                                                { key: 'archive', label: t.viewArchive, icon: Archive, count: archivedProjects.length }
+                                                // One tab for everything off the board. Two tabs here
+                                                // widened the toolbar enough to push the header into
+                                                // wrapping; the split lives inside the view instead.
+                                                { key: 'archive', label: t.viewArchiveHub, icon: Archive, count: archivedProjects.length + haltedProjects.length }
                                             ].map(v => (
                                                 <button key={v.key} type="button" role="tab" aria-selected={view === v.key} onClick={() => setView(v.key)}
                                                     className={`flex items-center gap-1.5 text-sm font-bold px-3 py-1.5 rounded-md transition-colors ${view === v.key ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}>
@@ -2324,9 +3101,9 @@
                                                     <button type="button" onClick={() => { setShowPresence(v => !v); setShowInfo(false); }} title={t.whoOnline}
                                                         className={`flex items-center gap-1.5 text-xs font-bold rounded-lg px-2.5 py-1.5 border transition-colors ${showPresence ? 'bg-slate-100 border-slate-300 text-slate-800' : 'text-slate-600 bg-slate-50 border-slate-200 hover:bg-slate-100'}`}>
                                                         <Users size={14} style={{ color: BRAND.green }} />
-                                                        <span className="tabular-nums">{new Set(presence.map(x => x.user)).size}</span>
+                                                        <span className="tabular-nums">{roster.filter(r => r.online).length}</span>
                                                     </button>
-                                                    {showPresence && <PresencePanel t={t} people={presence} userLabel={userLabel} onClose={() => setShowPresence(false)} />}
+                                                    {showPresence && <PresencePanel t={t} people={people} roster={roster} userLabel={userLabel} onClose={() => setShowPresence(false)} />}
                                                 </div>
                                             </>
                                         )}
@@ -2338,6 +3115,7 @@
                                             {showInfo && (
                                                 <InfoPanel t={t} rootName={rootName} dbFormat={dbFormat}
                                                     backupState={backupState} backupBusy={backupBusy} syncState={syncState}
+                                                    lastLoadedAt={lastLoadedAt}
                                                     onChangeFolder={() => { setShowInfo(false); switchFolder(); }}
                                                     onOpenBackups={() => { setShowInfo(false); openBackups(); }}
                                                     onOpenTrash={() => { setShowInfo(false); setView('trash'); }}
@@ -2372,7 +3150,17 @@
                             </div>
                         </div>
                     </header>
-                    <main id="main-content" className="flex-1 min-h-0 overflow-auto w-full">{children}</main>
+                    {/* scrollbar-gutter reserves the scrollbar space on BOTH edges.
+                        Without it, <main> is the scroll container and its scrollbar
+                        eats ~15px off the right of its content box, while the header
+                        sits outside <main> and keeps its full width — so the board
+                        centred 7.5px left of the header, and drifted in and out of
+                        alignment depending on whether the page happened to scroll.
+                        Measured: -7.5px before, 0px after. Plain `stable` does not
+                        help; it reserves one edge, which keeps the same offset.
+                        The app is Chromium-only anyway (File System Access API). */}
+                    <main id="main-content" className="flex-1 min-h-0 overflow-auto w-full"
+                        style={{ scrollbarGutter: 'stable both-edges' }}>{children}</main>
                 </div>
             );
 
@@ -2443,17 +3231,23 @@
                             onRestoreCard={restoreCard} onRestoreProduct={restoreProduct}
                             onPurgeCard={purgeCard} onPurgeProduct={purgeProduct} />
                     ) : view === 'archive' ? (
-                        <ArchiveView t={t} projects={archivedProjects}
-                            onOpen={openArchived} onUnarchive={unarchiveProject} onDelete={deleteProject} />
+                        <ArchiveHub t={t} archived={archivedProjects} halted={haltedProjects}
+                            onOpen={openArchived} onUnarchive={unarchiveProject}
+                            onResume={resumeProject} onSwitchKind={switchHaltKind}
+                            onDelete={deleteProject} />
                     ) : view === 'products' ? (
                         <div className="max-w-[1600px] mx-auto px-4 md:px-6 pt-6 pb-8">
                             {productIndex.length === 0 ? (
                                 <p className="text-sm text-slate-400">{t.noProducts}</p>
                             ) : (
                                 <div className="grid gap-4 sm:gap-5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
+                                    {/* projectCount is ACTIVE work: a project on hold or
+                                        cancelled is excluded, the same way it is excluded
+                                        from the board columns. It stays findable under the
+                                        Stopped tab. */}
                                     {productIndex.map(prod => (
                                         <ProductCard key={prod.id} t={t} product={prod}
-                                            projectCount={manifest.projects.filter(p => p.productId === prod.id && !p.archivedAt).length}
+                                            projectCount={manifest.projects.filter(p => p.productId === prod.id && !p.archivedAt && !p.haltedAt).length}
                                             archivedCount={manifest.projects.filter(p => p.productId === prod.id && p.archivedAt).length}
                                             onOpen={openProductInDashboard} />
                                     ))}
@@ -2463,9 +3257,16 @@
                     ) : (
                     <>
                     {activeProjects.length === 0 && (
-                        <p className="px-4 md:px-6 pt-4 text-xs text-slate-400">{t.noProjects}</p>
+                        // Same box as the columns below, so the hint lines up with them.
+                        <p className="max-w-[1900px] mx-auto px-4 md:px-6 pt-4 text-xs text-slate-400">{t.noProjects}</p>
                     )}
-                    <div className="px-4 md:px-6 pt-3 pb-8">
+                    {/* Wider than the header on purpose: six columns need 1856px
+                        (6 x w-72 + 5 x gap-4 + padding) and the header is a nav bar,
+                        which reads better at 1600. Different widths, SAME CENTRE —
+                        both are mx-auto in the same parent, so the board still sits
+                        squarely under the header. What actually knocked them out of
+                        line was <main>'s scrollbar; see scrollbar-gutter there. */}
+                    <div className="max-w-[1900px] mx-auto px-4 md:px-6 pt-3 pb-8">
                         {/* w-max + mx-auto centres the columns when they fit, and
                             falls back to left-aligned horizontal scrolling when they
                             don't (e.g. narrow / mobile screens). */}
@@ -2480,6 +3281,8 @@
                                     onDragStart={onDragStart} onDrop={onDrop} onHeaderClick={startNewInPhase}
                                     onOpen={openInTool} onEdit={editProject} onDelete={deleteProject}
                                     onArchive={phase.key === 'dashboard' ? archiveProject : null}
+                                    onHalt={setHaltTarget}
+                                    onCopy={copyProject}
                                     onActionOpen={openAction} onActionToggle={toggleActionDone} />
                             ))}
                         </div>
@@ -2490,6 +3293,11 @@
                         fresh form, but a re-render of the SAME card must not — the
                         modal holds the user's unsaved edits. */}
                     {editing && <ProjectModal key={editing.id || 'new'} t={t} initial={editing} onSave={saveProject} onClose={() => setEditing(null)} people={people} productIndex={productIndex} onAddPerson={addPerson} onUpdatePerson={updatePerson} onRenamePerson={renamePerson} onDeletePerson={deletePerson} />}
+                    {haltTarget && (
+                        <HaltModal t={t} project={haltTarget}
+                            onSave={(kind, note) => haltProject(haltTarget, kind, note)}
+                            onClose={() => setHaltTarget(null)} />
+                    )}
                     {showAgenda && <AgendaModal t={t} lang={lang} projects={activeProjects} people={people} todayISO={todayISO} onActionOpen={openAction} onActionToggle={toggleActionDone} onClose={() => setShowAgenda(false)} />}
                     {/* Asked once on the shared store: an unattributed change history
                         is useless to a team. Also reachable from the header chip. */}
