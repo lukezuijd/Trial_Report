@@ -34,13 +34,20 @@
     <script src="brand.js?v=e549b527"></script>
 
     <!-- Chart.js for graphs -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Pinned. This was an unversioned URL, so jsdelivr served whatever the
+         latest chart.js happened to be — including, one day, the next major.
+         The charts here are written against the v4 API; 4.5.1 is the version
+         that was actually being served, so this freezes today's behaviour
+         rather than changing it. Same path resolution, version added.
+         xlsx (0.18.5), mammoth (1.6.0) and docx (8.5.0) were already pinned. -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1"></script>
 
-    <!-- SheetJS (XLSX) for Excel & CSV parsing -->
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-
-    <!-- Mammoth.js for Word (.docx) extraction -->
-    <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
+    <!-- SheetJS (Excel/CSV) and Mammoth (Word .docx) are NOT loaded here.
+         Together they were 1.5 MB — 84% of everything this page downloaded — on
+         every single load, to serve an importer that most sessions never open.
+         They are fetched on first use instead by ensureLib() below, and the
+         browser caches them from then on. Versions stay pinned; the URLs live in
+         LAZY_LIBS. -->
 
     <!-- Babel for in-browser React (JSX) compilation -->
     <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
@@ -55,7 +62,7 @@
     <!-- This page renders its own Board button in the header, so the shared
          floating bar that board-db.js injects would be a second, redundant way back. -->
     <script>window.PERFOTEC_NO_BACK_BUTTON = true;</script>
-    <script src="board-db.js?v=2371f8df"></script>
+    <script src="board-db.js?v=b978be9b"></script>
 
     <!-- Import Maps for modern modules -->
     <script type="importmap">
@@ -63,10 +70,7 @@
         "imports": {
             "react": "https://esm.sh/react@18.2.0",
             "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
-            "lucide-react": "https://esm.sh/lucide-react@0.292.0",
-            "firebase/app": "https://esm.sh/firebase@10.7.1/app",
-            "firebase/auth": "https://esm.sh/firebase@10.7.1/auth",
-            "firebase/firestore": "https://esm.sh/firebase@10.7.1/firestore"
+            "lucide-react": "https://esm.sh/lucide-react@0.292.0"
         }
     }
     </script>
@@ -192,7 +196,7 @@
         <div class="pf-loading" role="status">Loading the product dashboard…</div>
     </div>
 
-    <script type="text/babel" data-type="module">
+    <script type="text/babel" data-type="module" data-presets="react">
         import React, { useState, useEffect, useRef, useMemo } from 'react';
         import { createRoot } from 'react-dom/client';
         import { 
@@ -203,9 +207,22 @@
             Image as ImageIcon, Beaker, Globe, Download, LayoutDashboard, ListTodo, Eye, Table, RefreshCw, Merge, LayoutGrid, Filter, Package, Trash2, Search, StickyNote, Info
         } from 'lucide-react';
         
-        import { initializeApp } from 'firebase/app';
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
-        import { getFirestore, collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+        // Firebase was once an alternative backend for this dashboard. It is not
+        // wired up in this deployment: `db` is only assigned when the global
+        // `__firebase_config` exists, and nothing anywhere in this repository
+        // defines it — so every `if (db)` branch below is unreachable.
+        //
+        // The three module trees were nonetheless fetched from esm.sh on EVERY
+        // load — 19 requests before the page could render — for code that cannot
+        // run. The imports are gone.
+        //
+        // These bindings stay declared on purpose. The unreachable branches still
+        // name them, and a declared-but-undefined binding is inert where a removed
+        // one would be a ReferenceError if a branch were ever reached. To restore
+        // the Firestore option: re-add the three imports below and the matching
+        // importmap entries in <head>.
+        let initializeApp, getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged,
+            getFirestore, collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc;
 
         // --- Firebase Init ---
         const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
@@ -215,6 +232,39 @@
         if (firebaseConfig && Object.keys(firebaseConfig).length > 0) {
             app = initializeApp(firebaseConfig); auth = getAuth(app); db = getFirestore(app);
         }
+
+        // --- Lazy library loader ---
+        // The two file parsers the importer needs, fetched the first time they are
+        // actually needed rather than on page load. Version pins match what the
+        // <script> tags used to carry, so nothing about the parsing changes.
+        const LAZY_LIBS = {
+            XLSX:    'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
+            mammoth: 'https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js',
+        };
+        const _libLoads = {};
+        const ensureLib = (name) => {
+            // Already there (loaded earlier, or the browser cached it): done.
+            if (window[name]) return Promise.resolve(window[name]);
+            // In flight: hand back the same promise so two imports started at once
+            // do not inject the script twice.
+            if (_libLoads[name]) return _libLoads[name];
+            _libLoads[name] = new Promise((resolve, reject) => {
+                const s = document.createElement('script');
+                s.src = LAZY_LIBS[name];
+                s.async = true;
+                s.onload = () => window[name]
+                    ? resolve(window[name])
+                    : reject(new Error(name + ' loaded but did not register itself.'));
+                s.onerror = () => {
+                    // Drop the cached rejection so a retry can actually retry —
+                    // the usual cause is a dropped connection, not a bad URL.
+                    delete _libLoads[name];
+                    reject(new Error('Could not load the ' + name + ' library. Check your internet connection and try the import again.'));
+                };
+                document.head.appendChild(s);
+            });
+            return _libLoads[name];
+        };
 
         // --- Regression Math Helper ---
         const getRegressionCurve = (taskData, type = 'O2') => {
@@ -714,6 +764,110 @@
             );
         };
 
+        // The complete schema of one trial row, as stored under
+        // p2-pack-master as pack_opt_<i>_<field>.
+        //
+        // ONE list, because there were three and they had drifted: the variety
+        // merge listed all 17 fields, the row-delete listed 14, and the pipeline
+        // merge listed 13. Every field missing from a list was data that got
+        // dropped or left pointing at the wrong row. Anything added to a trial
+        // row belongs here and nowhere else.
+        const TRIAL_ROW_FIELDS = [
+            'type', 'condition', 'material', 'temp', 'weight', 'trans',
+            'o2', 'co2', 'company', 'country', 'days', 'rating', 'pdf',
+            'date', 'variety', 'notes', 'curve',
+        ];
+
+        /* ── ALTERNATIVE PRODUCT NAMES ────────────────────────────────────────
+         * One product, several names in the trade: Romano Beans is also Flat
+         * Beans and Italian Green Beans. Each product record carries an
+         * `aliases` list, and everything that SEARCHES — the header search, the
+         * product picker, the forms in the workflow — searches those names too.
+         * Nothing DISPLAYS them in place of the product: the main name is what
+         * every heading, table and document keeps saying.
+         * ------------------------------------------------------------------ */
+        const normProductName = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+
+        // Trimmed, no blanks, no duplicates, never a repeat of the main name.
+        const cleanAliases = (list, ownName) => {
+            const seen = new Set();
+            const own = normProductName(ownName);
+            if (own) seen.add(own);
+            return (Array.isArray(list) ? list : []).map(a => String(a || '').trim()).filter(a => {
+                const k = normProductName(a);
+                if (!k || seen.has(k)) return false;
+                seen.add(k);
+                return true;
+            });
+        };
+
+        const aliasesOf = (p) => cleanAliases(p && p.aliases, p && p.name);
+
+        // Every name a product answers to, main name first.
+        const productNames = (p) => [(p && p.name) || ''].concat(aliasesOf(p)).filter(Boolean);
+
+        // Which alternative name did this search text hit? '' when the main name
+        // matched, so a caller can show "also known as …" only when it helps.
+        const aliasHit = (query, p) => {
+            const q = String(query || '').toLowerCase().trim();
+            if (!q || normProductName(p && p.name).includes(normProductName(q))) return '';
+            return aliasesOf(p).find(a => a.toLowerCase().includes(q)) || '';
+        };
+
+        // The chips editor for those names. Each name is its own chip rather than
+        // one comma-separated string, so a name that legitimately contains a
+        // comma survives and there is nothing to parse. Commits on Enter, comma
+        // or blur; the typed text is never left hanging unsaved.
+        const AliasEditor = ({ names, mainName, disabled, onChange }) => {
+            const [draft, setDraft] = useState('');
+            const list = names || [];
+
+            const commit = () => {
+                const typed = draft.trim();
+                setDraft('');
+                if (!typed) return;
+                const next = cleanAliases(list.concat([typed]), mainName);
+                if (next.length !== list.length) onChange(next);
+            };
+            const remove = (name) => onChange(list.filter(a => a !== name));
+
+            if (disabled) {
+                return <span className="block p-2 text-[11px] text-slate-400">{list.join(' · ') || '—'}</span>;
+            }
+            return (
+                <div className="flex flex-wrap items-center gap-1 p-1.5">
+                    {list.map(a => (
+                        <span key={a} className="inline-flex items-center gap-1 pl-2 pr-1 py-0.5 bg-slate-100 border border-slate-200 rounded-full text-[11px] font-medium text-slate-700">
+                            {a}
+                            <button onClick={() => remove(a)} className="text-slate-400 hover:text-red-600 transition-colors" title={`Remove "${a}"`}><X size={11}/></button>
+                        </span>
+                    ))}
+                    <input
+                        type="text"
+                        value={draft}
+                        onChange={e => {
+                            // A typed comma ends a name — the way people write lists.
+                            if (e.target.value.includes(',')) {
+                                const parts = e.target.value.split(',');
+                                setDraft(parts.pop());
+                                const next = cleanAliases(list.concat(parts), mainName);
+                                if (next.length !== list.length) onChange(next);
+                                return;
+                            }
+                            setDraft(e.target.value);
+                        }}
+                        onKeyDown={e => {
+                            if (e.key === 'Enter') { e.preventDefault(); commit(); }
+                            if (e.key === 'Backspace' && !draft && list.length) remove(list[list.length - 1]);
+                        }}
+                        onBlur={commit}
+                        placeholder={list.length ? '+ name' : '+ other name'}
+                        className="flex-1 min-w-[80px] px-1 py-0.5 text-[11px] bg-transparent outline-none focus:bg-blue-50 rounded placeholder-slate-300"
+                    />
+                </div>
+            );
+        };
+
         function App() {
             const [user, setUser] = useState(null);
             const [products, setProducts] = useState([]);
@@ -767,7 +921,7 @@
             const [bulkProductsData, setBulkProductsData] = useState([]);
 
             // Single Import State
-            const [newProductData, setNewProductData] = useState({ name: "", variety: "", state: "whole", targets: [], imageUrl: "", completedTaskIds: [], links: {}, createdAt: null });
+            const [newProductData, setNewProductData] = useState({ name: "", aliases: [], variety: "", state: "whole", targets: [], imageUrl: "", completedTaskIds: [], links: {}, createdAt: null });
             const [importedFormData, setImportedFormData] = useState(null);
             const [mergeTargetId, setMergeTargetId] = useState("new");
             
@@ -863,20 +1017,78 @@
             // that actually changed rather than rewriting the whole store.
             const lastWrittenRef = useRef(new Map());
 
-            const loadFromFolder = async () => {
+            // The rev each product was loaded at, kept OUT of React state on
+            // purpose: a save bumps the rev on disk, and writing that back into
+            // `products` would change every record's JSON and make the next diff
+            // think everything changed. This map is the baseRev each write is
+            // checked against — it is what turns a blind overwrite into a
+            // detected conflict.
+            const productRevsRef = useRef(new Map());
+            // size:mtime per record file at the moment we last agreed with disk.
+            const diskStampsRef = useRef({});
+
+            // Products someone else changed while we were editing them.
+            const [productConflicts, setProductConflicts] = useState([]);
+            // The folder moved under us and we are holding unsaved work.
+            const [staleOnDisk, setStaleOnDisk] = useState(false);
+            // Sync conflict copies and the superseded index file.
+            const [folderWarnings, setFolderWarnings] = useState([]);
+
+            // Things in the folder that should not be there. Nothing used to look
+            // for these on the product side, which is how a OneDrive copy sat in
+            // this database unnoticed until someone opened the folder by hand.
+            const scanFolderWarnings = async () => {
                 const B = window.PerfoTecBoard;
-                const [name, hasStore, records] = await Promise.all([
-                    B.getRootName(), B.hasProductStore(), B.readAllProducts()
+                try {
+                    const [rootArtefacts, legacyIndex] = await Promise.all([
+                        B.scanRootArtefacts ? B.scanRootArtefacts() : Promise.resolve([]),
+                        B.legacyProductIndexPresent ? B.legacyProductIndexPresent() : Promise.resolve(false)
+                    ]);
+                    const artefacts = (B.lastSyncArtefacts ? B.lastSyncArtefacts() : [])
+                        .concat(rootArtefacts)
+                        .filter((n, i, a) => a.indexOf(n) === i);
+                    const out = artefacts.map(name => ({ kind: 'artefact', name }));
+                    if (legacyIndex) out.push({ kind: 'legacy-index', name: B.PRODUCT_INDEX });
+                    setFolderWarnings(out);
+                } catch (err) { /* a warning that cannot be gathered is not an error */ }
+            };
+
+            // silent: refresh the list without touching what the user is looking
+            // at (used by the focus check below, where a jump to another product
+            // mid-session would be its own kind of data loss).
+            const loadFromFolder = async ({ silent = false } = {}) => {
+                const B = window.PerfoTecBoard;
+                const [name, hasStore, records, stamps] = await Promise.all([
+                    B.getRootName(), B.hasProductStore(), B.readAllProducts(),
+                    B.readProductStamps ? B.readProductStamps() : Promise.resolve({})
                 ]);
                 setFolderName(name);
                 setProducts(records);
                 lastWrittenRef.current = new Map(records.map(r => [r.id, JSON.stringify(r)]));
-                // An empty root that has never held products is a first run — offer
-                // to bring the existing database across instead of starting blank.
-                setNeedsProductMigration(!hasStore && records.length === 0);
-                setActiveProductId(prev => prev || ((records.length > 0 && !opensSomethingSpecific()) ? familyLandingId(records[0], records) : null));
-                setFolderState('ready');
-                setLoading(false);
+                productRevsRef.current = new Map(records.map(r => [r.id, Number(r.rev || 0)]));
+                diskStampsRef.current = stamps;
+                setStaleOnDisk(false);
+                setProductConflicts([]);
+                scanFolderWarnings();
+                if (silent) {
+                    // Re-seed the editing buffer for the product on screen. Without
+                    // this the refresh is worse than useless: `products` comes back
+                    // fresh while localFormData still holds the snapshot taken when
+                    // the product was opened, and the next keystroke flushes that
+                    // snapshot wholesale over everything that just arrived. The
+                    // caller only reaches here with a clean buffer, so this cannot
+                    // discard anything the user typed.
+                    const act = records.find(r => r.id === activeProductIdRef.current);
+                    if (act) setLocalFormData(act.formData || {});
+                }
+                if (!silent) {
+                    // An empty root that has never held products is a first run — offer
+                    // to bring the existing database across instead of starting blank.
+                    setNeedsProductMigration(!hasStore && records.length === 0);
+                    setActiveProductId(prev => prev || ((records.length > 0 && !opensSomethingSpecific()) ? familyLandingId(records[0], records) : null));
+                    setFolderState('ready');
+                    setLoading(false);
+                }
             };
 
             useEffect(() => {
@@ -954,6 +1166,14 @@
             // changed, drop files for products that were removed, then refresh the
             // index once. Every existing setProducts(...) call site stays as it is
             // — the diffing happens here, in the write layer.
+            // Persist the records that changed, each one checked against the rev
+            // it was loaded at. A product someone else has moved on is left alone
+            // and reported rather than overwritten, and — importantly — one
+            // contested product no longer blocks the save of all the others.
+            //
+            // There is no index write any more: the product list is derived from
+            // the record files (board-db.js). Rebuilding it from this session's
+            // in-memory list is what used to delete colleagues' products.
             const writeProductsToFolder = async () => {
                 const B = window.PerfoTecBoard;
                 const records = productsRef.current.filter(p => p && p.id && !p.isAverage);
@@ -961,17 +1181,140 @@
                 const changed = records.filter(r => lastWrittenRef.current.get(r.id) !== seen.get(r.id));
                 const removed = [...lastWrittenRef.current.keys()].filter(id => !seen.has(id));
                 if (changed.length === 0 && removed.length === 0) return;
+
+                setFileSaveState('saving');
+                const conflicts = [];
+                let failed = null;
+                for (const rec of changed) {
+                    try {
+                        const next = await B.writeProductRecord(rec, { baseRev: productRevsRef.current.get(rec.id) });
+                        productRevsRef.current.set(rec.id, Number(next && next.rev) || 0);
+                        lastWrittenRef.current.set(rec.id, seen.get(rec.id));
+                    } catch (err) {
+                        if (err && err.code === 'CONFLICT') {
+                            // Deliberately do NOT mark this one as written: the
+                            // edit is still pending and the banner offers the
+                            // choice. Their version is on disk, ours is parked
+                            // under _conflicts/.
+                            conflicts.push({ productId: err.productId, theirs: err.theirs, mine: rec });
+                        } else {
+                            console.error('Saving products to the shared folder failed:', err);
+                            failed = err;
+                        }
+                    }
+                }
+                for (const id of removed) {
+                    try {
+                        await B.deleteProduct(id);
+                        lastWrittenRef.current.delete(id);
+                        productRevsRef.current.delete(id);
+                    } catch (err) { console.error('Deleting a product failed:', err); failed = err; }
+                }
+
+                if (conflicts.length > 0) {
+                    setProductConflicts(prev => {
+                        const byId = new Map(prev.map(c => [c.productId, c]));
+                        conflicts.forEach(c => byId.set(c.productId, c));
+                        return [...byId.values()];
+                    });
+                }
+                // Our own writes must not read as someone else's change on the
+                // next focus check.
+                try { if (B.readProductStamps) diskStampsRef.current = await B.readProductStamps(); } catch (err) { /* probe only */ }
+                if (failed) setFileSaveState(failed.code === 'NEEDS_PERMISSION' ? 'needs-permission' : 'error');
+                else if (conflicts.length > 0) setFileSaveState('error');
+                else setFileSaveState('saved');
+            };
+
+            // ── Staleness check ────────────────────────────────────────────────
+            // The dashboard loads once and holds its list for the whole session,
+            // so on a shared folder it drifts out of date by the hour. Re-reading
+            // blindly would throw away whatever the user has just typed, so:
+            // nothing pending → refresh silently; work in flight → say so and let
+            // them choose the moment.
+            const refreshIfFolderMoved = async () => {
+                const B = window.PerfoTecBoard;
+                if (db || folderState !== 'ready' || !B || !B.readProductStamps) return;
+                if (B.hasPendingWrites && B.hasPendingWrites()) return;
+                try {
+                    const stamps = await B.readProductStamps();
+                    const before = diskStampsRef.current || {};
+                    const ids = new Set([...Object.keys(before), ...Object.keys(stamps)]);
+                    let moved = false;
+                    ids.forEach(id => { if (before[id] !== stamps[id]) moved = true; });
+                    if (!moved) return;
+
+                    // Anything typed but not yet on disk makes an automatic reload
+                    // unsafe. Two separate debounces stand between a keystroke and
+                    // the folder — the form buffer (autosaveTimerRef, ~1s) and the
+                    // folder write (fileSaveTimerRef, ~1.5s) — and beyond those the
+                    // buffer itself is a whole-formData snapshot taken when the
+                    // product was opened. If it has drifted from the record, the
+                    // user has work in hand: say so and let them pick the moment.
+                    const act = activeProductRef.current;
+                    const bufferDirty = !!autosaveTimerRef.current || (
+                        act && !act.isAverage &&
+                        JSON.stringify(localFormDataRef.current || {}) !== JSON.stringify(act.formData || {})
+                    );
+                    if (fileSaveTimerRef.current || bufferDirty || productConflicts.length > 0) {
+                        setStaleOnDisk(true);
+                        return;
+                    }
+                    await loadFromFolder({ silent: true });
+                } catch (err) { /* a probe that fails changes nothing */ }
+            };
+
+            // The listeners below are registered once per folder state, so calling
+            // the function directly would freeze whichever closure existed at that
+            // moment — and with it a stale activeProductId and localFormData. Go
+            // through a ref that every render refreshes.
+            const refreshRef = useRef(refreshIfFolderMoved);
+            useEffect(() => { refreshRef.current = refreshIfFolderMoved; });
+
+            useEffect(() => {
+                if (db || folderState !== 'ready') return;
+                const onWake = () => { if (document.visibilityState === 'visible') refreshRef.current(); };
+                document.addEventListener('visibilitychange', onWake);
+                window.addEventListener('focus', onWake);
+                return () => {
+                    document.removeEventListener('visibilitychange', onWake);
+                    window.removeEventListener('focus', onWake);
+                };
+            }, [db, folderState]);
+
+            // ── Resolving a conflict ───────────────────────────────────────────
+            // Both ways out keep both versions: theirs is on disk, ours is under
+            // _conflicts/. The only thing the user is choosing is which one the
+            // team works from next.
+            const takeTheirVersion = async (productId) => {
+                const B = window.PerfoTecBoard;
+                try {
+                    const rec = await B.readProduct(productId);
+                    if (rec) {
+                        setProducts(prev => prev.map(p => p.id === productId ? rec : p));
+                        lastWrittenRef.current.set(productId, JSON.stringify(rec));
+                        productRevsRef.current.set(productId, Number(rec.rev || 0));
+                        if (productId === activeProductId) setLocalFormData(rec.formData || {});
+                    }
+                    setProductConflicts(prev => prev.filter(c => c.productId !== productId));
+                    if (B.readProductStamps) diskStampsRef.current = await B.readProductStamps();
+                    setFileSaveState('saved');
+                } catch (err) { console.error('Could not load their version:', err); }
+            };
+
+            const keepMyVersion = async (productId) => {
+                const B = window.PerfoTecBoard;
+                const mine = productsRef.current.find(p => p.id === productId);
+                if (!mine) return;
                 try {
                     setFileSaveState('saving');
-                    for (const rec of changed) await B.writeProductRecord(rec);
-                    for (const id of removed) await B.deleteProduct(id);
-                    await B.writeProductIndex(B.buildProductIndex(records));
-                    lastWrittenRef.current = seen;
+                    const next = await B.writeProductRecord(mine, { force: true });
+                    productRevsRef.current.set(productId, Number(next && next.rev) || 0);
+                    lastWrittenRef.current.set(productId, JSON.stringify(mine));
+                    setProductConflicts(prev => prev.filter(c => c.productId !== productId));
+                    if (B.readProductStamps) diskStampsRef.current = await B.readProductStamps();
                     setFileSaveState('saved');
-                } catch (err) {
-                    console.error('Saving products to the shared folder failed:', err);
-                    setFileSaveState(err && err.code === 'NEEDS_PERMISSION' ? 'needs-permission' : 'error');
-                }
+                } catch (err) { console.error('Could not force my version:', err); setFileSaveState('error'); }
             };
 
             const displayProducts = useMemo(() => {
@@ -1013,7 +1356,7 @@
                         // "All varieties" must show EVERY trial across the varieties, not just the
                         // first one's. Merge all varieties' trial rows into one combined table,
                         // tagging each row with the variety it came from so they stay distinguishable.
-                        const TRIAL_FIELDS = ['type','material','temp','weight','trans','o2','co2','company','country','days','rating','pdf','date','variety','condition','notes','curve'];
+                        const TRIAL_FIELDS = TRIAL_ROW_FIELDS;
                         const mergedPack = {};
                         let mi = 0;
                         group.forEach(variety => {
@@ -1049,7 +1392,17 @@
             }, [products]);
 
             const activeProduct = displayProducts.find(p => p.id === activeProductId) || null;
-            
+
+            // Latest-value refs for the folder-staleness check, which runs from
+            // window listeners and must never reason about a product the user
+            // moved away from three renders ago.
+            const activeProductRef = useRef(null);
+            const activeProductIdRef = useRef(null);
+            useEffect(() => {
+                activeProductRef.current = activeProduct;
+                activeProductIdRef.current = activeProductId;
+            });
+
             useEffect(() => {
                 if (activeProduct && loadedDataId !== activeProduct.id) {
                     // Flush any pending autosave to the previous product before loading the new one
@@ -1121,7 +1474,7 @@
 
             const resetModal = () => {
                 setShowCreateModal(false); setImportStatus('idle'); setIsBulkImport(false); setBulkProductsData([]);
-                setNewProductData({ name: "", variety: "", state: "whole", targets: [], imageUrl: "", completedTaskIds: [], links: {}, createdAt: null });
+                setNewProductData({ name: "", aliases: [], variety: "", state: "whole", targets: [], imageUrl: "", completedTaskIds: [], links: {}, createdAt: null });
                 setImportedFormData(null); setImportedFileName(''); setParsedItemCount(0); setIsBackupRestore(false); setMergeTargetId("new");
                 setTrialImportRows([]); setTrialProductMappings({});
             };
@@ -1189,7 +1542,16 @@
                 if (dbFileHandle) await writeDbToFile();
             };
             useEffect(() => {
-                if (db || loading || products.length === 0) return;
+                // No products.length check. It used to bail on an empty array, and
+                // since writeProductsToFolder is the only caller of B.deleteProduct,
+                // deleting the LAST product never reached the folder: the record
+                // stayed on disk, was not moved to the recycle bin, and the product
+                // reappeared on the next reload. (registerFlush below has no such
+                // guard, but that only fires via the Board button — a plain reload
+                // or tab close does not run it.) writeProductsToFolder already
+                // returns early when nothing changed, so an empty array is a no-op
+                // on a folder that never had anything written to it.
+                if (db || loading) return;
                 if (folderState !== 'ready' && !dbFileHandle) return;
                 if (fileSaveTimerRef.current) clearTimeout(fileSaveTimerRef.current);
                 fileSaveTimerRef.current = setTimeout(() => { fileSaveTimerRef.current = null; persistProducts(); }, 1500);
@@ -1230,12 +1592,32 @@
             const handleProductMetaChange = async (productId, field, value) => {
                 const targetProduct = products.find(p => p.id === productId);
                 if (!targetProduct || targetProduct.isAverage) return;
-                
+
                 const updatedProduct = { ...targetProduct, [field]: value };
                 if (db) {
                     await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', productId), { [field]: value });
                 } else {
                     setProducts(prev => prev.map(p => p.id === productId ? updatedProduct : p));
+                }
+            };
+
+            // Alternative names are a property of the product, not of one of its
+            // varieties: "Flat Beans" means Romano Beans whichever variety the
+            // row happens to be. So the list is written to EVERY record sharing
+            // the product name — otherwise a search would find the one variety it
+            // was typed on and miss its siblings.
+            const handleAliasesChange = async (productId, list) => {
+                const targetProduct = products.find(p => p.id === productId);
+                if (!targetProduct || targetProduct.isAverage) return;
+                const family = products.filter(p => !p.isAverage && normProductName(p.name) === normProductName(targetProduct.name));
+                if (db) {
+                    await Promise.all(family.map(p => updateDoc(
+                        doc(db, 'artifacts', appId, 'public', 'data', 'products', p.id),
+                        { aliases: cleanAliases(list, p.name) }
+                    )));
+                } else {
+                    const ids = new Set(family.map(p => p.id));
+                    setProducts(prev => prev.map(p => ids.has(p.id) ? { ...p, aliases: cleanAliases(list, p.name) } : p));
                 }
             };
 
@@ -1302,8 +1684,15 @@
                 const master = fd['p2-pack-master'] || {};
                 const oldCount = master.packOptCount || 0;
                 if (idxToRemove >= oldCount) return;
-                // Re-index: shift all entries after idxToRemove down by 1
-                const fields = ['type','condition','material','temp','weight','trans','o2','co2','company','country','days','rating','pdf','valid'];
+                // Re-index: shift all entries after idxToRemove down by 1.
+                // Must be the COMPLETE row schema. This list used to omit date,
+                // variety, notes and curve (and carried a 'valid' key nothing
+                // writes), so deleting a row shifted 14 of the 17 fields and left
+                // those four behind: every row below the deleted one kept the
+                // previous row's trial date, variety tag, conclusion and quality
+                // curve. That silently attributed one film's shelf-life curve to
+                // another — the exact comparison this tool exists to make.
+                const fields = TRIAL_ROW_FIELDS;
                 for (let i = idxToRemove; i < oldCount - 1; i++) {
                     fields.forEach(f => {
                         const nextKey = `pack_opt_${i+1}_${f}`;
@@ -1354,14 +1743,163 @@
             // Reading textContent concatenates all three ("Optimale bewaringOptimal storage…"),
             // and <br> contributes nothing, so a three-line <h1> collapses into
             // "Green BeansWholeFlowpack Guide". Return the English rendering as real lines.
-            const psEnLines = (el) => {
+            const psLangLines = (el, lang, dropEm) => {
                 if (!el) return [];
                 const clone = el.cloneNode(true);
-                clone.querySelectorAll('[data-lang]').forEach(s => { if (s.getAttribute('data-lang') !== 'en') s.remove(); });
+                clone.querySelectorAll('[data-lang]').forEach(s => { if (s.getAttribute('data-lang') !== lang) s.remove(); });
+                // The sheet's <h1> ends in an italic descriptor ("Packaging Guide",
+                // "Verpakkingsgids") that is never part of the product name.
+                if (dropEm) clone.querySelectorAll('em').forEach(e => e.remove());
                 clone.querySelectorAll('br').forEach(br => br.parentNode.replaceChild(br.ownerDocument.createTextNode('\n'), br));
                 return clone.textContent.split('\n').map(s => s.trim().replace(/\s+/g, ' ')).filter(Boolean);
             };
+            const psEnLines = (el) => psLangLines(el, 'en', false);
             const psEnText = (el) => psEnLines(el).join(' ');
+
+            /* ── The product's name in each of the sheet's three languages ──────────
+             * A 2026 product sheet titles itself in Dutch, English and Spanish:
+             *   <h1><span data-lang="nl">Vers Gesneden<br>Broccoli Roosjes<br><em>…</em>
+             *       <span data-lang="en">Fresh-Cut<br>Broccoli Florets<br><em>…</em>
+             *       <span data-lang="es">Floretes de<br>Brócoli Frescos<br><em>…</em>
+             * That makes the sheet the one place that states the same product's name in
+             * every language it is sold under — so importing one settles the naming
+             * question outright: English becomes the product's name, Dutch and Spanish
+             * become alternative names, and a search in any of the three finds it.
+             * -------------------------------------------------------------------- */
+
+            // The processing state is said in the title too — "Fresh-Cut", "Vers
+            // Gesneden", "Verwerkte" — and is carried by the product's own `state`
+            // field, so it is never part of the name. All three languages are stripped
+            // whatever language is being read: a title mixes them more often than not,
+            // and no produce is called "whole", "vers" or "entero".
+            // "fresh" on its own comes last in the alternation, so "Fresh-Cut" is
+            // matched as the compound it is before this ever sees it.
+            const PS_STATE_WORDS = /\b(?:fresh[\s-]?cut|freshcut|whole|processed|packaging guide|product guide|specification|fresh|vers\s?gesneden|versgesneden|verwerkte|verwerkt|verse|vers|hele|heel|onbewerkte|onbewerkt|verpakkingsgids|productgids|specificatie|frescos|frescas|fresco|fresca|enteros|enteras|entero|entera|procesados|procesadas|procesado|procesada|gu[ií]a de envasado|especificaci[óo]n)\b/gi;
+
+            // How the product is CUT or presented — not what it is. "Broccoli Florets"
+            // is broccoli, "Bloemkool Roosjes" is bloemkool. The cut is carried by the
+            // state and the variety, so it is stripped out of every name a sheet
+            // yields — the main name AND the alternative ones. An alternative name is
+            // the same product said in another language, never the same product said
+            // with its cut attached.
+            const PS_FORM_WORDS = /\b(?:florets?|spears?|sticks?|batons?|julienne|slices?|sliced|rings?|cubes?|cubed|diced|chunks?|halves|halved|quarters|quartered|wedges|shredded|grated|chopped|trimmed|peeled|crowns?|kernels?|roosjes?|reepjes?|blokjes?|plakjes?|plakken|schijfjes?|stukjes?|stukken|snippers?|geraspte?|geschilde?|gehalveerde?|halve|kwarten|gepelde?|gewassen|gesneden|floretes?|tiras|bastones|cubos|dados|rodajas|rebanadas|trozos|mitades|cuartos|rallad[oa]s?|pelad[oa]s?|lavad[oa]s?|cortad[oa]s?|trocead[oa]s?)\b/gi;
+
+            // A trailing clause like "Without Calyx" or "Zonder Kelk" describes how the
+            // product is presented, not what it is called.
+            const PS_QUALIFIER = /\s\b(?:without|with|zonder|met|sin|con)\b.*$/i;
+
+            // Taking a word out of the middle of a phrase leaves the preposition that
+            // held it there: "Floretes de Brócoli" → "de Brócoli".
+            const PS_EDGE_WORDS = /^\s*(?:de|del|of|van|the|el|la|los|las|en|y|and)\b|\b(?:de|del|of|van|the|el|la|los|las|en|y|and)\s*$/gi;
+
+            const psTrim = (s) => s.replace(/\s+/g, ' ').replace(/^[\s\-–—:,.]+|[\s\-–—:,.]+$/g, '').trim();
+
+            // A sheet title reduced to the bare product: "Fresh-Cut Broccoli Florets"
+            // and "Floretes de Brócoli Frescos" both come out as the produce alone.
+            const psCleanName = (text) => {
+                // The older titles carry the pack format in brackets — "Appel (Retail
+                // Punnet)", "Blauwe Bessen (Bulk/Transport)". That is the target market,
+                // which the product records under `targets`, and the legacy reader has
+                // already split it off into the variety by the time it gets here.
+                let s = psTrim(String(text || '')
+                    .replace(/\([^)]*\)/g, ' ')
+                    .replace(PS_STATE_WORDS, ' ')
+                    .replace(PS_FORM_WORDS, ' ')
+                    .replace(PS_QUALIFIER, ''));
+                let prev;
+                do { prev = s; s = psTrim(s.replace(PS_EDGE_WORDS, ' ')); } while (s !== prev);
+                return s;
+            };
+
+            // The product as this sheet titles it in one language, or '' when the sheet
+            // does not carry that language or the result is not a plausible name.
+            //
+            // Every line of the title is read as one phrase, because where the line
+            // breaks fall is a matter of layout, not of grammar: English breaks
+            // "Fresh-Cut / Broccoli Florets" between the state and the name, while
+            // Spanish breaks the very same title mid-phrase, "Floretes de / Brócoli
+            // Frescos". Joining first and stripping words after is the only reading
+            // that survives both.
+            const psProductName = (doc, lang) => {
+                const h1 = doc && doc.querySelector('h1');
+                // Only the trilingual template states the name per language. An older
+                // sheet has a single-language <h1> — usually Dutch — and reading it
+                // three times would file the product under a Dutch name in English and
+                // then list that same name as its own Spanish alternative.
+                if (!h1 || !h1.querySelector('[data-lang="' + lang + '"]')) return '';
+                const name = psCleanName(psLangLines(h1, lang, true).join(' '));
+                return name.length >= 2 && name.length <= 40 ? name : '';
+            };
+
+            /* ── The same three names, in the OLDER sheets ─────────────────────────
+             * The pre-2026 sheets are just as trilingual, they only say it elsewhere:
+             * the markup is written in one language and the other two sit in a
+             *   const translations = { nl: {}, en: { mainTitle: "…" }, es: { … } }
+             * object, addressed by each element's data-translate key. The language
+             * whose block is EMPTY is the one the markup itself is written in.
+             *
+             * That object is read as data — scanned for one key — and never evaluated.
+             * ------------------------------------------------------------------- */
+
+            // One language's block out of the translations object, brace-matched so a
+            // nested object cannot end it early. null when the sheet does not carry
+            // that language at all, '' when it carries it empty.
+            const psLegacyBlock = (text, lang) => {
+                const open = /\btranslations\s*=\s*\{/.exec(text || '');
+                if (!open) return null;
+                const key = new RegExp('^["\']?' + lang + '["\']?\\s*:\\s*\\{');
+                let depth = 1, inStr = null, esc = false, start = -1;
+                for (let i = open.index + open[0].length; i < text.length && depth > 0; i++) {
+                    const c = text[i];
+                    if (esc) { esc = false; continue; }
+                    if (c === '\\') { esc = true; continue; }
+                    if (inStr) { if (c === inStr) inStr = null; continue; }
+                    if (c === '"' || c === "'" || c === '`') { inStr = c; continue; }
+                    // A language key is only a language key at the top level.
+                    if (start === -1 && depth === 1 && /["'A-Za-z]/.test(c)) {
+                        const m = key.exec(text.substr(i, lang.length + 40));
+                        if (m) { i += m[0].length - 1; start = i + 1; depth++; continue; }
+                    }
+                    if (c === '{') depth++;
+                    else if (c === '}') { depth--; if (start !== -1 && depth === 1) return text.slice(start, i); }
+                }
+                return null;
+            };
+
+            const psLegacyValue = (block, key) => {
+                const m = new RegExp('(?:^|[,{])\\s*["\']?' + key + '["\']?\\s*:\\s*(["\'`])([\\s\\S]*?)\\1').exec(block || '');
+                if (!m) return '';
+                return m[2].replace(/<[^>]*>/g, ' ').replace(/&[a-z]+;/gi, ' ').replace(/\s+/g, ' ').trim();
+            };
+
+            const psLegacyTitle = (doc, text, lang) => {
+                const h1 = doc && doc.querySelector('h1');
+                const key = h1 && h1.getAttribute('data-translate');
+                if (!key) return '';
+                const block = psLegacyBlock(text, lang);
+                if (block === null) return '';
+                const value = psLegacyValue(block, key);
+                if (value) return value;
+                // An empty block means this language needs no translation — the page as
+                // written IS this language.
+                return block.trim() === '' ? (h1.textContent || '').replace(/\s+/g, ' ').trim() : '';
+            };
+
+            // One name per language, whichever of the two sheet generations this is.
+            const psNameFor = (doc, text, lang) => {
+                const fromSpans = psProductName(doc, lang);
+                if (fromSpans) return fromSpans;
+                const name = psCleanName(psLegacyTitle(doc, text, lang));
+                return name.length >= 2 && name.length <= 40 ? name : '';
+            };
+
+            // The bare product name per language. English is what the product is filed
+            // under; the other two become its alternative names.
+            const psNamesByLang = (doc, text) => ({
+                en: psNameFor(doc, text, 'en'),
+                nl: psNameFor(doc, text, 'nl'),
+                es: psNameFor(doc, text, 'es'),
+            });
 
             const psIsNewFormat = (doc) =>
                 doc.querySelectorAll('.card-eyebrow').length > 0 ||
@@ -1556,6 +2094,14 @@
                     if (first.length >= 2 && first.length < 40) cleanName = first;
                 }
 
+                // A trilingual sheet names the product in all three languages, and the
+                // English one is what the dashboard files it under — always, whatever
+                // the filename or the earlier guesses said. The bare product name, not
+                // the sheet's full title: "Broccoli", not "Fresh-Cut Broccoli Florets".
+                // Every title it does carry is kept as an alternative name below.
+                const psNames = psNamesByLang(doc, text);
+                if (psNames.en) cleanName = psNames.en;
+
                 // New-format: if cleanName looks like multilingual soup (mixed langs / too long),
                 // extract from the English data-lang span of h1 or from the <title> tag
                 if (cleanName.length > 30 || cleanName.match(/bleekselderij|apio\b|frais|gesneden|procesado/i)) {
@@ -1576,6 +2122,16 @@
                         }
                     }
                 }
+                // Whichever of the routes above produced the name, the product is filed
+                // under the produce and not under how it was cut: "Bleekselderij", not
+                // "Verwerkte Bleekselderij"; "Bloemkool", not "Bloemkool Roosjes". The
+                // older single-language sheets go through here too — they never reach
+                // the trilingual reader — and they are the ones that state the cut in
+                // the title most often. A title that is NOTHING but a cut is left
+                // alone; stripping it would leave the product with no name at all.
+                const psBare = psCleanName(cleanName, true);
+                if (psBare.length >= 2) cleanName = psBare;
+
                 cleanName = cleanName.charAt(0).toUpperCase() + cleanName.slice(1);
 
                 let extractedState = "whole";
@@ -1950,7 +2506,12 @@
                 let points = 0; Object.values(parsedData).forEach(task => { points += Object.keys(task).length; });
 
                 return {
-                    product: { name: cleanName, variety: extractedVariety, state: extractedState, targets: defaultTargets, imageUrl: imgUrl, completedTaskIds: [], links: {}, createdAt: null, formData: parsedData },
+                    // The Dutch and Spanish names come straight in as alternatives:
+                    // the same product, said in the other two languages the sheet is
+                    // written in. cleanAliases drops whichever of them is identical to
+                    // the English name, so a product called the same thing in all three
+                    // languages gains nothing.
+                    product: { name: cleanName, aliases: cleanAliases([psNames.nl, psNames.es], cleanName), variety: extractedVariety, state: extractedState, targets: defaultTargets, imageUrl: imgUrl, completedTaskIds: [], links: {}, createdAt: null, formData: parsedData },
                     points
                 };
             };
@@ -1991,7 +2552,7 @@
                         }
 
                         if (parsed.name && parsed.formData) {
-                            setNewProductData({ name: parsed.name, variety: parsed.variety || "", state: parsed.state || "whole", targets: parsed.targets || [], imageUrl: parsed.imageUrl || "", completedTaskIds: parsed.completedTaskIds || [], links: parsed.links || {}, createdAt: parsed.createdAt || new Date().toISOString() });
+                            setNewProductData({ name: parsed.name, aliases: parsed.aliases || [], variety: parsed.variety || "", state: parsed.state || "whole", targets: parsed.targets || [], imageUrl: parsed.imageUrl || "", completedTaskIds: parsed.completedTaskIds || [], links: parsed.links || {}, createdAt: parsed.createdAt || new Date().toISOString() });
                             setImportedFormData(parsed.formData);
                             let points = 0; Object.values(parsed.formData).forEach(task => { points += Object.keys(task).length; });
                             setParsedItemCount(points); setIsBackupRestore(true); setIsBulkImport(false); setImportStatus('success');
@@ -2044,7 +2605,8 @@
 
                     if (['xlsx', 'xls', 'csv'].includes(fileExt)) {
                         const buffer = await new Promise((res, rej) => { const reader = new FileReader(); reader.onload = e => res(e.target.result); reader.onerror = e => rej(e); reader.readAsArrayBuffer(file); });
-                        if (!window.XLSX) throw new Error("XLSX library not loaded");
+                        // Fetches SheetJS on first use; instant on every later import.
+                        await ensureLib("XLSX");
                         const workbook = XLSX.read(new Uint8Array(buffer), {type: 'array'});
                         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
                                                 const json = XLSX.utils.sheet_to_json(firstSheet, {defval: ""});
@@ -2152,11 +2714,12 @@
 
                     if (fileExt === 'docx') {
                         const buffer = await new Promise((res, rej) => { const reader = new FileReader(); reader.onload = e => res(e.target.result); reader.onerror = e => rej(e); reader.readAsArrayBuffer(file); });
-                        if (!window.mammoth) throw new Error("Mammoth library not loaded");
+                        // Fetches Mammoth on first use; instant on every later import.
+                        await ensureLib("mammoth");
                         const result = await mammoth.extractRawText({arrayBuffer: buffer});
                         const { product, points } = extractProductDataFromText(result.value, file.name);
 
-                        setNewProductData({ name: product.name, variety: product.variety, state: product.state, targets: product.targets, imageUrl: product.imageUrl, completedTaskIds: [], links: {}, createdAt: null });
+                        setNewProductData({ name: product.name, aliases: product.aliases || [], variety: product.variety, state: product.state, targets: product.targets, imageUrl: product.imageUrl, completedTaskIds: [], links: {}, createdAt: null });
                         setImportedFormData(product.formData); setIsBulkImport(false); setIsBackupRestore(false); setParsedItemCount(points); setImportStatus('success');
 
                         const cleanPName = product.name.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -2174,7 +2737,7 @@
                     const text = await new Promise((res, rej) => { const reader = new FileReader(); reader.onload = e => res(e.target.result); reader.onerror = e => rej(e); reader.readAsText(file); });
                     const { product, points } = extractProductDataFromText(text, file.name);
                     
-                    setNewProductData({ name: product.name, variety: product.variety, state: product.state, targets: product.targets, imageUrl: product.imageUrl, completedTaskIds: [], links: {}, createdAt: null });
+                    setNewProductData({ name: product.name, aliases: product.aliases || [], variety: product.variety, state: product.state, targets: product.targets, imageUrl: product.imageUrl, completedTaskIds: [], links: {}, createdAt: null });
                     setImportedFormData(product.formData); setIsBulkImport(false); setIsBackupRestore(false); setParsedItemCount(points); setImportStatus('success');
 
                     const cleanPName = product.name.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -2252,7 +2815,7 @@
                         if (existing) {
                             const mergedFormData = { ...existing.formData };
                             for (const key in prod.formData) { mergedFormData[key] = { ...(existing.formData[key] || {}), ...prod.formData[key] }; }
-                            const mergedDoc = { ...existing, targets: Array.from(new Set([...existing.targets, ...prod.targets])), formData: mergedFormData };
+                            const mergedDoc = { ...existing, targets: Array.from(new Set([...existing.targets, ...prod.targets])), aliases: cleanAliases([...aliasesOf(existing), ...aliasesOf(prod)], existing.name), formData: mergedFormData };
                             newProductsList.push(mergedDoc);
                             if (db) await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', existing.id), mergedDoc);
                         } else {
@@ -2285,7 +2848,10 @@
                             return;
                         }
                         const mergedFormData = buildMergedFD(existing.formData, importedFormData, {});
-                        const mergedDoc = { ...existing, imageUrl: newProductData.imageUrl || existing.imageUrl, targets: Array.from(new Set([...existing.targets, ...newProductData.targets])), formData: mergedFormData };
+                        // A document imported under a different product name is folded
+                        // in as an alternative name, so the name it arrived under still
+                        // finds this product afterwards.
+                        const mergedDoc = { ...existing, imageUrl: newProductData.imageUrl || existing.imageUrl, targets: Array.from(new Set([...existing.targets, ...newProductData.targets])), aliases: cleanAliases([...aliasesOf(existing), ...aliasesOf(newProductData), newProductData.name], existing.name), formData: mergedFormData };
                         if (db) await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', existing.id), mergedDoc);
                         else setProducts(prev => prev.map(p => p.id === existing.id ? mergedDoc : p));
                         setLoadedDataId(null); resetModal(); setActiveProductId(existing.id); setActiveStepId(1); setActiveTab('pipeline');
@@ -2297,6 +2863,9 @@
                 
                 const newProduct = {
                     id: finalId, name: newProductData.name.trim(), variety: newProductData.variety.trim(), state: newProductData.state,
+                    // Alternative names travel with the product through an export
+                    // and back, or a restore would quietly unfindable it again.
+                    aliases: cleanAliases(newProductData.aliases, newProductData.name),
                     targets: newProductData.targets, imageUrl: newProductData.imageUrl.trim(),
                     createdAt: isBackupRestore && newProductData.createdAt ? newProductData.createdAt : new Date().toISOString(),
                     completedTaskIds: isBackupRestore && newProductData.completedTaskIds ? newProductData.completedTaskIds : [], 
@@ -2439,6 +3008,21 @@
                                 const packType = mapPackType(g.specs && g.specs.packaging);
                                 const sortedMeas = (g.measurements || []).slice().sort((a, b) => (Number(a.day) || 0) - (Number(b.day) || 0));
                                 const lastMeas = sortedMeas.length > 0 ? sortedMeas[sortedMeas.length - 1] : {};
+                                // A day's quality by the report's own rule (board-db.js
+                                // measurementQuality): the average of its criterion scores,
+                                // or an older overall score, and nothing for a day that was
+                                // not evaluated. Reading `quality` directly took the code's
+                                // placeholder 9 on every unevaluated day, and the old
+                                // dropdown instead of the scores.
+                                const qualityOf = (m) => {
+                                    const B = window.PerfoTecBoard;
+                                    if (!B || !B.measurementQuality) return m.quality != null ? String(m.quality).trim() : '';
+                                    const q = B.measurementQuality(m);
+                                    return q ? String(q.value) : '';
+                                };
+                                // Rating and its day describe the same moment: the last day
+                                // that has a quality. The last day itself often has none.
+                                const lastRated = sortedMeas.slice().reverse().find(m => qualityOf(m) !== '');
                                 const getLastValid = (field) => {
                                     const found = sortedMeas.slice().reverse().find(m => {
                                         const s = m.samples && m.samples[0] ? m.samples[0] : {};
@@ -2466,8 +3050,8 @@
                                 master['pack_opt_' + idx + '_co2']     = getLastValid('co2');
                                 master['pack_opt_' + idx + '_company'] = String(proj.company || '');
                                 master['pack_opt_' + idx + '_country'] = String(proj.country || '');
-                                master['pack_opt_' + idx + '_days']    = lastMeas.day != null ? String(lastMeas.day) : '';
-                                master['pack_opt_' + idx + '_rating']  = String(lastMeas.quality || '');
+                                master['pack_opt_' + idx + '_days']    = lastRated ? String(lastRated.day) : (lastMeas.day != null ? String(lastMeas.day) : '');
+                                master['pack_opt_' + idx + '_rating']  = lastRated ? qualityOf(lastRated) : '';
                                 master['pack_opt_' + idx + '_date']    = reportDate;
                                 master['pack_opt_' + idx + '_pdf']     = reportRef;
                                 // Per-variant conclusion from the report analysis → trial notes,
@@ -2478,8 +3062,9 @@
                                 // Full quality-over-time curve ("day:score|day:score|...") — rating and
                                 // shelf life are one story; keep every measured point, not just the endpoint.
                                 const curvePoints = sortedMeas
-                                    .filter(m => m.quality != null && String(m.quality).trim() !== '')
-                                    .map(m => `${Number(m.day) || 0}:${String(m.quality).trim()}`);
+                                    .map(m => ({ day: Number(m.day) || 0, q: qualityOf(m) }))
+                                    .filter(p => p.q !== '')
+                                    .map(p => `${p.day}:${p.q}`);
                                 master['pack_opt_' + idx + '_curve']   = curvePoints.join('|');
                                 const rawAtm = String(g.specs && g.specs.atmosphereStrategy ? g.specs.atmosphereStrategy : '').trim();
                                 master['pack_opt_' + idx + '_condition'] = rawAtm === 'Open' ? 'OPEN' : rawAtm === 'MHP' ? 'MHP' : 'MAP';
@@ -2822,10 +3407,21 @@
 
 
             // ── Merge helper utilities ────────────────────────────────────────────────
-            const PACK_FIELDS = ['type','condition','material','temp','weight','trans','o2','co2','company','country','days','rating','pdf'];
+            // The full row schema. This used to stop at pdf, and buildMergedFD
+            // rebuilds the pack block from scratch (nd = {}), so every merge —
+            // the Merge Pipelines tool, conflict resolution, and accepting
+            // "Merge with: <product>" on import — permanently dropped the trial
+            // date, the variety tag, the conclusion notes and the whole
+            // quality-over-time curve of every row it touched.
+            const PACK_FIELDS = TRIAL_ROW_FIELDS;
 
+            // Includes date: without it two genuinely separate trial rounds that
+            // happened to share material, temp, weight, gas and rating counted as
+            // the same row and one of them was discarded by the dedupe below.
+            // notes and curve stay out on purpose — a differing conclusion or
+            // curve should not turn one trial into two.
             const packOptFingerprint = row =>
-                ['type','material','temp','weight','trans','o2','co2','company','country','days','rating']
+                ['type','material','temp','weight','trans','o2','co2','company','country','days','rating','date']
                 .map(f => String(row[f]||'').trim().toLowerCase()).join('|');
 
             const extractPackRows = master => {
@@ -2899,6 +3495,11 @@
                     ...target,
                     targets: Array.from(new Set([...target.targets, ...(source?.targets||[])])),
                     completedTaskIds: Array.from(new Set([...(target.completedTaskIds||[]), ...(source?.completedTaskIds||[])])),
+                    // The record that disappears leaves its names behind. Merging
+                    // a duplicate "Flat Beans" into Romano Beans is precisely how
+                    // an alternative name gets discovered, and anyone still
+                    // searching the old name has to land on the surviving product.
+                    aliases: cleanAliases([...aliasesOf(target), ...aliasesOf(source), (source?.name || '')], target.name),
                     formData: mergedFormData, links: mergedLinks,
                     imageUrl: target.imageUrl || source?.imageUrl
                 };
@@ -2923,7 +3524,7 @@
                 if (!target) { setMergeConflictPending(null); return; }
                 if (type === 'import') {
                     const mergedFormData = buildMergedFD(target.formData, sourceFD, conflictChoices);
-                    const mergedDoc = { ...target, imageUrl: (newProdData?.imageUrl)||target.imageUrl, targets: Array.from(new Set([...target.targets, ...(newProdData?.targets||[])])), formData: mergedFormData };
+                    const mergedDoc = { ...target, imageUrl: (newProdData?.imageUrl)||target.imageUrl, targets: Array.from(new Set([...target.targets, ...(newProdData?.targets||[])])), aliases: cleanAliases([...aliasesOf(target), ...aliasesOf(newProdData), (newProdData?.name || '')], target.name), formData: mergedFormData };
                     if (db) await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', target.id), mergedDoc);
                     else setProducts(prev => prev.map(p => p.id === target.id ? mergedDoc : p));
                     setLoadedDataId(null); resetModal(); setMergeConflictPending(null); setConflictChoices({}); setActiveProductId(target.id); setActiveStepId(1); setActiveTab('pipeline');
@@ -3284,8 +3885,26 @@
                 }
                 const next = { ...localFormData, 'product-sheet': { html, fileName: file.name, attachedAt: new Date().toISOString(), lastSyncedAt: '' } };
                 await psWriteFormData(next);
-                setSheetMsg(`✓ "${file.name}" attached — compare and sync below.`);
-                setTimeout(() => setSheetMsg(''), 6000);
+
+                // The sheet names this product in Dutch and Spanish as well. Attaching
+                // it says "this sheet is about this product", so those two names are a
+                // statement about the product and are adopted as alternative names —
+                // the English name it is filed under does not move.
+                let namesMsg = '';
+                if (activeProduct && !activeProduct.isAverage) {
+                    const psDocNames = new DOMParser().parseFromString(html, 'text/html');
+                    const psNames = psNamesByLang(psDocNames, html);
+                    // The product keeps the name it is filed under; what the sheet adds
+                    // is the other ways to find it.
+                    const added = cleanAliases([psNames.en, psNames.nl, psNames.es], activeProduct.name)
+                        .filter(n => !aliasesOf(activeProduct).some(a => normProductName(a) === normProductName(n)));
+                    if (added.length) {
+                        await handleAliasesChange(activeProduct.id, aliasesOf(activeProduct).concat(added));
+                        namesMsg = ` Also known as: ${added.join(' · ')}.`;
+                    }
+                }
+                setSheetMsg(`✓ "${file.name}" attached — compare and sync below.${namesMsg}`);
+                setTimeout(() => setSheetMsg(''), 8000);
             };
 
             const handleViewSheet = () => {
@@ -3593,7 +4212,7 @@
                                                 <td className="p-0 border-r border-slate-200"><input type="text" placeholder="Country..." className="w-full p-3 outline-none focus:bg-blue-50 font-medium text-slate-900 text-xs bg-transparent" value={taskData[`pack_opt_${idx}_country`] || ''} onChange={(e) => handleFieldChange('p2-pack-master', `pack_opt_${idx}_country`, e.target.value)}/></td>
                                                 <td className="p-0 border-r border-slate-200"><input type="number" placeholder="Days" className="w-full p-3 outline-none focus:bg-blue-50 font-medium text-slate-900 text-xs bg-transparent" value={taskData[`pack_opt_${idx}_days`] || ''} onChange={(e) => handleFieldChange('p2-pack-master', `pack_opt_${idx}_days`, e.target.value)}/></td>
                                                 <td className="p-0 border-r border-slate-200 relative">
-                                                    <input type="number" placeholder="1-10" className={`w-full p-3 outline-none focus:bg-blue-50 font-bold text-xs bg-transparent ${rating && parseFloat(rating) >= 7 ? 'text-green-600' : 'text-slate-900'}`} value={taskData[`pack_opt_${idx}_rating`] || ''} onChange={(e) => handleFieldChange('p2-pack-master', `pack_opt_${idx}_rating`, e.target.value)}/>
+                                                    <input type="number" step="0.1" min="0" max="10" placeholder="1-10" className={`w-full p-3 outline-none focus:bg-blue-50 font-bold text-xs bg-transparent ${rating && parseFloat(rating) >= 7 ? 'text-green-600' : 'text-slate-900'}`} value={taskData[`pack_opt_${idx}_rating`] || ''} onChange={(e) => handleFieldChange('p2-pack-master', `pack_opt_${idx}_rating`, e.target.value)}/>
                                                     {rating && <span className="absolute right-2 top-3 text-[10px] text-green-600 pointer-events-none">★</span>}
                                                 </td>
                                                 <td className="p-0 border-r border-slate-200"><input type="date" className="w-full p-3 outline-none focus:bg-blue-50 font-medium text-slate-900 text-xs bg-transparent" value={taskData[`pack_opt_${idx}_date`] || ''} onChange={(e) => handleFieldChange('p2-pack-master', `pack_opt_${idx}_date`, e.target.value)}/></td>
@@ -4254,6 +4873,10 @@
                                         <thead>
                                             <tr>
                                                 <th className="cursor-pointer select-none" onClick={() => handleDbSort('name')}>Product Name{dbSortIcon('name')}</th>
+                                                {/* The other names this product is sold under. Searched
+                                                    everywhere in the workflow; never shown in place of the
+                                                    product name. */}
+                                                <th className="min-w-[200px]" title="Other names this product is sold under — searching any of them finds this product">Also Known As</th>
                                                 <th className="cursor-pointer select-none" onClick={() => handleDbSort('variety')}>Variety{dbSortIcon('variety')}</th>
                                                 <th className="cursor-pointer select-none" onClick={() => handleDbSort('state')}>State{dbSortIcon('state')}</th>
                                                 <th className="cursor-pointer select-none" onClick={() => handleDbSort('minTemp')}>Min Temp (°C){dbSortIcon('minTemp')}</th>
@@ -4270,6 +4893,12 @@
                                                         <td className="p-0 border-r border-slate-200">
                                                             <input type="text" disabled={p.isAverage} value={p.name} onChange={e => handleProductMetaChange(p.id, 'name', e.target.value)} className="w-full p-2 outline-none focus:bg-blue-50 font-medium text-xs bg-transparent" />
                                                             {p.isAverage && <span className="absolute right-2 top-2 px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded text-[9px]">AVG</span>}
+                                                        </td>
+                                                        <td className="p-0 border-r border-slate-200 align-top">
+                                                            {/* Edited once per product: the list is stored on every
+                                                                variety of it, so a search under any name finds them all. */}
+                                                            <AliasEditor names={aliasesOf(p)} mainName={p.name} disabled={p.isAverage}
+                                                                onChange={next => handleAliasesChange(p.id, next)} />
                                                         </td>
                                                         <td className="p-0 border-r border-slate-200">
                                                             <input type="text" disabled={p.isAverage} value={p.variety || ''} onChange={e => handleProductMetaChange(p.id, 'variety', e.target.value)} className="w-full p-2 outline-none focus:bg-blue-50 text-xs bg-transparent" />
@@ -4446,7 +5075,7 @@
                                                 <td><input type="text" disabled={t.isAverage} value={t.company} onChange={e => handleDatabaseChange(t.productId, 'p2-pack-master', `pack_opt_${t.idx}_company`, e.target.value)} placeholder="Company" /></td>
                                                 <td><input type="text" disabled={t.isAverage} value={t.country} onChange={e => handleDatabaseChange(t.productId, 'p2-pack-master', `pack_opt_${t.idx}_country`, e.target.value)} placeholder="Country" /></td>
                                                 <td><input type="number" disabled={t.isAverage} value={t.days} onChange={e => handleDatabaseChange(t.productId, 'p2-pack-master', `pack_opt_${t.idx}_days`, e.target.value)} /></td>
-                                                <td><input type="number" disabled={t.isAverage} value={t.rating} onChange={e => handleDatabaseChange(t.productId, 'p2-pack-master', `pack_opt_${t.idx}_rating`, e.target.value)} placeholder="1-10" /></td>
+                                                <td><input type="number" step="0.1" min="0" max="10" disabled={t.isAverage} value={t.rating} onChange={e => handleDatabaseChange(t.productId, 'p2-pack-master', `pack_opt_${t.idx}_rating`, e.target.value)} placeholder="1-10" /></td>
                                                 <td><input type="date" disabled={t.isAverage} value={t.date} onChange={e => handleDatabaseChange(t.productId, 'p2-pack-master', `pack_opt_${t.idx}_date`, e.target.value)} /></td>
                                                 <td><input type="text" disabled={t.isAverage} value={t.pdf} onChange={e => handleDatabaseChange(t.productId, 'p2-pack-master', `pack_opt_${t.idx}_pdf`, e.target.value)} className="text-blue-600" placeholder="URL / File" /></td>
                                                 <td className="p-0 text-center">
@@ -4548,7 +5177,84 @@
 
             return (
                 <div className="min-h-screen bg-slate-100 font-sans antialiased selection:bg-blue-200 selection:text-blue-900 text-slate-800">
-                    
+
+                    {/* DATA-INTEGRITY BANNERS
+                        Everything here exists because the alternative is silence.
+                        A lost edit that nobody is told about is indistinguishable
+                        from one that never happened. */}
+                    {productConflicts.length > 0 && (
+                        <div className="sticky top-0 z-[90] bg-red-50 border-b-2 border-red-500 px-4 py-3">
+                            <div className="max-w-6xl mx-auto flex flex-col gap-2">
+                                <div className="flex items-start gap-2 text-red-800">
+                                    <AlertCircle size={18} className="shrink-0 mt-0.5" />
+                                    <p className="text-sm font-bold">
+                                        {productConflicts.length === 1 ? 'A product was changed by someone else' : `${productConflicts.length} products were changed by someone else`} while you had them open.
+                                        Your version is kept in the <span className="font-mono">_conflicts</span> folder — nothing was thrown away.
+                                    </p>
+                                </div>
+                                {productConflicts.map(c => {
+                                    const who = (c.theirs && c.theirs.updatedBy) || 'someone else';
+                                    const when = c.theirs && c.theirs.updatedAt ? new Date(c.theirs.updatedAt).toLocaleString() : '';
+                                    return (
+                                        <div key={c.productId} className="flex flex-wrap items-center gap-2 pl-6 text-sm text-red-900">
+                                            <span className="font-bold">{(c.mine && c.mine.name) || c.productId}</span>
+                                            <span className="text-red-700">— saved by {who}{when && ` at ${when}`}.</span>
+                                            <button onClick={() => takeTheirVersion(c.productId)}
+                                                className="px-3 py-1 rounded-lg text-xs font-bold text-white bg-red-600 hover:bg-red-700">
+                                                Load their version
+                                            </button>
+                                            <button onClick={() => keepMyVersion(c.productId)}
+                                                className="px-3 py-1 rounded-lg text-xs font-bold text-red-700 border border-red-300 bg-white hover:bg-red-50">
+                                                Keep mine
+                                            </button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {staleOnDisk && (
+                        <div className="sticky top-0 z-[89] bg-blue-50 border-b-2 border-blue-500 px-4 py-2.5">
+                            <div className="max-w-6xl mx-auto flex flex-wrap items-center gap-3 text-sm text-blue-900">
+                                <RefreshCw size={16} className="shrink-0" />
+                                <span className="font-bold">Someone else has saved changes to this database since you opened it.</span>
+                                <span className="text-blue-700">You have unsaved work, so nothing was reloaded automatically.</span>
+                                <button onClick={async () => { await persistProducts(); await loadFromFolder({ silent: true }); }}
+                                    className="px-3 py-1 rounded-lg text-xs font-bold text-white bg-blue-600 hover:bg-blue-700">
+                                    Save mine, then reload
+                                </button>
+                                <button onClick={() => setStaleOnDisk(false)} className="text-xs font-bold text-blue-600 hover:text-blue-800">Dismiss</button>
+                            </div>
+                        </div>
+                    )}
+
+                    {folderWarnings.length > 0 && (
+                        <div className="sticky top-0 z-[88] bg-amber-50 border-b-2 border-amber-500 px-4 py-2.5">
+                            <div className="max-w-6xl mx-auto flex flex-col gap-1 text-sm text-amber-900">
+                                {folderWarnings.some(w => w.kind === 'artefact') && (
+                                    <div className="flex items-start gap-2">
+                                        <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                                        <span>
+                                            <span className="font-bold">Sync conflict copies in the database folder:</span>{' '}
+                                            <span className="font-mono text-xs">{folderWarnings.filter(w => w.kind === 'artefact').map(w => w.name).join(', ')}</span>.
+                                            {' '}OneDrive could not merge these, so a change may not have arrived. Open the folder, check which version is right and remove the copy.
+                                        </span>
+                                    </div>
+                                )}
+                                {folderWarnings.some(w => w.kind === 'legacy-index') && (
+                                    <div className="flex items-start gap-2">
+                                        <Info size={16} className="shrink-0 mt-0.5" />
+                                        <span>
+                                            <span className="font-mono text-xs">products.json</span> in the folder root is no longer used — the product list is built
+                                            from the record files themselves. It is frozen at the day this version shipped and can be deleted.
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
                     {/* MODAL FOR MANUAL MERGING */}
                     {showMergeModal && (
                         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm animate-fadeIn">
@@ -4888,8 +5594,11 @@
                         const q = globalSearch.toLowerCase().trim();
                         const terms = q.split(/\s+/).filter(Boolean);
                         const matches = (haystack) => terms.every(term => haystack.includes(term));
+                        // Alternative names search as fully as the main one, so
+                        // "flat beans" finds Romano Beans — which is still what the
+                        // hit shows, with the name that matched noted underneath.
                         const productHits = q ? displayProducts
-                            .filter(p => matches(`${p.name || ''} ${p.variety || ''} ${p.state || ''}`.toLowerCase()))
+                            .filter(p => matches(`${productNames(p).join(' ')} ${p.variety || ''} ${p.state || ''}`.toLowerCase()))
                             .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
                             .slice(0, 8) : [];
                         const trialHits = [];
@@ -4901,7 +5610,7 @@
                                 for (let i = 0; i < n && trialHits.length < 10; i++) {
                                     const f = (k) => pd[`pack_opt_${i}_${k}`] || '';
                                     if (!['type','material','o2','co2','days','rating','company','date'].some(k => f(k))) continue;
-                                    const hay = `${p.name} ${p.variety || ''} ${f('type')} ${f('material')} ${f('company')} ${f('country')} ${f('pdf')} ${f('date')} ${f('temp')} ${f('trans')} ${f('notes')}`.toLowerCase();
+                                    const hay = `${productNames(p).join(' ')} ${p.variety || ''} ${f('type')} ${f('material')} ${f('company')} ${f('country')} ${f('pdf')} ${f('date')} ${f('temp')} ${f('trans')} ${f('notes')}`.toLowerCase();
                                     if (matches(hay)) trialHits.push({ productId: p.id, productName: `${p.name}${p.variety ? ' — ' + p.variety : ''}`, mat: f('material'), type: f('type'), temp: f('temp'), rating: f('rating'), days: f('days'), date: f('date'), company: f('company') });
                                 }
                             }
@@ -4927,14 +5636,21 @@
                                         {productHits.length > 0 && (
                                             <div>
                                                 <p className="px-5 pt-4 pb-1.5 text-[10px] font-spartan font-bold uppercase tracking-widest text-slate-400">Products</p>
-                                                {productHits.map(p => (
-                                                    <button key={p.id} onClick={() => { setActiveProductId(p.id); setActiveTab('dashboard'); close(); }} className="w-full flex items-center gap-3 px-5 py-2.5 hover:bg-blue-50/60 transition-colors text-left">
-                                                        <Leaf size={15} className="text-[#008837] shrink-0"/>
-                                                        <span className="text-sm font-bold text-slate-900">{p.name}{p.variety ? ` — ${p.variety}` : ''}</span>
-                                                        <span className="text-xs text-slate-400">{p.state === 'whole' ? 'Whole' : 'Processed'}</span>
-                                                        <ChevronRight size={14} className="ml-auto text-slate-300 shrink-0"/>
-                                                    </button>
-                                                ))}
+                                                {productHits.map(p => {
+                                                    const via = aliasHit(globalSearch, p);
+                                                    return (
+                                                        <button key={p.id} onClick={() => { setActiveProductId(p.id); setActiveTab('dashboard'); close(); }} className="w-full flex items-center gap-3 px-5 py-2.5 hover:bg-blue-50/60 transition-colors text-left">
+                                                            <Leaf size={15} className="text-[#008837] shrink-0"/>
+                                                            <div className="min-w-0">
+                                                                <span className="block text-sm font-bold text-slate-900 truncate">{p.name}{p.variety ? ` — ${p.variety}` : ''}</span>
+                                                                {/* Says why a product you did not search for by name came up. */}
+                                                                {via && <span className="block text-[11px] text-slate-400 truncate">also known as {via}</span>}
+                                                            </div>
+                                                            <span className="text-xs text-slate-400">{p.state === 'whole' ? 'Whole' : 'Processed'}</span>
+                                                            <ChevronRight size={14} className="ml-auto text-slate-300 shrink-0"/>
+                                                        </button>
+                                                    );
+                                                })}
                                             </div>
                                         )}
                                         {trialHits.length > 0 && (
@@ -5048,7 +5764,10 @@
                                                         families[k].entries.push(p);
                                                     });
                                                     let famList = Object.values(families);
-                                                    if (q) famList = famList.filter(f => f.entries.some(e => (e.name || '').toLowerCase().includes(q) || (e.variety || '').toLowerCase().includes(q)));
+                                                    // Alternative names filter as well as the main one; the row
+                                                    // itself keeps showing the main name, with the matched name
+                                                    // underneath it.
+                                                    if (q) famList = famList.filter(f => f.entries.some(e => productNames(e).some(n => n.toLowerCase().includes(q)) || (e.variety || '').toLowerCase().includes(q)));
                                                     famList.sort((a, b) => (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase()) || (a.state || '').localeCompare(b.state || ''));
                                                     if (famList.length === 0) return <div className="p-5 text-center text-sm text-slate-400 font-medium">{productSearch ? 'No results found.' : 'No products in database.'}</div>;
 
@@ -5061,11 +5780,15 @@
                                                         const stateLabel = fam.state === 'whole' ? 'Whole' : 'Processed';
                                                         const isSelected = fam.entries.some(e => e.id === activeProductId);
                                                         const key = `${fam.name}||${fam.state}`;
+                                                        const via = productSearch ? aliasHit(productSearch, rep) : '';
                                                         return (
                                                             <button key={key} onClick={() => { setActiveProductId(rep.id); setShowProductPicker(false); setProductSearch(''); }} className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-blue-50/50 transition-colors text-left ${isSelected ? 'bg-blue-50' : ''}`}>
                                                                 <div className="flex-1 min-w-0">
                                                                     <p className={`text-sm font-bold truncate leading-snug ${isSelected ? 'text-blue-700' : 'text-slate-900'}`}>{fam.name} — {stateLabel}</p>
-                                                                    <p className="text-[11px] text-slate-400 mt-0.5 font-medium">{realVarieties.length > 1 ? `${realVarieties.length} varieties` : (realVarieties[0]?.variety ? realVarieties[0].variety : 'Single variety')}</p>
+                                                                    <p className="text-[11px] text-slate-400 mt-0.5 font-medium truncate">
+                                                                        {realVarieties.length > 1 ? `${realVarieties.length} varieties` : (realVarieties[0]?.variety ? realVarieties[0].variety : 'Single variety')}
+                                                                        {via ? ` · also known as ${via}` : ''}
+                                                                    </p>
                                                                 </div>
                                                             </button>
                                                         );
@@ -5151,6 +5874,18 @@
                                             so colour-coding this line carried nothing. */}
                                         <span className="text-white/75">{activeTab === 'dashboard' ? 'Product Dashboard.' : activeTab === 'database' ? 'Database Editor.' : 'Validation Workflow.'}</span>
                                     </h2>
+                                    {/* The trade names this product also goes by. Read-only here on
+                                        purpose: the heading above is the name this product is known
+                                        by in the dashboard, and these only ever help you find it.
+                                        They are edited in Database → Product Properties. */}
+                                    {activeProduct && aliasesOf(activeProduct).length > 0 && (
+                                        <p className="-mt-2 mb-4 text-sm text-white/70 flex flex-wrap items-center gap-x-2 gap-y-1">
+                                            <span className="font-spartan font-bold uppercase tracking-widest text-[10px] text-white/50">Also known as</span>
+                                            {aliasesOf(activeProduct).map(a => (
+                                                <span key={a} className="px-2 py-0.5 bg-white/10 border border-white/20 rounded-full text-[11px] font-medium">{a}</span>
+                                            ))}
+                                        </p>
+                                    )}
                                     <div className="flex items-center gap-4 mt-6 text-sm font-spartan uppercase tracking-widest">
                                         <span className="text-white/70">Pipeline Progress:</span>
                                         <div className="flex-1 max-w-[250px] h-2.5 bg-white/20 rounded-full overflow-hidden">
@@ -5455,8 +6190,46 @@
             );
         }
 
+        // A render error used to take the whole page to white — on top of a live
+        // autosave, with no way to tell whether the last edit reached disk. React
+        // unmounts the tree on an uncaught error, so without this the user is left
+        // with nothing to read and nothing to click.
+        class ErrorBoundary extends React.Component {
+            constructor(props) { super(props); this.state = { error: null }; }
+            static getDerivedStateFromError(error) { return { error }; }
+            componentDidCatch(error, info) { console.error('Dashboard crashed:', error, info); }
+            render() {
+                if (!this.state.error) return this.props.children;
+                return (
+                    <div className="min-h-screen bg-slate-100 flex items-center justify-center p-6 font-sans">
+                        <div className="bg-white rounded-2xl shadow-xl border-t-8 border-red-500 max-w-lg w-full p-8">
+                            <h1 className="text-xl font-bold text-slate-900 mb-2">The dashboard stopped</h1>
+                            <p className="text-sm text-slate-600 mb-4">
+                                Something went wrong while drawing the page. Your data is in the database folder, not in this
+                                tab — but anything typed in the last few seconds may not have been saved yet. Reload, then check
+                                the product you were working on.
+                            </p>
+                            <pre className="text-xs bg-slate-50 border border-slate-200 rounded-lg p-3 overflow-auto max-h-40 text-slate-700">
+                                {String(this.state.error && (this.state.error.stack || this.state.error.message || this.state.error))}
+                            </pre>
+                            <div className="flex gap-2 mt-4">
+                                <button onClick={() => window.location.reload()}
+                                    className="px-4 py-2 rounded-lg text-sm font-bold text-white" style={{ backgroundColor: '#008837' }}>
+                                    Reload
+                                </button>
+                                <button onClick={() => window.PerfoTecBoard && window.PerfoTecBoard.goToBoard && window.PerfoTecBoard.goToBoard()}
+                                    className="px-4 py-2 rounded-lg text-sm font-bold text-slate-600 border border-slate-300">
+                                    Back to board
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+        }
+
         const root = createRoot(document.getElementById('root'));
-        root.render(<App />);
+        root.render(<ErrorBoundary><App /></ErrorBoundary>);
     </script>
 </body>
 </html>
