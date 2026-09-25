@@ -29,13 +29,13 @@
 
     <!-- LOAD CENTRAL STYLING & CONFIGURATION -->
     <link rel="stylesheet" href="style.css?v=e8637b4c">
-    <script src="config.js?v=8d659a19"></script>
+    <script src="config.js?v=7b34913e"></script>
     <!-- This page renders its own Board button in the header, so the shared
          floating bar that board-db.js injects would be a second, redundant way
          back. Pages WITHOUT a header button (the Product Dashboard) still get it. -->
     <script>window.PERFOTEC_NO_BACK_BUTTON = true;</script>
-    <script src="board-db.js?v=2371f8df"></script>
-    <script src="product-tools.js?v=eca36103"></script>
+    <script src="board-db.js?v=b978be9b"></script>
+    <script src="product-tools.js?v=5916a60f"></script>
 </head>
 <body class="bg-slate-50 text-slate-700 antialiased selection:bg-blue-200 selection:text-blue-900">
     <div id="root">
@@ -45,7 +45,7 @@
         </div>
     </div>
 
-    <script type="text/babel" data-type="module">
+    <script type="text/babel" data-type="module" data-presets="react">
         import React, { useState, useRef, useEffect } from 'https://esm.sh/react@18.2.0';
         import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
         
@@ -64,6 +64,30 @@
 
         // --- LINK WITH CONFIG.JS ---
         const globalConfig = window.PERFOTEC_CONFIG || {};
+
+        // Rich text is rendered through dangerouslySetInnerHTML below, which does
+        // no sanitising of its own: React just assigns innerHTML on a live node, so
+        // <img src=x onerror=...> and <details open ontoggle=...> execute (verified).
+        // Proposal/report JSON sits in a SHARED OneDrive folder, so a payload written
+        // there by anyone with access runs in the next colleague-s browser - one that
+        // holds a File System Access handle to the whole database folder.
+        //
+        // Sanitising happens on READ rather than on write, deliberately: the editor
+        // stores whatever execCommand produced, and in some browsers that is
+        // <span style="font-weight:bold">. Stripping attributes on the way IN would
+        // silently drop the user-s bold. On the way out every payload is inert and no
+        // formatting the toolbar can make is lost. It also disarms documents that
+        // already carry a payload from before this fix.
+        // proposal-s Word export reads the RENDERED DOM (#print-content), so it
+        // inherits this automatically.
+        const cleanRich = (html) => {
+          const fn = globalConfig.sanitizeRichText;
+          if (fn) return fn.call(globalConfig, html);
+          // config.js missing: degrade to plain text rather than to raw markup.
+          if (html == null || html === '') return '';
+          const d = new DOMParser().parseFromString(String(html), 'text/html');
+          return (d.body.textContent || '');
+        };
 
         const BRAND = {
           colors: {
@@ -212,6 +236,10 @@
           );
         };
 
+        // One decimal at most, without floating-point noise: 0.25+0.5+0.2+0.6
+        // is 1.5499999999999998 in binary and used to print in full. Read as the
+        // 1.55 it is, it rounds to 1.6 (toPrecision(12) drops the noise first).
+        const round1 = (n) => Math.round(Number((n * 10).toPrecision(12))) / 10;
         const ProductSupplyChainFlow = ({ chain }) => {
           if (!chain || chain.length === 0) return null;
           let cumulativeMin = 0;
@@ -225,7 +253,8 @@
                 cumulativeMin += minD;
                 cumulativeMax += maxD;
                 
-                const cumStr = cumulativeMin === cumulativeMax ? `${cumulativeMin}` : `${cumulativeMin}-${cumulativeMax}`;
+                const shownMin = round1(cumulativeMin), shownMax = round1(cumulativeMax);
+                const cumStr = shownMin === shownMax ? `${shownMin}` : `${shownMin}-${shownMax}`;
 
                 return (
                   <React.Fragment key={idx}>
@@ -669,7 +698,7 @@
           const minTemp = allTemps.length > 0 ? Math.min(...allTemps) : null;
           const maxTemp = allTemps.length > 0 ? Math.max(...allTemps) : null;
           const tempString = allTemps.length > 0 ? (minTemp === maxTemp ? `${minTemp}°C` : `${minTemp}°C - ${maxTemp}°C`) : '-°C';
-          const totalDays = project.totalDuration || (minDays === maxDays ? `${minDays}` : `${minDays} - ${maxDays}`);
+          const totalDays = project.totalDuration || (round1(minDays) === round1(maxDays) ? `${round1(minDays)}` : `${round1(minDays)} - ${round1(maxDays)}`);
 
           // Reusable class for titles to ensure they stand out even if CSS fails
           const reportTitleClass = "text-3xl font-extrabold uppercase mb-6 brand-heading break-after-avoid";
@@ -684,10 +713,15 @@
               const url = URL.createObjectURL(blob);
               const downloadLink = document.createElement("a");
               document.body.appendChild(downloadLink);
-              downloadLink.href = URL.createObjectURL(blob);
+              downloadLink.href = url;
               downloadLink.download = (project.reportTitle || 'Proposal') + '.doc';
               downloadLink.click();
               document.body.removeChild(downloadLink);
+              // Release it: an object URL pins the whole blob in memory until
+              // the page unloads, and this print-content blob carries the logo and
+              // every product photo as base64. The JSON export a few lines down
+              // already revokes; this one made TWO urls and freed neither.
+              URL.revokeObjectURL(url);
           };
 
           return (
@@ -761,7 +795,7 @@
                 <div className="pt-4">
                   <h2 className={reportTitleClass} style={reportTitleStyle}>{pv.sec1}</h2>
                   <div className="text-base print:text-xs leading-relaxed print:leading-tight text-justify text-slate-800 mb-8 print:mb-3">
-                     <div className="mb-6 print:mb-2 whitespace-pre-wrap pdf-rich-text" dangerouslySetInnerHTML={{ __html: proposal?.intro || '' }}></div>
+                     <div className="mb-6 print:mb-2 whitespace-pre-wrap pdf-rich-text" dangerouslySetInnerHTML={{ __html: cleanRich(proposal?.intro) }}></div>
 
                      {/* Challenge + Target side by side on print to save vertical space */}
                      {(project.currentChallenge || project.trialTarget) && (
@@ -784,7 +818,7 @@
                      {proposal?.expectedOutcomes && (
                        <div className="mb-6 print:mb-2">
                          <h4 className="font-bold text-lg print:text-sm mb-2 print:mb-1" style={{color: BRAND.colors.blue}}>{pv.expectedOutcomesLabel}</h4>
-                         <div className="whitespace-pre-wrap pdf-rich-text" dangerouslySetInnerHTML={{ __html: proposal.expectedOutcomes }}></div>
+                         <div className="whitespace-pre-wrap pdf-rich-text" dangerouslySetInnerHTML={{ __html: cleanRich(proposal.expectedOutcomes) }}></div>
                        </div>
                      )}
                   </div>
@@ -1111,7 +1145,7 @@
                                );
                              })()}
 
-                             <div className="whitespace-pre-wrap pdf-rich-text bg-slate-50 p-6 print:p-3 rounded-2xl border border-slate-200" dangerouslySetInnerHTML={{ __html: proposal.requirements }}></div>
+                             <div className="whitespace-pre-wrap pdf-rich-text bg-slate-50 p-6 print:p-3 rounded-2xl border border-slate-200" dangerouslySetInnerHTML={{ __html: cleanRich(proposal.requirements) }}></div>
                          </div>
                      )}
                   </div>
@@ -1339,6 +1373,7 @@
               productPickHint: 'Choose one of {n} products, or type a new name.',
               productLinked: 'Linked to the product database — section 5 filled automatically',
               productNotLinked: 'Not in the product database yet.',
+              productAliasMatched: 'found under "{alias}"',
               productMissing: 'This product is no longer in the product database — the values below are the ones last saved.',
               productCreate: 'Add as new product',
               productCreateAs: 'add as',
@@ -1442,6 +1477,7 @@
               productPickHint: 'Kies uit {n} producten, of typ een nieuwe naam.',
               productLinked: 'Gekoppeld aan de productendatabase — hoofdstuk 5 automatisch ingevuld',
               productNotLinked: 'Nog niet in de productendatabase.',
+              productAliasMatched: 'gevonden onder "{alias}"',
               productMissing: 'Dit product staat niet meer in de productendatabase — onderstaande waarden zijn de laatst opgeslagen waarden.',
               productCreate: 'Als nieuw product toevoegen',
               productCreateAs: 'toevoegen als',
@@ -1545,6 +1581,7 @@
               productPickHint: 'Elija entre {n} productos, o escriba un nombre nuevo.',
               productLinked: 'Vinculado a la base de datos de productos — sección 5 rellenada automáticamente',
               productNotLinked: 'Aún no está en la base de datos de productos.',
+              productAliasMatched: 'encontrado como "{alias}"',
               productMissing: 'Este producto ya no está en la base de datos — los valores siguientes son los últimos guardados.',
               productCreate: 'Añadir como producto nuevo',
               productCreateAs: 'añadir como',
@@ -1797,7 +1834,7 @@
               measurements: (g.measurements || []).map(m => ({
                  day: m.day,
                  samples: Array.from({length: g.specs?.sampleCount || 3}, (_, i) => ({ id: Date.now()+i, o2: '', co2: '', weight: '' })),
-                 quality: 9,
+                 quality: '',
                  notes: '',
                  images: [],
                  qualityParams: [],
@@ -1869,6 +1906,12 @@
             });
             setProject(prev => ({ ...prev,
               productName: p.name || '',
+              // The chosen product's own link: with a multi-product intake, picking
+              // product #2 otherwise kept product #1's id under #2's name.
+              productId: p.productId || '',
+              // Leaving a linked product for one without a link: its target window and
+              // defects must go with it, as when the name is changed by hand.
+              ...(!p.productId && prev.productId && window.PerfoTecProduct ? window.PerfoTecProduct.emptyTargetPatch() : {}),
               processingType: p.processingType || 'Whole',
               type: p.type || '',
               origin: p.origin || '',
@@ -1882,12 +1925,12 @@
               startWeight: (p.packagings?.[0]?.weight || p.packagings?.[0]?.startWeight || p.weight || prev.startWeight),
               technologies: p.technologies || prev.technologies || [],
               packagings: p.packagings
-                ? p.packagings.map(pkg => ({ ...pkg, startWeight: pkg.startWeight || pkg.weight || '' }))
+                ? p.packagings.map(({ weight, ...pkg }) => ({ ...pkg, startWeight: weight || pkg.startWeight || '' }))
                 : (p.packagingType
                     ? [{ id: 1, packagingType: p.packagingType || 'Retail', material: p.material || '', length: p.length || '', width: p.width || '', height: p.height || '', startWeight: p.weight || '' }]
                     : (prev.packagings && prev.packagings.length > 0 ? prev.packagings : [{ id: 1, packagingType: 'Retail', material: '', length: '', width: '', height: '', startWeight: '' }])),
             }));
-            if (p.supplyChain) setSupplyChain(p.supplyChain);
+            if (Array.isArray(p.supplyChain) && p.supplyChain.length) setSupplyChain(p.supplyChain);
             setGroups(prev => {
               const ug = [...prev];
               if (ug[0]) {
@@ -1921,6 +1964,9 @@
             // A newly loaded document must be re-checked against the product
             // database, even when it carries the same product id as the last one.
             setDocLoadSeq(n => n + 1);
+            // Whichever name the PREVIOUS product was found under says nothing
+            // about this document.
+            setAliasNote('');
             // Canonical contact projection comes from config; fallback to a
             // local no-op in the unlikely event config is missing.
             const extractPrimaryContact = globalConfig.extractPrimaryContact
@@ -2096,19 +2142,27 @@
             if (data) applyProposalData(data);
             // Couple board metadata into the tool: packing date ← board packing date,
             // PerfoTec employee ← product manager (+ their email/phone), when empty.
+            // An intake payload carries no packing date, so the form's default —
+            // today — used to win and the autosave wrote it over the card's date.
+            const fromIntake = !data || !!data.isPerfoTecIntake;
+            // With several products the picker decides, so the card's link (it
+            // tracks the first) must not be applied first: its product would load
+            // its targets under whichever product is picked, and an autosave before
+            // the pick would no longer be a stub, so Cancel lost the intake for good.
+            const pickPending = !!(data && data.isPerfoTecIntake && Array.isArray(data.products) && data.products.length > 1);
             if (proj) {
               const pmPerson = proj.productManager ? pmList.find(x => x.name === proj.productManager) : null;
               setProject(pr => ({
                 ...pr,
-                packingDate: pr.packingDate || proj.startDate || pr.packingDate,
+                packingDate: fromIntake ? (proj.startDate || pr.packingDate) : (pr.packingDate || proj.startDate || pr.packingDate),
                 employee: pr.employee || proj.productManager || '',
                 employeeEmail: pr.employeeEmail || (pmPerson && pmPerson.email) || '',
                 employeePhone: pr.employeePhone || (pmPerson && pmPerson.phone) || '',
                 // Adopt the board's product link, so a project that was already
                 // linked (on the board, or in an earlier proposal session) opens
                 // with the right product selected.
-                productId: pr.productId || proj.productId || '',
-                productName: pr.productName || proj.product || ''
+                productId: pickPending ? pr.productId : fromIntake ? (proj.productId || pr.productId || '') : (pr.productId || proj.productId || ''),
+                productName: pickPending ? pr.productName : (pr.productName || proj.product || '')
               }));
             }
             boardLoadedRef.current = true;
@@ -2270,6 +2324,9 @@
           const [docLoadSeq, setDocLoadSeq] = useState(0);
           const [dashState, setDashState] = useState('loading'); // loading | ready | unavailable
           const [dashMsg, setDashMsg] = useState('');
+          // Set when the typed text matched one of the product's OTHER names, so
+          // the link status can explain why the field now says something else.
+          const [aliasNote, setAliasNote] = useState('');
           const [creatingProduct, setCreatingProduct] = useState(null); // null | 'whole' | 'processed'
 
           useEffect(() => {
@@ -2338,7 +2395,18 @@
 
           const handleProductNameChange = (name) => {
             const hit = Products.matchProduct(name, dashProducts);
-            if (hit) { applyDashProduct(hit); return; }
+            if (hit) {
+              // A product found under one of its other trade names still goes in
+              // under its main name — that is what applyDashProduct writes back
+              // into the field — so remember which name was recognised and say so
+              // beside the link, or the field changing under your hands reads as
+              // a bug. Kept out of dashMsg because the live-link effect above
+              // rewrites that on every product change.
+              setAliasNote(Products.matchedAlias(name, hit));
+              applyDashProduct(hit);
+              return;
+            }
+            setAliasNote('');
             setDashMsg('');
             setProject(p => ({
               ...p,
@@ -3060,14 +3128,24 @@
                                {dashProducts.map(p => (
                                  <option key={p.id} value={p.label}>{p.state}{p.hasSheet ? ' · ' + pt.dashWithSheet : ''}</option>
                                ))}
+                               {/* The other names each product is sold under. Picking one
+                                   links the product and the field then shows its MAIN name. */}
+                               {Products.aliasEntries(dashProducts).map(a => (
+                                 <option key={a.key} value={a.alias}>→ {a.name}</option>
+                               ))}
                              </datalist>
 
                              {/* Link status, and the one-click way to add a product
                                  that does not exist in the database yet. */}
                              <div className="mt-2 min-h-[24px]">
                                {project.productId ? (
-                                 <span className="text-xs font-bold text-green-700 flex items-center gap-1.5">
+                                 <span className="text-xs font-bold text-green-700 flex flex-wrap items-center gap-1.5">
                                    <Check size={13} />{pt.productLinked}
+                                   {aliasNote && (
+                                     <span className="font-medium text-slate-500">
+                                       · {(pt.productAliasMatched || 'found under "{alias}"').replace('{alias}', aliasNote)}
+                                     </span>
+                                   )}
                                  </span>
                                ) : (project.productName || '').trim() ? (
                                  /* The state is chosen here, not taken from the toggle
