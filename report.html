@@ -29,13 +29,13 @@
 
     <!-- LOAD CENTRAL STYLING & CONFIGURATION -->
     <link rel="stylesheet" href="style.css?v=e8637b4c">
-    <script src="config.js?v=8d659a19"></script>
+    <script src="config.js?v=7b34913e"></script>
     <!-- This page renders its own Board button in the header, so the shared
          floating bar that board-db.js injects would be a second, redundant way
          back. Pages WITHOUT a header button (the Product Dashboard) still get it. -->
     <script>window.PERFOTEC_NO_BACK_BUTTON = true;</script>
-    <script src="board-db.js?v=2371f8df"></script>
-    <script src="product-tools.js?v=eca36103"></script>
+    <script src="board-db.js?v=b978be9b"></script>
+    <script src="product-tools.js?v=5916a60f"></script>
 </head>
 <body class="bg-slate-50 text-slate-700 antialiased selection:bg-blue-200 selection:text-blue-900">
     <div id="root">
@@ -45,7 +45,7 @@
         </div>
     </div>
 
-    <script type="text/babel" data-type="module">
+    <script type="text/babel" data-type="module" data-presets="react">
         import React, { useState, useRef, useEffect } from 'https://esm.sh/react@18.2.0';
         import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
         
@@ -62,6 +62,30 @@
 
         // --- BRAND CONFIGURATION ---
         const globalConfig = window.PERFOTEC_CONFIG || {};
+
+        // Rich text is rendered through dangerouslySetInnerHTML below, which does
+        // no sanitising of its own: React just assigns innerHTML on a live node, so
+        // <img src=x onerror=...> and <details open ontoggle=...> execute (verified).
+        // Proposal/report JSON sits in a SHARED OneDrive folder, so a payload written
+        // there by anyone with access runs in the next colleague-s browser - one that
+        // holds a File System Access handle to the whole database folder.
+        //
+        // Sanitising happens on READ rather than on write, deliberately: the editor
+        // stores whatever execCommand produced, and in some browsers that is
+        // <span style="font-weight:bold">. Stripping attributes on the way IN would
+        // silently drop the user-s bold. On the way out every payload is inert and no
+        // formatting the toolbar can make is lost. It also disarms documents that
+        // already carry a payload from before this fix.
+        // proposal-s Word export reads the RENDERED DOM (#print-content), so it
+        // inherits this automatically.
+        const cleanRich = (html) => {
+          const fn = globalConfig.sanitizeRichText;
+          if (fn) return fn.call(globalConfig, html);
+          // config.js missing: degrade to plain text rather than to raw markup.
+          if (html == null || html === '') return '';
+          const d = new DOMParser().parseFromString(String(html), 'text/html');
+          return (d.body.textContent || '');
+        };
 
         // Unit conversion helper sourced from config; falls back to identity
         // so the report still functions if config is unavailable.
@@ -147,13 +171,206 @@
         const labelClass = (globalConfig.UI_CLASSES && globalConfig.UI_CLASSES.label) || "block mb-2 text-xs font-bold tracking-wide text-slate-600 uppercase";
 
         // --- HELPER FUNCTIONS ---
+        // One measured value, or NaN if there is nothing usable there.
+        //
+        // The measurement inputs are type="number", so the browser already turns
+        // a comma, a space or letters into "" before it reaches state. Values
+        // that skip that path — an imported report JSON, a hand-edited file, a
+        // round-trip that wrote null for an unmeasured sample — do not get that
+        // protection, which is what this guards.
+        //
+        // Number() rather than parseFloat(): parseFloat("5,5") returns 5 and
+        // would quietly count a comma-typed 5.5 as 5. Number("5,5") is NaN, so
+        // such a value is left out instead of silently altering the average —
+        // the same thing that happened before this change.
+        const sampleNumber = (v) => {
+          if (v === null || v === undefined) return NaN;
+          const s = String(v).trim();
+          if (s === '') return NaN;
+          return Number(s);
+        };
+
         const getAverage = (samples, key) => {
           if (!samples || samples.length === 0) return 0;
-          const validSamples = samples.filter(s => s[key] !== '' && !isNaN(s[key]));
-          if (validSamples.length === 0) return 0;
-          const sum = validSamples.reduce((acc, curr) => acc + parseFloat(curr[key]), 0);
-          return (sum / validSamples.length).toFixed(1);
+          // Filter on the PARSED value. The old test was
+          // `s[key] !== '' && !isNaN(s[key])`, and both isNaN(null) and
+          // isNaN(' ') are false — so a null or whitespace cell passed the
+          // filter and then turned the sum into NaN at parseFloat. A single
+          // such sample printed the average as the literal text "NaN" in a
+          // customer-facing report.
+          const values = samples.map(s => sampleNumber(s[key])).filter(n => !isNaN(n));
+          if (values.length === 0) return 0;
+          const sum = values.reduce((acc, n) => acc + n, 0);
+          // Still a string with one decimal: the reports show "4.0", and
+          // returning a bare number would drop that decimal everywhere.
+          return (sum / values.length).toFixed(1);
         };
+
+        // Round to one decimal without floating-point noise. 0.25+0.5+0.2+0.6
+        // is 1.5499999999999998 in binary; read as the 1.55 it is, it rounds to
+        // 1.6 instead of 1.5 (toPrecision(12) drops the noise before rounding).
+        const round1 = (n) => Math.round(Number((n * 10).toPrecision(12))) / 10;
+
+        // Last day on a chart's time axis: the length of the test, or the last
+        // measured day if that is later. There used to be a floor of 5 days, so a
+        // 2-day trial was squeezed into the left 40% beside an empty P+3..P+5.
+        const axisEndDay = (dataDays, plannedDays) => {
+          const planned = parseFloat(plannedDays);
+          const end = Math.max(0, ...(dataDays || []).filter(d => isFinite(d)), isFinite(planned) ? planned : 0);
+          return end > 0 ? end : 1;
+        };
+
+        // Quality of one measurement day. The rule lives in board-db.js
+        // (measurementQuality) because the dashboard's trial import applies it
+        // too: the mean of the criterion scores entered via the pencil, one
+        // decimal, blank criteria not counted, and nothing when evaluation is
+        // switched off for that day. A row from before this rule can instead
+        // carry the overall score picked in the former per-row dropdown (or
+        // brought in by an import); that comes back with `legacy: true`.
+        // Returns { value, legacy, count } or null.
+        const measQuality = (m) => {
+          const B = window.PerfoTecBoard;
+          return B && B.measurementQuality ? B.measurementQuality(m) : null;
+        };
+        // "6.1", or '' when there is none — the shape `quality` is exported in.
+        const qualityValue = (m) => { const q = measQuality(m); return q ? q.value.toFixed(1) : ''; };
+
+        // ---- Anonymised report --------------------------------------------------
+        // A copy of the report data with the client taken out, for a version that
+        // can be shared commercially. Only the PREVIEW gets this copy — and the
+        // PDF and the Word file are both built from the preview — so the saved
+        // report keeps every client detail and nothing downstream changes.
+        //   * company, address, website, contacts and logo: emptied;
+        //   * every mention of the client in free text (title, conclusions, notes,
+        //     captions, variant and stage names...) replaced by an alias. Looked
+        //     for: the company name, its distinctive words ("Trent" out of "Trent
+        //     Hypermarket Private Limited"), contact names, e-mail addresses, phone
+        //     numbers, the website and e-mail domain, street and postcode, and any
+        //     extra words the user adds — a trade name the text uses, say;
+        //   * the trial location, unless the user keeps it.
+        // Words of the product, its variety and origin and the client's city and
+        // country are never treated as the client: "Rose Farms" is replaced as a
+        // whole in a rose trial, but "rose" on its own is not.
+        // Photos cannot be checked by code; the editor lists them for a look by eye.
+        const ANON_LEGAL = new Set(['bv', 'b.v', 'nv', 'n.v', 'ltd', 'limited', 'private', 'pvt', 'inc', 'llc', 'llp', 'gmbh', 'sa', 's.a', 'sac', 's.a.c', 'srl', 'sl', 'spa', 'ag', 'co', 'corp', 'plc', 'pty', 'bvba', 'vof']);
+        const ANON_GENERIC = new Set(['the', 'and', 'of', 'de', 'van', 'der', 'den', 'het', 'en', 'y', 'la', 'el', 'los', 'las', 'company', 'corporation', 'group', 'holding', 'holdings', 'international', 'intl', 'trading', 'fresh', 'fruit', 'fruits', 'food', 'foods', 'farm', 'farms', 'produce', 'export', 'exports', 'import', 'imports', 'agro', 'global', 'retail', 'market', 'markets', 'supermarket', 'supermarkets', 'hypermarket', 'distribution', 'logistics', 'packaging', 'industries', 'enterprises', 'solutions', 'services', 'partners', 'brothers', 'bros', 'sons', 'products', 'growers', 'nursery', 'kwekerij']);
+        const ANON_MAIL_HOSTS = new Set(['gmail', 'googlemail', 'hotmail', 'outlook', 'live', 'yahoo', 'icloud', 'me', 'msn', 'proton', 'protonmail', 'aol', 'gmx', 'ziggo', 'kpnmail', 'planet', 'home']);
+        const ANON_IMAGE_KEYS = new Set(['url', 'logo', 'clientLogo', 'coverImage', 'startImage', 'predictedImage', 'imageUrl', 'image', 'photo', 'temperatureImages', 'images']);
+        const ANON_FIXED_KEYS = new Set(['id', 'action', 'category', 'atmosphereStrategy', 'processingType', 'packagingType', 'packaging', 'evaluate', 'measure', 'open', 'score', 'productId']);
+        const ANON_CLIENT_KEYS = ['company', 'street', 'houseNumber', 'addressExtra', 'zipCode', 'city', 'country', 'website', 'contactName', 'contactRole', 'contactEmail', 'contactPhone', 'phone', 'email', 'phoneDirect', 'phoneWork', 'role', 'clientLogo'];
+
+        const anonWords = (s) => String(s || '').split(/[\s,;:()\/|]+/)
+          .map(w => w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')).filter(Boolean);
+
+        // The strings that identify the client, longest first (a full name must
+        // be replaced before its words).
+        const anonTerms = (clientInfo, project, opts) => {
+          const ci = clientInfo || {}, p = project || {}, o = opts || {};
+          const keep = new Set(['perfotec', ...[p.productName, p.type, p.origin, ci.city, ci.country, o.alias]
+            .flatMap(anonWords).map(w => w.toLowerCase())]);
+          const out = [];
+          const add = (t) => {
+            t = String(t == null ? '' : t).replace(/\s+/g, ' ').trim();
+            if (t.length < 2 || keep.has(t.toLowerCase())) return;
+            if (!out.some(x => x.toLowerCase() === t.toLowerCase())) out.push(t);
+          };
+          const distinctive = (w) => w.length >= 3 && !/^\d+$/.test(w)
+            && !ANON_LEGAL.has(w.toLowerCase().replace(/\.$/, '')) && !ANON_GENERIC.has(w.toLowerCase()) && !keep.has(w.toLowerCase());
+          const stem = (host) => {
+            const h = String(host || '').trim().toLowerCase().replace(/^[a-z]+:\/\//, '').replace(/^www\./, '').split(/[\/?#]/)[0];
+            const s = h.split('.')[0];
+            return h && s.length >= 4 && !ANON_MAIL_HOSTS.has(s) ? [h, s] : [];
+          };
+          const company = ci.companyName || p.company || '';
+          add(company);
+          add(anonWords(company).filter(w => !ANON_LEGAL.has(w.toLowerCase().replace(/\.$/, ''))).join(' '));
+          anonWords(company).filter(distinctive).forEach(add);
+          [ci.website, p.website].forEach(w => stem(w).forEach(add));
+          const people = [
+            ...(Array.isArray(ci.contacts) ? ci.contacts : []),
+            { name: ci.contactName, email: ci.email, phone: ci.phone, phoneDirect: ci.phoneDirect, phoneWork: ci.phoneWork },
+            { name: p.contactName, email: p.contactEmail, phone: p.contactPhone }
+          ];
+          people.forEach(c => {
+            if (!c) return;
+            add(c.name);
+            anonWords(c.name).filter(distinctive).forEach(add);
+            if (c.email) { add(c.email); stem(String(c.email).split('@')[1]).forEach(add); }
+            [c.phone, c.phoneDirect, c.phoneWork].forEach(ph => { if (ph && String(ph).replace(/\D/g, '').length >= 6) add(ph); });
+          });
+          if (String(ci.street || '').trim().length >= 4) { add([ci.street, ci.houseNumber].filter(Boolean).join(' ')); add(ci.street); }
+          if (String(ci.zipCode || '').replace(/\s/g, '').length >= 4) add(ci.zipCode);
+          String(o.extraTerms || '').split(/[,;\n]+/).forEach(add);
+          return out.sort((a, b) => b.length - a.length);
+        };
+
+        // Returns the cleaned copy plus what was found, for the editor's summary.
+        const anonymiseReport = ({ clientInfo, project, groups, analysis, supplyChain }, opts) => {
+          const o = opts || {};
+          const alias = String(o.alias || '').trim() || 'Client';
+          const terms = anonTerms(clientInfo, project, o);
+          const esc = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '(?:\\s|&nbsp;|\\u00a0)+');
+          const re = terms.length
+            ? new RegExp('(?<![\\p{L}\\p{N}])(?:' + terms.map(esc).join('|') + ')(?![\\p{L}\\p{N}])', 'giu')
+            : null;
+          // With the location hidden, the place goes from the texts as well
+          // ("DC Bangalore"), removed rather than given the client's alias.
+          const pr = project || {}, cl = clientInfo || {};
+          const productWords = new Set([pr.productName, pr.type, pr.origin, cl.country].flatMap(anonWords).map(w => w.toLowerCase()));
+          const locationTerms = o.hideLocation === false ? [] : [...new Set([pr.testLocation, pr.testLocationTo, cl.city]
+            .map(t => String(t || '').replace(/\s+/g, ' ').trim())
+            .filter(t => t.length >= 3 && !productWords.has(t.toLowerCase())))].sort((a, b) => b.length - a.length);
+          const reLoc = locationTerms.length
+            ? new RegExp('(?<![\\p{L}\\p{N}])(?:' + locationTerms.map(esc).join('|') + ')(?![\\p{L}\\p{N}])', 'giu')
+            : null;
+          let hits = 0;
+          const areas = new Set();
+          // Rich-text fields are HTML: replace in the text between tags only.
+          const scrub = (str, area) => {
+            if (!re && !reLoc) return str;
+            return str.split(/(<[^>]*>)/).map(part => {
+              if (part.charAt(0) === '<') return part;
+              let out = re ? part.replace(re, () => { hits++; areas.add(area); return alias; }) : part;
+              if (reLoc) {
+                let removed = false;
+                out = out.replace(reLoc, () => { hits++; areas.add(area); removed = true; return ''; });
+                if (removed) out = out.replace(/\(\s*\)/g, '').replace(/[ \t\u00a0]{2,}/g, ' ').replace(/[ \t\u00a0]+([,.;:!?)])/g, '$1');
+              }
+              return out;
+            }).join('');
+          };
+          // A plain-text field may now end in the space before a removed place.
+          const scrubField = (str, area) => { const out = scrub(str, area); return out !== str && !/[<>]/.test(out) ? out.trim() : out; };
+          const walk = (v, key, area) => {
+            if (typeof v === 'string') {
+              if (ANON_IMAGE_KEYS.has(key) || ANON_FIXED_KEYS.has(key) || /^(data:|blob:)/i.test(v)) return v;
+              return scrubField(v, area);
+            }
+            if (Array.isArray(v)) return v.map(x => walk(x, key, area));
+            if (v && typeof v === 'object') {
+              const out = {};
+              Object.keys(v).forEach(k => { out[k] = walk(v[k], k, area); });
+              return out;
+            }
+            return v;
+          };
+          const proj = {};
+          Object.keys(project || {}).forEach(k => { proj[k] = walk(project[k], k, 'project.' + k); });
+          ANON_CLIENT_KEYS.forEach(k => { if (k in proj) proj[k] = k === 'clientLogo' ? null : ''; });
+          if (o.hideLocation !== false) { proj.testLocation = ''; proj.testLocationTo = ''; }
+          const an = {};
+          Object.keys(analysis || {}).forEach(k => { an[k] = walk(analysis[k], k, 'analysis.' + k); });
+          return {
+            clientInfo: { companyName: '', street: '', houseNumber: '', addressExtra: '', zipCode: '', city: '', country: '', website: '',
+              contactName: '', role: '', email: '', phone: '', phoneDirect: '', phoneWork: '', contacts: [], logo: null },
+            project: proj,
+            groups: (groups || []).map(g => walk(g, '', 'groups')),
+            analysis: an,
+            supplyChain: (supplyChain || []).map(s => walk(s, '', 'supplyChain')),
+            alias, terms, locationTerms, hits, areas: [...areas]
+          };
+        };
+
 
         // Weight loss per sample. Samples unpacked at different evaluation
         // moments are usually different physical units, so each sample can
@@ -524,7 +741,7 @@
                   txtCell(s.stage || '-', { bold: true, fill, pct: widths[1], align: AlignmentType.LEFT }),
                   txtCell(fmtRange(s.tempStart, s.tempEnd, '°C'), { fill, pct: widths[2] }),
                   txtCell(fmtRange(s.daysStart, s.daysEnd, ' d'), { fill, pct: widths[3] }),
-                  txtCell(cMin === cMax ? `${cMin} d` : `${cMin} - ${cMax} d`, { color: '084BCD', fill, pct: widths[4] }),
+                  txtCell(round1(cMin) === round1(cMax) ? `${round1(cMin)} d` : `${round1(cMin)} - ${round1(cMax)} d`, { color: '084BCD', fill, pct: widths[4] }),
                   txtCell(action, { bold: true, color: s.action === 'pack' ? '008837' : 'DC2626', fill, pct: widths[5] }),
                 ],
               }));
@@ -776,7 +993,8 @@
                     const minD = parseFloat(step.daysStart) || 0;
                     const maxD = step.daysEnd ? parseFloat(step.daysEnd) : minD;
                     cumMin += minD; cumMax += maxD;
-                    const cumStr = cumMin === cumMax ? `${cumMin}` : `${cumMin}-${cumMax}`;
+                    const shownMin = round1(cumMin), shownMax = round1(cumMax);
+                    const cumStr = shownMin === shownMax ? `${shownMin}` : `${shownMin}-${shownMax}`;
 
                     return (
                       <React.Fragment key={globalIdx}>
@@ -820,7 +1038,7 @@
           // A shared x-domain (max day across ALL variants) keeps every gas
           // chart on an identical time scale, so charts can be compared
           // side by side. Falls back to this variant's own range.
-          const maxDay = sharedMaxDay || Math.max(...data.map(d => parseFloat(d.day) || 0), 5);
+          const maxDay = sharedMaxDay || axisEndDay(data.map(d => parseFloat(d.day) || 0), isNaN(pDays) ? 0 : pDays);
           const maxY = 25;
           const getX = (day) => padding + (parseFloat(day) / maxDay) * (width - 2 * padding);
           const getY = (val) => height - padding - (parseFloat(val) / maxY) * (height - 2 * padding);
@@ -924,7 +1142,7 @@
               <div className="flex flex-wrap justify-center gap-6 mt-8">
                 {groups.map((g, idx) => (
                   <div key={g.id} className="flex items-center gap-2 text-sm font-extrabold text-slate-700">
-                    <div className="w-4 h-4 rounded-full shadow-sm" style={{ backgroundColor: CHART_COLORS[idx % CHART_COLORS.length].stroke }}></div>
+                    <span className="text-lg leading-none" style={{ color: CHART_COLORS[idx % CHART_COLORS.length].stroke }}>{'● '}</span>
                     {g.name || 'Variant'}
                   </div>
                 ))}
@@ -934,78 +1152,136 @@
           );
         };
 
-        // Line chart comparing one quality criterion (default: General Quality)
-        // across all variants over time. Uses the same variant colours and the
-        // same day-based time axis as the other report charts. The dashed line
-        // at score 7 marks the acceptance limit from the score scale.
-        const QualityLineChart = ({ groups, criterion = 'General Quality' }) => {
+        // Line chart of the AVERAGE quality per variant over time: per day the
+        // mean of the scored criteria (measQuality — the same number the
+        // measurement table, the summary table and the export carry). Same
+        // variant colours and day-based time axis as the other report charts; the
+        // dashed line at score 7 marks the acceptance limit from the score scale.
+        //
+        // Variants often score identically: they come from one batch, so day 0
+        // usually matches, and on a 1-10 scale two treatments can match exactly.
+        // Drawn one over the other, the later line covered the earlier one
+        // completely — that is how Control vanished while the legend still
+        // listed it. Every point stays where it is; a segment shared by k variants
+        // is drawn as k alternating dashes, one colour each, and a shared point as
+        // concentric rings. Markers go in two passes (discs, then rings) so no
+        // marker can cover another. Presentation attributes only, so the Word
+        // export's SVG serialisation keeps all of it.
+        const QualityLineChart = ({ groups, plannedDays }) => {
           const width = 600; const height = 260; const padding = 40;
           const series = groups.map((g, idx) => ({
             name: g.name || 'Variant', idx,
+            color: CHART_COLORS[idx % CHART_COLORS.length].stroke,
             points: (g.measurements || [])
-              .filter(m => m.evaluateQuality)
-              .map(m => {
-                const p = (m.qualityParams || []).find(q => q.name === criterion);
-                return (p && p.score !== '' && !isNaN(parseFloat(p.score))) ? { day: parseFloat(m.day), score: parseFloat(p.score) } : null;
-              })
-              .filter(Boolean)
+              .map(m => { const q = measQuality(m); return { day: parseFloat(m.day), score: q ? q.value : null, legacy: !!(q && q.legacy) }; })
+              .filter(p => p.score !== null && !isNaN(p.day))
               .sort((a, b) => a.day - b.day)
           })).filter(s => s.points.length > 0);
           if (series.length === 0) return null;
 
-          const maxDay = Math.max(...series.flatMap(s => s.points.map(p => p.day)), 5);
+          const maxDay = axisEndDay(series.flatMap(s => s.points.map(p => p.day)), plannedDays);
           const getX = (day) => padding + (day / maxDay) * (width - 2 * padding);
           const getY = (score) => height - padding - (score / 10) * (height - 2 * padding);
           const tickStep = [1, 2, 5, 7, 10, 14, 21, 30, 60, 90].find(s => maxDay / s <= 7) || Math.ceil(maxDay / 7);
           const xTicks = [];
           for (let t = 0; t <= maxDay; t += tickStep) xTicks.push(t);
 
+          // Which variants share each point and each stretch of line. Every line
+          // is cut at every plotted day of ANY variant: a variant that skipped a
+          // day (evaluation off, criteria left blank) otherwise ran one long
+          // segment straight over another variant's two, and hid it just the same.
+          const DASH = 8, R0 = 4, RING = 2.5;
+          const r6 = (n) => Math.round(n * 1e6) / 1e6; // interpolated scores: no float noise in the key
+          const ptKey = (p) => p.day + '|' + r6(p.score);
+          const segKey = (a, b) => ptKey(a) + '>' + ptKey(b);
+          const allDays = [...new Set(series.flatMap(s => s.points.map(p => p.day)))].sort((x, y) => x - y);
+          const pieces = (s) => s.points.slice(1).flatMap((b, i) => {
+            const a = s.points[i];
+            if (!(b.day > a.day)) return [[a, b]];
+            const cuts = [a, ...allDays.filter(d => d > a.day && d < b.day)
+              .map(d => ({ day: d, score: a.score + (b.score - a.score) * (d - a.day) / (b.day - a.day) })), b];
+            return cuts.slice(1).map((q, j) => [cuts[j], q]);
+          });
+          const ptOwners = {}, segOwners = {};
+          const own = (map, key, idx) => { const list = map[key] || (map[key] = []); if (!list.includes(idx)) list.push(idx); };
+          series.forEach(s => {
+            s.points.forEach(p => own(ptOwners, ptKey(p), s.idx));
+            pieces(s).forEach(([a, b]) => own(segOwners, segKey(a, b), s.idx));
+          });
+          const segments = series.flatMap(s => pieces(s).map(([a, b], i) => {
+            const owners = segOwners[segKey(a, b)];
+            return { key: 'l-' + s.idx + '-' + i, color: s.color, a, b, k: owners.length, rank: owners.indexOf(s.idx) };
+          }));
+          const markers = series.flatMap(s => s.points.map((p, i) => {
+            const owners = ptOwners[ptKey(p)];
+            return { key: s.idx + '-' + i, color: s.color, p, legacy: p.legacy, r: R0 + RING * (owners.length - 1 - owners.indexOf(s.idx)) };
+          }));
+          // Rings of several variants that share a day-0 score reach left past
+          // the axis; move the y labels out so a '10' never reads as '1'.
+          const day0Edge = Math.max(0, ...markers.filter(mk => mk.p.day === 0).map(mk => mk.r + 1));
+          const yLabelX = padding - Math.min(Math.max(10, day0Edge + 2), 26);
+
           return (
             <div className="w-full border border-slate-200 rounded-3xl bg-white p-8 font-sans shadow-sm">
-              <h4 className="text-center font-extrabold mb-6 uppercase text-sm tracking-wider text-slate-800 border-b border-slate-100 pb-4">{criterion} Development per Variant</h4>
+              <h4 className="text-center font-extrabold mb-6 uppercase text-sm tracking-wider text-slate-800 border-b border-slate-100 pb-4">Average Quality Development per Variant</h4>
               <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto mt-2">
                 {[0, 2, 4, 6, 8, 10].map(val => (
                   <g key={val}>
                     <line x1={padding} y1={getY(val)} x2={width - padding} y2={getY(val)} stroke="#F2F5F9" strokeWidth="2" strokeDasharray="4" />
-                    <text x={padding - 10} y={getY(val) + 4} textAnchor="end" fontSize="11" fill="#8A97AD" fontWeight="600">{val}</text>
+                    <text x={yLabelX} y={getY(val) + 4} textAnchor="end" fontSize="11" fill="#8A97AD" fontWeight="600">{val}</text>
                   </g>
                 ))}
                 {/* Acceptance limit: scores >= 7 are within specification */}
                 <line x1={padding} y1={getY(7)} x2={width - padding} y2={getY(7)} stroke="#f97316" strokeWidth="1.5" strokeDasharray="6 4" />
-                <text x={width - padding} y={getY(7) - 5} textAnchor="end" fontSize="9" fill="#f97316" fontWeight="700">Acceptance limit (7)</text>
                 {xTicks.map(t => (
                   <g key={`tick-${t}`}>
                     <line x1={getX(t)} y1={height - padding} x2={getX(t)} y2={height - padding + 4} stroke="#CFD9E6" strokeWidth="1.5" />
                     <text x={getX(t)} y={height - 14} textAnchor="middle" fontSize="10" fill="#66707F" fontWeight="bold">{formatDay(t)}</text>
                   </g>
                 ))}
-                {series.map(s => (
-                  <g key={s.idx}>
-                    <polyline points={s.points.map(p => `${getX(p.day)},${getY(p.score)}`).join(' ')} fill="none" stroke={CHART_COLORS[s.idx % CHART_COLORS.length].stroke} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                    {s.points.map((p, i) => <circle key={i} cx={getX(p.day)} cy={getY(p.score)} r="4" fill="#ffffff" stroke={CHART_COLORS[s.idx % CHART_COLORS.length].stroke} strokeWidth="2" />)}
-                  </g>
+                {segments.map(({ key, color, a, b, k, rank }) => (
+                  <line key={key} x1={getX(a.day)} y1={getY(a.score)} x2={getX(b.day)} y2={getY(b.score)}
+                    stroke={color} strokeWidth="3" strokeLinecap={k > 1 ? 'butt' : 'round'}
+                    strokeDasharray={k > 1 ? DASH + ' ' + DASH * (k - 1) : undefined}
+                    strokeDashoffset={k > 1 ? ((k - rank) % k) * DASH : undefined} />
                 ))}
+                {markers.map(({ key, p, r }) => <circle key={'d-' + key} cx={getX(p.day)} cy={getY(p.score)} r={r} fill="#ffffff" />)}
+                {markers.map(({ key, color, p, r, legacy }) => <circle key={'r-' + key} cx={getX(p.day)} cy={getY(p.score)} r={r} fill="none" stroke={color} strokeWidth="2" strokeDasharray={legacy ? '2 1.5' : undefined} />)}
+                {/* Last, with a halo, so a point near 7 on the last day cannot cover it. */}
+                <text x={width - padding} y={getY(7) - 5} textAnchor="end" fontSize="9" fill="#f97316" fontWeight="700" stroke="#ffffff" strokeWidth="3" strokeLinejoin="round" paintOrder="stroke">Acceptance limit (7)</text>
               </svg>
+              {/* A coloured glyph rather than an empty coloured div: the Word
+                  export copies text runs with their colour, and an empty div
+                  left the legend there as bare names without a colour key. */}
               <div className="flex flex-wrap justify-center gap-6 mt-6">
                 {series.map(s => (
                   <div key={s.idx} className="flex items-center gap-2 text-sm font-extrabold text-slate-700">
-                    <div className="w-4 h-4 rounded-full shadow-sm" style={{ backgroundColor: CHART_COLORS[s.idx % CHART_COLORS.length].stroke }}></div>
+                    <span className="text-lg leading-none" style={{ color: s.color }}>{'● '}</span>
                     {s.name}
                   </div>
                 ))}
               </div>
-              <p className="text-[10px] text-slate-500 mt-4 leading-relaxed text-center italic">{criterion} score (1-10) per variant at each evaluation moment. Scores of 7 and higher (above the dashed line) are within specification. Time axis: days after packing (P+X), consistent with the other charts.</p>
+              <p className="text-[10px] text-slate-500 mt-4 leading-relaxed text-center italic">Average quality score per variant at each evaluation moment: the mean of the criteria scored that day (scale 1-10, one decimal; criteria without a score are not counted). Scores of 7 and higher (on or above the dashed line) are within specification; the individual criteria are listed in the tables below. Where variants score the same, their lines alternate colour and their points show as concentric rings.{markers.some(mk => mk.legacy) ? ' Dotted markers: an earlier overall score, recorded without criterion scores.' : ''} Time axis: days after packing (P+X), consistent with the other charts.</p>
             </div>
           );
         };
 
-        const SampleModal = ({ isOpen, onClose, data, onSave, startWeight, day0Samples, projectCriteria, isEvaluationDay, isDayEditable, projectTotalDuration, isMAP = true, rt }) => {
+        const SampleModal = ({ isOpen, onClose, data, onSave, startWeight, day0Samples, projectCriteria, isEvaluationDay, isDayEditable, projectTotalDuration, isMAP = true, rt, onChooseCriteria }) => {
           if (!isOpen) return null;
           const [samples, setSamples] = useState(data.samples || []);
           const [day, setDay] = useState(data.day === 0 ? 0 : (data.day || ''));
           const [notes, setNotes] = useState(data.notes || '');
           const [evaluateQuality, setEvaluateQuality] = useState(data.evaluateQuality !== undefined ? data.evaluateQuality : false);
-          const [qualityParams, setQualityParams] = useState(data.qualityParams || []);
+          const [qualityParams, setQualityParams] = useState(() => {
+            const own = Array.isArray(data.qualityParams) ? data.qualityParams : [];
+            if (own.length === 0) return own;
+            const have = new Set(own.map(p => p && p.name));
+            return [...own, ...(projectCriteria || []).filter(c => !have.has(c)).map(c => ({ name: c, score: '', notes: '' }))];
+          });
+          // An overall score from before quality became the average of the
+          // criteria (former dropdown, or an import). Kept until criteria are
+          // scored or it is removed here — never thrown away unasked.
+          const [legacyQuality, setLegacyQuality] = useState(window.PerfoTecBoard && window.PerfoTecBoard.measurementLegacyQuality ? window.PerfoTecBoard.measurementLegacyQuality(data) : (data.legacyQuality || ''));
 
           useEffect(() => {
             if (evaluateQuality && projectCriteria?.length > 0 && qualityParams.length === 0) {
@@ -1014,18 +1290,27 @@
           }, [evaluateQuality, projectCriteria, qualityParams]);
 
           const addSample = () => setSamples([...samples, { id: Date.now(), o2: '', co2: '', weight: '', initialWeight: '' }]);
+          // Copy the row, never write into it: these objects are the saved
+          // measurement's own, so an in-place edit survived Cancel — and the
+          // row's quality average would show scores that were never saved.
           const updateSample = (index, field, value) => {
-            const newSamples = [...samples]; newSamples[index][field] = value; setSamples(newSamples);
+            setSamples(prev => prev.map((s, i) => i === index ? { ...s, [field]: value } : s));
           };
           const removeSample = (index) => setSamples(samples.filter((_, i) => i !== index));
-          
+
           const updateParam = (index, field, value) => {
-            const newParams = [...qualityParams];
-            newParams[index][field] = value;
-            setQualityParams(newParams);
+            setQualityParams(prev => prev.map((p, i) => i === index ? { ...p, [field]: value } : p));
           };
 
-          const handleSave = () => { onSave({ ...data, day: parseFloat(day)||0, notes, samples, qualityParams, evaluateQuality }); onClose(); };
+          // `quality` is derived from the scores, never entered on its own.
+          const liveQuality = measQuality({ evaluateQuality, qualityParams, legacyQuality });
+          const scoreOutOfRange = (v) => { const t = String(v == null ? '' : v).trim().replace(',', '.'); if (!t) return false; const n = Number(t); return !(isFinite(n) && n >= 1 && n <= 10); };
+          const anyOutOfRange = qualityParams.some(p => scoreOutOfRange(p && p.score));
+          // Once criteria carry real scores the average has replaced the older
+          // overall score for good; keeping it would bring it back the moment
+          // someone cleared those scores.
+          const hasValidScore = qualityParams.some(p => p && String(p.score == null ? '' : p.score).trim() !== '' && !scoreOutOfRange(p.score));
+          const handleSave = () => { onSave({ ...data, day: parseFloat(day)||0, notes, samples, qualityParams, evaluateQuality, legacyQuality: hasValidScore ? '' : legacyQuality }); onClose(); };
 
           // Pick the layout in JS, not with `hidden md:block` / `md:hidden`.
           // Those utilities are generated at runtime by the Tailwind CDN, and the
@@ -1205,13 +1490,24 @@
 
                   <div className="bg-slate-50 p-4 md:p-6 rounded-2xl md:rounded-3xl border border-slate-200 shadow-inner flex flex-col h-full overflow-hidden">
                      <div className="flex flex-wrap justify-between items-center gap-3 border-b border-slate-200 pb-4 mb-5 md:mb-6">
-                       <h4 className="font-extrabold text-base md:text-lg text-slate-800">{rt?.qualityEval || 'Quality Evaluation'}</h4>
+                       <h4 className="font-extrabold text-base md:text-lg text-slate-800 flex items-center gap-3">
+                         {rt?.qualityEval || 'Quality Evaluation'}
+                         {liveQuality && !liveQuality.legacy && (
+                           <span className="text-sm font-extrabold px-2.5 py-1 rounded-lg bg-white border border-slate-200 shadow-sm" style={{ color: BRAND.colors.green }} title={rt?.qualityAvgHint || ''}>Ø {liveQuality.value.toFixed(1)}</span>
+                         )}
+                       </h4>
                        <label className="flex items-center gap-3 text-sm bg-white border border-slate-300 px-4 py-3 md:py-2 rounded-xl md:rounded-lg cursor-pointer shadow-sm hover:bg-slate-50 transition-colors">
                          <input type="checkbox" checked={evaluateQuality} onChange={e => setEvaluateQuality(e.target.checked)} className="accent-green-600 w-5 h-5" />
                          <span className="font-bold text-slate-700">{rt?.enableEval || 'Enable Evaluation'}</span>
                        </label>
                      </div>
 
+                     {liveQuality && liveQuality.legacy && (
+                       <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                         <span className="flex-1 min-w-[12rem]">{(rt?.legacyQualityNote || 'Earlier overall score: {v}. It counts until you score the criteria below.').replace('{v}', liveQuality.value.toFixed(1))}</span>
+                         <button type="button" onClick={() => setLegacyQuality('')} className="shrink-0 font-bold px-3 py-1.5 rounded-lg bg-white border border-amber-300 text-amber-800 hover:bg-amber-100">{rt?.legacyQualityRemove || 'Remove'}</button>
+                       </div>
+                     )}
                      {evaluateQuality ? (
                        <div className="flex-1 flex flex-col overflow-hidden">
                          {/* ---- PHONE: one card per criterion ----------------------
@@ -1230,7 +1526,7 @@
                                <div className="flex items-center gap-3">
                                  <span className="flex-1 font-bold text-slate-800 text-sm leading-tight">{param.name}</span>
                                  <input type="number" inputMode="numeric" min="1" max="10"
-                                   className="w-16 h-12 border-2 border-slate-300 rounded-xl text-center text-lg font-extrabold text-blue-900 outline-none focus:border-blue-500 shrink-0"
+                                   className={`w-16 h-12 border-2 rounded-xl text-center text-lg font-extrabold text-blue-900 outline-none focus:border-blue-500 shrink-0 ${scoreOutOfRange(param.score) ? 'border-red-400 bg-red-50' : 'border-slate-300'}`}
                                    value={param.score || ''} onChange={e => updateParam(i, 'score', e.target.value)} placeholder="–" />
                                </div>
                                <input type="text"
@@ -1251,12 +1547,15 @@
                                </tr>
                              </thead>
                              <tbody className="divide-y divide-slate-100">
-                               {qualityParams.length === 0 && <tr><td colSpan="3" className="text-center italic text-slate-400 py-8">{rt?.noCriteriaModal || 'No criteria selected in Global Settings.'}</td></tr>}
+                               {qualityParams.length === 0 && <tr><td colSpan="3" className="text-center italic text-slate-400 py-8">
+                                 {rt?.noCriteriaModal || 'No criteria selected in Global Settings.'}
+                                 {onChooseCriteria && <div className="mt-3 not-italic"><button type="button" onClick={() => { handleSave(); onChooseCriteria(); }} className="font-bold px-4 py-2 rounded-lg text-white shadow-sm" style={{ backgroundColor: BRAND.colors.blue }}>{rt?.chooseCriteria || 'Choose criteria'}</button></div>}
+                               </td></tr>}
                                {qualityParams.map((param, i) => (
                                  <tr key={i} className="hover:bg-slate-50 transition-colors">
                                    <td className="p-3 text-slate-800 font-bold">{param.name}</td>
                                    <td className="p-3">
-                                      <input type="number" min="1" max="10" className="w-full p-2 border border-slate-300 rounded-lg text-center font-extrabold text-blue-900 outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" value={param.score || ''} onChange={e => updateParam(i, 'score', e.target.value)} placeholder="-" />
+                                      <input type="number" min="1" max="10" className={`w-full p-2 border rounded-lg text-center font-extrabold text-blue-900 outline-none focus:ring-2 focus:ring-blue-500 shadow-sm ${scoreOutOfRange(param.score) ? 'border-red-400 bg-red-50' : 'border-slate-300'}`} value={param.score || ''} onChange={e => updateParam(i, 'score', e.target.value)} placeholder="-" />
                                    </td>
                                    <td className="p-3">
                                       <input type="text" className="w-full p-2 border border-slate-300 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 shadow-sm" value={param.notes || ''} onChange={e => updateParam(i, 'notes', e.target.value)} placeholder="..." />
@@ -1266,6 +1565,7 @@
                              </tbody>
                            </table>
                          </div>
+                         {anyOutOfRange && <p className="mt-2 text-xs font-bold text-red-600">{rt?.scoreOutOfRange || 'Scores outside 1-10 are not counted in the average.'}</p>}
 
                          {/* Legend */}
                          <div className="mt-6 pt-6 border-t border-slate-200 shrink-0">
@@ -1349,9 +1649,11 @@
         /* `chip` is the smaller variant used by the panels inside the Variant tab:
          * a plain white box with a label-sized heading and a coloured icon square,
          * instead of a full section with an accent bar. Same collapse behaviour. */
-        const Panel = ({ title, icon: Icon, accent, iconBg, badge, children, bodyClass = '', defaultOpen = false, chip = false, chipClass = '', fill = false }) => {
+        const Panel = ({ title, icon: Icon, accent, iconBg, badge, children, bodyClass = '', defaultOpen = false, chip = false, chipClass = '', fill = false, openSignal = 0 }) => {
           const isPhone = usePhoneLayout();
           const [open, setOpen] = useState(defaultOpen);
+          // Bumping openSignal opens a collapsed panel, e.g. to point someone at it.
+          useEffect(() => { if (openSignal) setOpen(true); }, [openSignal]);
           const showBody = !isPhone || open;
 
           if (chip) {
@@ -1546,7 +1848,7 @@
           );
         };
 
-        const PrintPreview = ({ clientInfo, project, groups, analysis, supplyChain, onBack, unitSystem = 'metric', lang = 'en' }) => {
+        const PrintPreview = ({ clientInfo, project, groups, analysis, supplyChain, onBack, unitSystem = 'metric', lang = 'en', anonymised = false }) => {
           // Recognised stage labels are re-translated to the report language at
           // render time, so a chain entered in another language (e.g. Spanish)
           // never leaks untranslated into the report. Free text passes through.
@@ -1574,7 +1876,7 @@
           const minTemp = allTemps.length > 0 ? Math.min(...allTemps) : null;
           const maxTemp = allTemps.length > 0 ? Math.max(...allTemps) : null;
           const tempString = allTemps.length > 0 ? (minTemp === maxTemp ? `${minTemp}°C` : `${minTemp}°C - ${maxTemp}°C`) : '-°C';
-          const totalDays = project.totalDuration || (supplyChain || []).reduce((acc,s) => acc + parseFloat(s.daysStart || 0), 0);
+          const totalDays = project.totalDuration || round1((supplyChain || []).reduce((acc,s) => acc + parseFloat(s.daysStart || 0), 0));
 
           // Unit-aware weight label: bulk packaging (Pallet / Cube crate) uses kg or lb; retail uses g or oz.
           const projIsBulk = (project.packagings?.[0]?.packagingType || project.packagingType || 'Retail') === 'Cube crate' || (project.packagings?.[0]?.packagingType || project.packagingType || 'Retail') === 'Pallet';
@@ -1677,10 +1979,16 @@
                   const blob = await docx.Packer.toBlob(doc);
                   const a = document.createElement('a');
                   document.body.appendChild(a);
-                  a.href = URL.createObjectURL(blob);
-                  a.download = (project.reportTitle || 'Report') + '.docx';
+                  const url = URL.createObjectURL(blob);
+                  a.href = url;
+                  a.download = (project.reportTitle || 'Report') + (anonymised ? ' - anonymised' : '') + '.docx';
                   a.click();
                   document.body.removeChild(a);
+                  // A .docx with every chart and photo embedded is the biggest
+                  // blob this app makes, and an un-revoked object URL keeps it in
+                  // memory for the rest of the session. The two other object URLs
+                  // in this file already revoke — this one was the exception.
+                  URL.revokeObjectURL(url);
               } catch (e) {
                   alert('Word export failed: ' + ((e && e.message) ? e.message : e));
               } finally {
@@ -1691,6 +1999,9 @@
 
           return (
             <div className="min-h-screen bg-slate-600 p-0 sm:p-8 overflow-y-auto font-sans print:p-0 print:bg-white no-print-bg">
+              {anonymised && (
+                <div className="fixed top-6 right-8 no-print z-50 bg-amber-100 text-amber-900 border border-amber-300 px-4 py-2 rounded-full shadow font-bold text-sm">Anonymised version: client details removed</div>
+              )}
               <div className="fixed bottom-8 right-8 flex gap-4 no-print z-50">
                 <button onClick={onBack} className="bg-slate-800 text-white px-6 py-3 rounded-full shadow-lg font-bold transition hover:bg-slate-900 flex items-center gap-2"><Edit3 size={18}/> Edit</button>
                 <button onClick={handleWordExport} disabled={isWordExporting} className="bg-blue-600 text-white px-6 py-3 rounded-full shadow-lg font-bold flex items-center gap-2 hover:bg-blue-700 transition disabled:opacity-70 disabled:cursor-wait">
@@ -1705,7 +2016,7 @@
                     setIsPrinting(true);
                     const company = clientInfo.companyName || 'Client';
                     const product = project.productName || 'Product';
-                    const suggested = `PerfoTec_Report_${company}_${product}`;
+                    const suggested = anonymised ? `PerfoTec_Report_${product}_anonymised` : `PerfoTec_Report_${company}_${product}`;
                     // Wait for all web fonts (Montserrat) to be fully loaded before
                     // opening the print dialog — prevents layout recalculation delay.
                     await document.fonts.ready;
@@ -1840,7 +2151,7 @@
                   <h2 className={reportTitleClass} style={reportTitleStyle}>2. Summary and Conclusions</h2>
                   <div className="text-base leading-relaxed text-justify text-slate-800 mb-8">
                      <h4 className="font-bold mb-3 text-xl" style={{color: BRAND.colors.black}}>Main Conclusion:</h4>
-                     <div className="mb-8 whitespace-pre-wrap pdf-rich-text bg-slate-50 p-6 rounded-2xl border border-slate-200" dangerouslySetInnerHTML={{ __html: analysis.conclusion || 'No conclusion entered.' }}></div>
+                     <div className="mb-8 whitespace-pre-wrap pdf-rich-text bg-slate-50 p-6 rounded-2xl border border-slate-200" dangerouslySetInnerHTML={{ __html: cleanRich(analysis.conclusion) || 'No conclusion entered.' }}></div>
 
                      {/* Trial Target verdict — links the conclusion back to the target
                          defined in the trial setup. */}
@@ -1865,7 +2176,7 @@
                      {groups.map(g => analysis.variantConclusions && analysis.variantConclusions[g.id] ? (
                        <div key={`vc-${g.id}`} className="mb-6 break-inside-avoid">
                          <h4 className="font-bold text-lg mb-2" style={{color: BRAND.colors.green}}>Conclusion {g.name}:</h4>
-                         <div className="whitespace-pre-wrap pdf-rich-text" dangerouslySetInnerHTML={{ __html: analysis.variantConclusions[g.id] }}></div>
+                         <div className="whitespace-pre-wrap pdf-rich-text" dangerouslySetInnerHTML={{ __html: cleanRich(analysis.variantConclusions[g.id]) }}></div>
                        </div>
                      ) : null)}
 
@@ -2047,13 +2358,13 @@
                     // One shared time domain (in days) for every gas chart, so
                     // all variants render on an identical, comparable x-axis.
                     const pDaysNum = parseFloat(project.totalDuration);
-                    const gasMaxDay = Math.max(...mapGroups.flatMap(g => (g.measurements || [])
+                    const gasMaxDay = axisEndDay(mapGroups.flatMap(g => (g.measurements || [])
                       .map(m => parseFloat(m.day) || 0)
-                      .filter(d => isNaN(pDaysNum) || pDaysNum === 0 || d <= pDaysNum)), 5);
+                      .filter(d => isNaN(pDaysNum) || pDaysNum === 0 || d <= pDaysNum)), isNaN(pDaysNum) ? 0 : pDaysNum);
                     return (
                       <div className="mb-10">
                           <h3 id="sec-4-1" className="font-bold text-xl mb-4 brand-heading text-slate-700" style={{ pageBreakAfter: 'avoid' }}>4.{sec4Nums.gas} Gas Levels</h3>
-                          <div className="text-base mb-6 brand-body text-slate-800 pdf-rich-text" dangerouslySetInnerHTML={{ __html: analysis.graphNotes || 'Gas levels were monitored throughout the shelf life period.' }}></div>
+                          <div className="text-base mb-6 brand-body text-slate-800 pdf-rich-text" dangerouslySetInnerHTML={{ __html: cleanRich(analysis.graphNotes) || 'Gas levels were monitored throughout the shelf life period.' }}></div>
 
                           {showAnyHubPrediction && (
                             <div className="flex gap-6 mb-4 px-2">
@@ -2194,7 +2505,7 @@
                             <tr className="text-left text-slate-600 uppercase tracking-wider text-[10px] font-bold">
                               <th className="p-4 break-words">Variant</th>
                               <th className="p-4 text-center break-words">Final Day</th>
-                              <th className="p-4 text-center break-words">Visual Score</th>
+                              <th className="p-4 text-center break-words">Avg. Quality</th>
                               <th className="p-4 text-center break-words">Weight Loss</th>
                               <th className="p-4 break-words">Key Observation</th>
                             </tr>
@@ -2210,7 +2521,7 @@
                                   <td className="font-bold p-4 break-words" style={{ borderLeft: `4px solid ${CHART_COLORS[i % CHART_COLORS.length].stroke}` }}>{g.name || ''}</td>
                                   <td className="text-center p-4 text-slate-500 font-medium break-words">Day {last?.day || ''}</td>
                                   <td className="text-center p-4">
-                                     <span className="font-extrabold text-lg" style={{color: BRAND.colors.green}}>{last?.evaluateQuality ? last?.quality : '-'}</span>
+                                     <span className="font-extrabold text-lg" style={{color: BRAND.colors.green}}>{qualityValue(last) || '-'}</span>
                                   </td>
                                   <td className="text-center p-4 font-bold text-slate-600 break-words">{loss}%</td>
                                   <td className="p-4 text-sm text-slate-700 italic break-words">{last?.notes || '-'}</td>
@@ -2225,10 +2536,10 @@
                   <div className="break-inside-avoid mb-10">
                       <h3 className="font-bold text-xl mb-6 mt-12 brand-heading text-slate-700">4.{sec4Nums.detailed} Detailed Quality Parameters</h3>
 
-                      {/* Cross-variant comparison of General Quality over time —
-                          renders only when General Quality scores are present. */}
+                      {/* Cross-variant comparison of the average quality over time —
+                          renders only when at least one evaluated day has a score. */}
                       <div className="break-inside-avoid mb-6">
-                        <QualityLineChart groups={groups} />
+                        <QualityLineChart groups={groups} plannedDays={(parseFloat(project.totalDuration) || 0) + (parseFloat(project.retailOpenDays) || 0)} />
                       </div>
 
                       {(() => {
@@ -2238,14 +2549,16 @@
                            )
                          )).sort((a, b) => a - b);
 
-                         if (allEvalDays.length === 0 || !(project.criteria || []).length) {
+                         // Not gated on the global criteria list: the rows come from the criteria
+                         // the days were actually scored on, plus the average.
+                         if (allEvalDays.length === 0) {
                            return <p className="text-base italic text-slate-500 bg-slate-50 p-4 rounded-xl border border-slate-200">No specific criteria were evaluated during this test.</p>;
                          }
 
                          // One compact table per variant: criteria as rows, that
                          // variant's evaluation days as columns. Scales to any
                          // number of variants (tables stack; small ones sit in a
-                         // 2-column grid). The General Quality comparison across
+                         // 2-column grid). The average-quality comparison across
                          // variants is covered by the line chart above.
                          const variantInfos = groups.map((g, idx) => ({
                            g, idx,
@@ -2258,7 +2571,7 @@
 
                          const scoreCell = (g, day, crit) => {
                            const meas = (g.measurements || []).find(m => parseFloat(m.day) === day);
-                           const param = meas?.qualityParams?.find(p => p.name === crit);
+                           const param = (Array.isArray(meas?.qualityParams) ? meas.qualityParams : []).find(p => p && p.name === crit);
                            return param && param.score ? (
                              <div>
                                <span className="font-extrabold text-base leading-none" style={{color: BRAND.colors.green}}>{param.score}</span>
@@ -2283,7 +2596,10 @@
                                      </tr>
                                    </thead>
                                    <tbody className="divide-y divide-slate-100">
-                                     {project.criteria.map((crit, i) => (
+                                     {[...new Set([...(project.criteria || []), ...(g.measurements || [])
+                                         .filter(m => days.includes(parseFloat(m.day)))
+                                         .flatMap(m => (Array.isArray(m.qualityParams) ? m.qualityParams : [])
+                                           .filter(p => p && p.name && String(p.score == null ? '' : p.score).trim() !== '').map(p => p.name))])].map((crit, i) => (
                                        <tr key={i}>
                                          <td className="px-3 py-2 font-bold text-slate-700 break-words border-r border-slate-100 text-xs">{crit}</td>
                                          {days.map(d => (
@@ -2291,6 +2607,13 @@
                                          ))}
                                        </tr>
                                      ))}
+                                     <tr className="bg-slate-50">
+                                       <td className="px-3 py-2 font-extrabold text-slate-800 border-r border-slate-100 text-xs">Ø Average</td>
+                                       {days.map(d => {
+                                         const q = measQuality((g.measurements || []).find(m => parseFloat(m.day) === d));
+                                         return <td key={d} className={`px-2 py-2 text-center align-middle border-l border-slate-100 font-extrabold ${q && q.legacy ? 'italic text-slate-400' : ''}`} style={q && !q.legacy ? { color: BRAND.colors.green } : undefined}>{q ? q.value.toFixed(1) : <span className="text-slate-300">-</span>}</td>;
+                                       })}
+                                     </tr>
                                    </tbody>
                                  </table>
                                </div>
@@ -2446,7 +2769,7 @@
           // Criteria come from the measurement itself when present (they may have
           // been edited per day); otherwise from the global assessment criteria.
           const criteriaFor = (m) => {
-            const params = (m.qualityParams || []).filter(p => p && p.name);
+            const params = (Array.isArray(m.qualityParams) ? m.qualityParams : []).filter(p => p && p.name);
             const source = params.length ? params : (project.criteria || []).map(c => ({ name: c, score: '', notes: '' }));
             return source.map(p => ({
               label: getI18nLabel(DEFAULT_CRITERIA_I18N, p.name, lang) || p.name,
@@ -2660,10 +2983,14 @@
                                     <span className="text-[9px] font-extrabold uppercase tracking-widest" style={{ color: BRAND.colors.green }}>
                                       {rt.sheetQuality || 'Quality evaluation'}
                                     </span>
-                                    <span className="inline-flex items-center gap-1.5">
-                                      <span className="text-[10px] font-extrabold uppercase text-slate-600">{rt.sheetOverall || 'Overall'}</span>
-                                      <span className="inline-block w-9 text-center border border-slate-400 rounded bg-white text-xs font-extrabold text-slate-900">{showValues ? (m.quality || '') : ' '}</span>
-                                    </span>
+                                    {/* The overall figure is the average of the criteria
+                                        below, so a blank form has no box for it. */}
+                                    {showValues && (
+                                      <span className="inline-flex items-center gap-1.5">
+                                        <span className="text-[10px] font-extrabold uppercase text-slate-600">{rt.sheetOverall || 'Average'}</span>
+                                        <span className="inline-block w-9 text-center border border-slate-400 rounded bg-white text-xs font-extrabold text-slate-900">{qualityValue(m)}</span>
+                                      </span>
+                                    )}
                                     {crit.map((c, ci) => (
                                       <span key={ci} className="inline-flex items-center gap-1.5">
                                         <span className="text-[10px] font-bold text-slate-700">{c.label}</span>
@@ -2784,6 +3111,7 @@
               productPickHint: 'Choose one of {n} products, or type a new name.',
               productLinked: 'Linked to the product database',
               productNotLinked: 'Not in the product database yet.',
+              productAliasMatched: 'found under "{alias}"',
               productMissing: 'This product is no longer in the product database — the values below are the ones last saved.',
               productCreate: 'Add as new product',
               productCreateAs: 'add as',
@@ -2821,14 +3149,14 @@
               uploadTempGraph: 'Upload Temperature Graph',
               technologyNote: 'Additional Technology Notes', technologyNotePlaceholder: 'e.g. Including RespirO2 Measurement...',
               temperatureLabel: 'Section Title', temperatureLabelPlaceholder: 'Temperature Logger Profile',
-              sectionVisibility: 'Section Visibility', sectionVisibilityHint: 'Auto-enabled when data is present. Uncheck to always hide.',
+              sectionVisibility: 'Section Visibility', anonTitle: 'Anonymised report', anonHint: 'For sharing commercially: the preview, PDF and Word file leave the client out. The saved report keeps everything.', anonEnable: 'Anonymise the final report', anonAlias: 'Refer to the client as', anonExtra: 'Also hide these words (comma-separated)', anonExtraPlaceholder: 'e.g. a trade name or site the texts mention', anonHideLocation: 'Also hide the trial location', anonRemoved: 'Removed wherever they appear:', anonLocationRemoved: 'Location, left out of the texts:', anonNothingFound: 'No client details found to remove.', anonReplaced: '{n} mention(s) in the texts replaced by "{alias}". Company block, contacts, address and logo are left out.', anonPhotos: 'Check the {n} photo(s) and image(s) by eye: logos, labels or names on boxes and logger printouts cannot be removed automatically.', sectionVisibilityHint: 'Auto-enabled when data is present. Uncheck to always hide.',
               showGasSection: 'Gas Levels (4.1)', showHubPredictions: 'HUB Predictions', showWeightLoss: 'Weight Loss Graph',
               recommendation: 'Final Recommendation', retest: 'Retest needed', approved: 'Approved for implementation',
               nextSteps: 'Next Steps',
               transportRoad: 'Transport by road', transportSea: 'Seafreight', transportAir: 'Airfreight', transportStorage: 'Storage',
               stagePlaceholder: 'e.g. Farm, Transport...', min: 'Min', max: 'Max',
               measurementsTitle: 'Measurements',
-              thDayShort: 'Day', thSamples: 'Samples', thWeight: 'Wt. (g)', thQuality: 'Qual.', thActions: 'Actions',
+              thDayShort: 'Day', thSamples: 'Samples', thWeight: 'Wt. (g)', thQuality: 'Ø Qual.', thActions: 'Actions', qualityAvgHint: 'Average of the criterion scores entered via the pencil (1 decimal). Criteria without a score do not count; no evaluation = —', legacyQualityHint: 'Earlier overall score (former dropdown or an import): this day has no criterion scores. Score the criteria via the pencil to replace it.', legacyQualityNote: 'Earlier overall score (former dropdown or an import): {v}. It counts until you score the criteria below.', legacyQualityRemove: 'Remove', legacyQualityShort: 'earlier score', chooseCriteria: 'Choose criteria', scoreOutOfRange: 'Scores outside 1-10 are not counted in the average.',
               mainConclusionPlaceholder: 'Write the overall main conclusion here...',
               gasAnalysisPlaceholder: 'Interpretation of the gas development...',
               conclusionPlaceholderPrefix: 'Specific conclusion for',
@@ -2905,7 +3233,7 @@
               sheetShowValues: 'Show entered values',
               sheetVariants: 'Variants',
               sheetColId: 'ID', sheetColWeight: 'Weight',
-              sheetQuality: 'Quality evaluation', sheetOverall: 'Overall',
+              sheetQuality: 'Quality evaluation', sheetOverall: 'Ø Average',
               sheetExecutedBy: 'Measured by',
               sheetTotalRows: 'Measurements',
               sheetDayPacking: 'Packing', sheetDayEnd: 'End of packed period', sheetDayRetail: 'Retail simulation (opened)',
@@ -2970,6 +3298,7 @@
               productPickHint: 'Kies uit {n} producten, of typ een nieuwe naam.',
               productLinked: 'Gekoppeld aan de productendatabase',
               productNotLinked: 'Nog niet in de productendatabase.',
+              productAliasMatched: 'gevonden onder "{alias}"',
               productMissing: 'Dit product staat niet meer in de productendatabase — onderstaande waarden zijn de laatst opgeslagen waarden.',
               productCreate: 'Als nieuw product toevoegen',
               productCreateAs: 'toevoegen als',
@@ -3004,14 +3333,14 @@
               uploadTempGraph: 'Upload Temperatuurgrafiek',
               technologyNote: 'Aanvullende Technologie Notities', technologyNotePlaceholder: 'bijv. Inclusief RespirO2 Meting...',
               temperatureLabel: 'Sectietitel', temperatureLabelPlaceholder: 'Temperatuur Logger Profiel',
-              sectionVisibility: 'Sectie Zichtbaarheid', sectionVisibilityHint: 'Automatisch aan wanneer data aanwezig is. Vink uit om altijd te verbergen.',
+              sectionVisibility: 'Sectie Zichtbaarheid', anonTitle: 'Geanonimiseerd rapport', anonHint: 'Om commercieel te delen: preview, PDF en Word laten de klant weg. Het opgeslagen rapport houdt alles.', anonEnable: 'Eindrapport anonimiseren', anonAlias: 'Noem de klant', anonExtra: 'Verberg ook deze woorden (komma-gescheiden)', anonExtraPlaceholder: 'bijv. een merknaam of locatie die in de teksten staat', anonHideLocation: 'Verberg ook de testlocatie', anonRemoved: 'Overal verwijderd waar ze voorkomen:', anonLocationRemoved: 'Locatie, weggelaten uit de teksten:', anonNothingFound: 'Geen klantgegevens gevonden om te verwijderen.', anonReplaced: '{n} vermelding(en) in de teksten vervangen door "{alias}". Bedrijfsblok, contactpersonen, adres en logo worden weggelaten.', anonPhotos: 'Controleer de {n} foto(s) en afbeelding(en) zelf: logo\'s, labels of namen op dozen en loggeruitdraaien kunnen niet automatisch worden verwijderd.', sectionVisibilityHint: 'Automatisch aan wanneer data aanwezig is. Vink uit om altijd te verbergen.',
               showGasSection: 'Gaswaarden (4.1)', showHubPredictions: 'HUB Voorspellingen', showWeightLoss: 'Gewichtsverlies Grafiek',
               recommendation: 'Eindadvies', retest: 'Hertest nodig', approved: 'Goedgekeurd voor implementatie',
               nextSteps: 'Vervolgstappen',
               transportRoad: 'Wegtransport', transportSea: 'Zeevracht', transportAir: 'Luchtvracht', transportStorage: 'Opslag',
               stagePlaceholder: 'bijv. Boerderij, Transport...', min: 'Min', max: 'Max',
               measurementsTitle: 'Metingen',
-              thDayShort: 'Dag', thSamples: 'Monsters', thWeight: 'Gew. (g)', thQuality: 'Kwal.', thActions: 'Acties',
+              thDayShort: 'Dag', thSamples: 'Monsters', thWeight: 'Gew. (g)', thQuality: 'Ø Kwal.', thActions: 'Acties', qualityAvgHint: 'Gemiddelde van de criteriumscores die via het potlood zijn ingevuld (1 decimaal). Criteria zonder score tellen niet mee; geen beoordeling = —', legacyQualityHint: 'Eerdere totaalscore (vroegere keuzelijst of een import): deze dag heeft geen criteriumscores. Scoor de criteria via het potlood om hem te vervangen.', legacyQualityNote: 'Eerdere totaalscore (vroegere keuzelijst of een import): {v}. Deze telt tot je hieronder de criteria scoort.', legacyQualityRemove: 'Verwijderen', legacyQualityShort: 'eerdere score', chooseCriteria: 'Criteria kiezen', scoreOutOfRange: 'Scores buiten 1-10 tellen niet mee in het gemiddelde.',
               mainConclusionPlaceholder: 'Schrijf hier de algemene hoofdconclusie...',
               gasAnalysisPlaceholder: 'Interpretatie van de gasontwikkeling...',
               conclusionPlaceholderPrefix: 'Specifieke conclusie voor',
@@ -3088,7 +3417,7 @@
               sheetShowValues: 'Ingevulde waarden tonen',
               sheetVariants: 'Varianten',
               sheetColId: 'ID', sheetColWeight: 'Gewicht',
-              sheetQuality: 'Kwaliteitsbeoordeling', sheetOverall: 'Totaal',
+              sheetQuality: 'Kwaliteitsbeoordeling', sheetOverall: 'Ø Gemiddeld',
               sheetExecutedBy: 'Gemeten door',
               sheetTotalRows: 'Metingen',
               sheetDayPacking: 'Verpakken', sheetDayEnd: 'Einde verpakte periode', sheetDayRetail: 'Retail simulatie (geopend)',
@@ -3153,6 +3482,7 @@
               productPickHint: 'Elija entre {n} productos, o escriba un nombre nuevo.',
               productLinked: 'Vinculado a la base de datos de productos',
               productNotLinked: 'Aún no está en la base de datos de productos.',
+              productAliasMatched: 'encontrado como "{alias}"',
               productMissing: 'Este producto ya no está en la base de datos — los valores siguientes son los últimos guardados.',
               productCreate: 'Añadir como producto nuevo',
               productCreateAs: 'añadir como',
@@ -3187,14 +3517,14 @@
               uploadTempGraph: 'Subir Gráfico de Temperatura',
               technologyNote: 'Notas Adicionales de Tecnología', technologyNotePlaceholder: 'ej. Incluye Medición RespirO2...',
               temperatureLabel: 'Título de Sección', temperatureLabelPlaceholder: 'Perfil de Temperatura',
-              sectionVisibility: 'Visibilidad de Secciones', sectionVisibilityHint: 'Activado automáticamente cuando hay datos. Desmarque para ocultar siempre.',
+              sectionVisibility: 'Visibilidad de Secciones', anonTitle: 'Informe anonimizado', anonHint: 'Para compartir comercialmente: la vista previa, el PDF y el Word omiten al cliente. El informe guardado lo conserva todo.', anonEnable: 'Anonimizar el informe final', anonAlias: 'Referirse al cliente como', anonExtra: 'Ocultar también estas palabras (separadas por comas)', anonExtraPlaceholder: 'p. ej. una marca o un sitio que mencionan los textos', anonHideLocation: 'Ocultar también la ubicación del ensayo', anonRemoved: 'Eliminados dondequiera que aparezcan:', anonLocationRemoved: 'Ubicación, omitida de los textos:', anonNothingFound: 'No se encontraron datos del cliente que eliminar.', anonReplaced: '{n} mención(es) en los textos sustituidas por "{alias}". Se omiten el bloque de empresa, los contactos, la dirección y el logo.', anonPhotos: 'Revise usted mismo las {n} foto(s) e imagen(es): los logos, etiquetas o nombres en cajas e informes del registrador no se pueden eliminar automáticamente.', sectionVisibilityHint: 'Activado automáticamente cuando hay datos. Desmarque para ocultar siempre.',
               showGasSection: 'Niveles de Gas (4.1)', showHubPredictions: 'Predicciones HUB', showWeightLoss: 'Gráfico de Pérdida de Peso',
               recommendation: 'Recomendación Final', retest: 'Se necesita repetir prueba', approved: 'Aprobado para implementación',
               nextSteps: 'Próximos Pasos',
               transportRoad: 'Transporte Terrestre', transportSea: 'Transporte Marítimo', transportAir: 'Transporte Aéreo', transportStorage: 'Almacenamiento',
               stagePlaceholder: 'ej. Granja, Transporte...', min: 'Mín', max: 'Máx',
               measurementsTitle: 'Mediciones',
-              thDayShort: 'Día', thSamples: 'Muestras', thWeight: 'Peso (g)', thQuality: 'Cal.', thActions: 'Acciones',
+              thDayShort: 'Día', thSamples: 'Muestras', thWeight: 'Peso (g)', thQuality: 'Ø Cal.', thActions: 'Acciones', qualityAvgHint: 'Media de las puntuaciones por criterio introducidas con el lápiz (1 decimal). Los criterios sin puntuación no cuentan; sin evaluación = —', legacyQualityHint: 'Puntuación global anterior (antigua lista desplegable o una importación): este día no tiene puntuaciones por criterio. Puntúa los criterios con el lápiz para sustituirla.', legacyQualityNote: 'Puntuación global anterior (antigua lista desplegable o una importación): {v}. Cuenta hasta que puntúes los criterios de abajo.', legacyQualityRemove: 'Eliminar', legacyQualityShort: 'puntuación anterior', chooseCriteria: 'Elegir criterios', scoreOutOfRange: 'Las puntuaciones fuera de 1-10 no cuentan en la media.',
               mainConclusionPlaceholder: 'Escriba aquí la conclusión principal general...',
               gasAnalysisPlaceholder: 'Interpretación del desarrollo del gas...',
               conclusionPlaceholderPrefix: 'Conclusión específica para',
@@ -3271,7 +3601,7 @@
               sheetShowValues: 'Mostrar valores introducidos',
               sheetVariants: 'Variantes',
               sheetColId: 'ID', sheetColWeight: 'Peso',
-              sheetQuality: 'Evaluación de calidad', sheetOverall: 'Total',
+              sheetQuality: 'Evaluación de calidad', sheetOverall: 'Ø Media',
               sheetExecutedBy: 'Medido por',
               sheetTotalRows: 'Mediciones',
               sheetDayPacking: 'Envasado', sheetDayEnd: 'Fin del periodo envasado', sheetDayRetail: 'Simulación retail (abierto)',
@@ -3295,6 +3625,14 @@
           
           // Modals
           const [sampleModalOpen, setSampleModalOpen] = useState(false);
+          // "Choose criteria" in the measurement dialog: open the criteria panel
+          // (collapsed on a phone) and bring it into view once it has rendered.
+          const [criteriaFocus, setCriteriaFocus] = useState(0);
+          useEffect(() => {
+            if (!criteriaFocus) return;
+            const t = setTimeout(() => { const el = document.getElementById('global-criteria'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 60);
+            return () => clearTimeout(t);
+          }, [criteriaFocus]);
           const [detailsModalOpen, setDetailsModalOpen] = useState(false);
           const [editingMeasurement, setEditingMeasurement] = useState(null);
           const [pendingImageReplace, setPendingImageReplace] = useState(null);
@@ -3354,7 +3692,7 @@
             {
               id: 1, name: 'Control',
               specs: { packaging: 'Punnets', material: 'BOPP', length: '', width: '', height: '', holes: '2', holeSize: '6000', startWeight: '', sampleCount: 3 },
-              measurements: [{ day: 0, samples: [{id:1,o2:'20.9',co2:'0.03',weight:''}, {id:2,o2:'20.9',co2:'0.03',weight:''}, {id:3,o2:'20.9',co2:'0.03',weight:''}], quality: 10, notes: 'Start quality excellent', images: [], qualityParams: [], evaluateQuality: true }],
+              measurements: [{ day: 0, samples: [{id:1,o2:'20.9',co2:'0.03',weight:''}, {id:2,o2:'20.9',co2:'0.03',weight:''}, {id:3,o2:'20.9',co2:'0.03',weight:''}], quality: '', notes: 'Start quality excellent', images: [], qualityParams: [], evaluateQuality: true }],
               predictedImage: null
             }
           ]);
@@ -3396,7 +3734,7 @@
             if (!groups.some(g => g.id === activeGroupId)) setActiveGroupId(groups[0].id);
           }, [groups, activeGroupId]);
 
-          const [analysis, setAnalysis] = useState({ graphNotes: '', conclusion: '', variantConclusions: {}, recommendation: 'retest', nextSteps: [], temperatureImages: [], temperatureLabel: '', showGasSection: null, showHubPredictions: null, showWeightLoss: null, generalObservations: '', targetAchieved: null, targetEvaluation: '' });
+          const [analysis, setAnalysis] = useState({ graphNotes: '', conclusion: '', variantConclusions: {}, recommendation: 'retest', nextSteps: [], temperatureImages: [], temperatureLabel: '', showGasSection: null, showHubPredictions: null, showWeightLoss: null, generalObservations: '', targetAchieved: null, targetEvaluation: '', anonymise: null });
           const [newStep, setNewStep] = useState('');
           const [newStepVariant, setNewStepVariant] = useState('general');
           const [newCriteria, setNewCriteria] = useState('');
@@ -3544,7 +3882,7 @@
               const newM = [...g.measurements];
               const sCount = g.specs.sampleCount || 3;
               const createMeas = (day, notes) => ({
-                 day, samples: Array.from({length: sCount}, (_, i) => ({ id: Date.now()+i, o2: '', co2: '', weight: '', initialWeight: '' })), quality: 9, notes: notes, images: [], qualityParams: [], evaluateQuality: true
+                 day, samples: Array.from({length: sCount}, (_, i) => ({ id: Date.now()+i, o2: '', co2: '', weight: '', initialWeight: '' })), quality: '', notes: notes, images: [], qualityParams: [], evaluateQuality: true
               });
               
               if (p > 0 && !newM.find(m => parseFloat(m.day) === p)) {
@@ -3609,7 +3947,16 @@
               language: lang,
               unitSystem: unitSystem,
               project: { ...project, company: clientInfo.companyName, street: clientInfo.street, houseNumber: clientInfo.houseNumber, addressExtra: clientInfo.addressExtra, zipCode: clientInfo.zipCode, city: clientInfo.city, country: clientInfo.country, contactName: primaryContact.name || '', contactRole: primaryContact.role || '', contactEmail: primaryContact.email || '', contactPhone: primaryContact.phoneDirect || primaryContact.phoneWork || '' },
-              clientInfo: normalizedClientInfo, supplyChain, groups, analysis
+              clientInfo: normalizedClientInfo, supplyChain,
+              // `quality` per day is the average of its criterion scores, written
+              // out here so every reader of the file (the dashboard import takes
+              // its rating and quality curve from it) gets the number the table
+              // shows — including files saved while there was still a dropdown.
+              // `legacyQuality` is always written (possibly empty): its presence is
+              // what tells the next reader that `quality` here is the derived value
+              // and not an overall score someone picked.
+              groups: groups.map(g => ({ ...g, measurements: (g.measurements || []).map(m => ({ ...m, quality: qualityValue(m), legacyQuality: m.legacyQuality != null ? m.legacyQuality : '' })) })),
+              analysis
             };
           };
 
@@ -3653,6 +4000,17 @@
             const client = d.client || {};
             const p = prod || {};
             const contactData = reportSeedContacts(reportExtractPrimaryContact(client));
+            // The intake keeps its packaging as products[i].packagings[] (with
+            // `weight`); older intakes had one flat set of fields on the product.
+            // Reading only the flat fields is what emptied type, material and all
+            // three dimensions when a card went from Intake straight to Report.
+            // Same mapping as proposal.html's intake import.
+            const pkgs = Array.isArray(p.packagings) && p.packagings.length > 0
+              ? p.packagings.map(({ weight, ...pkg }, i) => ({ ...pkg, id: pkg.id != null ? pkg.id : i + 1, startWeight: weight || pkg.startWeight || '' }))
+              : (p.packagingType || p.length || p.width || p.height || p.weight
+                  ? [{ id: 1, packagingType: p.packagingType || 'Retail', material: p.material || '', length: p.length || '', width: p.width || '', height: p.height || '', startWeight: p.weight || '' }]
+                  : null);
+            const firstPkg = (pkgs && pkgs[0]) || {};
 
             setClientInfo({
               companyName: client.companyName || '',
@@ -3668,6 +4026,13 @@
             });
             setProject(prev => ({ ...prev,
               productName: p.name || '',
+              // The product link the intake chose. Without it the report opened
+              // unlinked and its autosave re-linked the card to whatever product
+              // the name happened to match.
+              productId: p.productId || '',
+              // Leaving a linked product for one without a link: its target window and
+              // defects must go with it, as when the name is changed by hand.
+              ...(!p.productId && prev.productId && window.PerfoTecProduct ? window.PerfoTecProduct.emptyTargetPatch() : {}),
               processingType: p.processingType || 'Whole',
               type: p.type || '',
               origin: p.origin || '',
@@ -3678,30 +4043,30 @@
               transportMode: p.transportMode || (p.transportModes?.[0] || ''),
               criteria: p.qualityCriteria || [],
               startImage: p.photo || null,
-              startWeight: p.weight || prev.startWeight,
+              startWeight: firstPkg.startWeight || prev.startWeight,
               technologies: p.technologies || prev.technologies || [],
-              packagingType: p.packagingType || prev.packagingType || 'Retail',
-              material: p.material || prev.material || '',
-              length: p.length || prev.length || '',
-              width: p.width || prev.width || '',
-              height: p.height || prev.height || ''
+              packagings: pkgs || (prev.packagings && prev.packagings.length > 0 ? prev.packagings : [{ id: 1, packagingType: 'Retail', material: '', length: '', width: '', height: '', startWeight: '' }]),
+              packagingType: firstPkg.packagingType || prev.packagingType || 'Retail',
+              material: firstPkg.material || prev.material || '',
+              length: firstPkg.length || prev.length || '',
+              width: firstPkg.width || prev.width || '',
+              height: firstPkg.height || prev.height || ''
             }));
-            if (p.supplyChain) setSupplyChain(p.supplyChain);
-            setGroups(prev => {
-              const ug = [...prev];
-              if (ug[0]) {
-                ug[0].specs = {
-                  ...ug[0].specs,
-                  packaging: p.packagingType || 'Retail',
-                  material: p.material || '',
-                  length: p.length || '',
-                  width: p.width || '',
-                  height: p.height || '',
-                  startWeight: p.weight || ''
-                };
+            if (Array.isArray(p.supplyChain) && p.supplyChain.length) setSupplyChain(p.supplyChain);
+            // The first variant takes the intake's packaging, as in the proposal.
+            // Fresh objects: `ug[0].specs = …` mutated the previous state in place.
+            if (pkgs) setGroups(prev => prev.map((g, i) => i !== 0 ? g : {
+              ...g,
+              specs: {
+                ...g.specs,
+                packaging: firstPkg.packagingType || 'Retail',
+                material: firstPkg.material || '',
+                length: firstPkg.length || '',
+                width: firstPkg.width || '',
+                height: firstPkg.height || '',
+                startWeight: firstPkg.startWeight || ''
               }
-              return ug;
-            });
+            }));
           };
 
           // Confirm handler for the multi-product picker modal.
@@ -3721,6 +4086,9 @@
             // A newly loaded document must be re-checked against the product
             // database, even when it carries the same product id as the last one.
             setDocLoadSeq(n => n + 1);
+            // Whichever name the PREVIOUS product was found under says nothing
+            // about this document.
+            setAliasNote('');
                 // Local aliases for the helpers declared at component scope above.
                 const extractPrimaryContact = reportExtractPrimaryContact;
                 const seedContacts = reportSeedContacts;
@@ -3829,18 +4197,50 @@
                    if(d.supplyChain) setSupplyChain(d.supplyChain); 
                    if(d.groups) setGroups(d.groups.map(g => ({
                      ...g,
-                     measurements: (g.measurements || []).map(m => ({
-                       ...m,
-                       // When an `evaluate` array is present (proposal origin), derive
-                       // evaluateQuality from it so the Enable Evaluation checkbox matches
-                       // what was ticked in the Variants & Planning timeline.
-                       // Falls back to the explicit boolean for pure report JSONs.
-                       evaluateQuality: Array.isArray(m.evaluate)
-                         ? m.evaluate.length > 0
-                         : (m.evaluateQuality !== undefined ? m.evaluateQuality : false)
-                     }))
+                     measurements: (g.measurements || []).map(m => {
+                       // `quality` is derived from the criterion scores and written
+                       // at export; in state it only goes stale. An overall score
+                       // someone picked in the former dropdown (or an import brought
+                       // in) moves to `legacyQuality`, so it is never lost.
+                       const { quality, ...rest } = m;
+                       const B = window.PerfoTecBoard;
+                       const unnormalised = m.legacyQuality === undefined || m.legacyQuality === null;
+                       const legacyQuality = B && B.measurementLegacyQuality ? B.measurementLegacyQuality(m)
+                         : (!unnormalised ? String(m.legacyQuality).trim() : (typeof m.quality === 'string' ? m.quality.trim() : ''));
+                       // A decimal comma counts in the average but an
+                       // <input type="number"> shows it as empty — make it a point.
+                       const qualityParams = (Array.isArray(m.qualityParams) ? m.qualityParams : [])
+                         .map(q => q && typeof q.score === 'string' && q.score.includes(',') ? { ...q, score: q.score.replace(',', '.') } : q);
+                       // Would this row have a quality if it were evaluated?
+                       const hasSignal = B && B.measurementQuality
+                         ? !!B.measurementQuality({ qualityParams, legacyQuality, evaluateQuality: true })
+                         : (legacyQuality !== '' || qualityParams.some(q => q && q.score != null && String(q.score).trim() !== ''));
+                       // A value this row carried that is neither kept as legacyQuality
+                       // nor recomputable is parked, never shown: the numeric 9/10
+                       // the old dropdown was seeded with (an evaluator who agreed
+                       // with it left exactly that), or a dropdown pick on a row whose
+                       // criteria now give its average. Opening a report must not be
+                       // what erases it.
+                       const keepOriginal = unnormalised && quality != null && String(quality).trim() !== '' && legacyQuality === '';
+                       return {
+                         ...rest,
+                         ...(keepOriginal ? { originalQuality: quality } : {}),
+                         qualityParams,
+                         legacyQuality,
+                         // Under the old tool the checkbox only opened the criteria
+                         // panel — the dropdown was the quality whatever it said — so
+                         // an old row that carries a score is ticked here, where the
+                         // box now means "assessed". Once saved by this tool, the
+                         // saved box wins: unticking must survive a reload. Without
+                         // any flag, a proposal row follows its planned `evaluate`.
+                         evaluateQuality: (unnormalised && hasSignal) ? true
+                           : typeof m.evaluateQuality === 'boolean' ? m.evaluateQuality
+                           : Array.isArray(m.evaluate) ? m.evaluate.length > 0
+                           : hasSignal
+                       };
+                     })
                    })));
-                   if(d.analysis) setAnalysis({ graphNotes: d.analysis.graphNotes||'', conclusion: d.analysis.conclusion||'', variantConclusions: d.analysis.variantConclusions||{}, recommendation: d.analysis.recommendation||'retest', nextSteps: d.analysis.nextSteps||[], temperatureImages: getTempImages(d.analysis), temperatureLabel: d.analysis.temperatureLabel||'', showGasSection: d.analysis.showGasSection ?? null, showHubPredictions: d.analysis.showHubPredictions ?? null, showWeightLoss: d.analysis.showWeightLoss ?? null, generalObservations: d.analysis.generalObservations||'', targetAchieved: d.analysis.targetAchieved||null, targetEvaluation: d.analysis.targetEvaluation||'' });
+                   if(d.analysis) setAnalysis({ graphNotes: d.analysis.graphNotes||'', conclusion: d.analysis.conclusion||'', variantConclusions: d.analysis.variantConclusions||{}, recommendation: d.analysis.recommendation||'retest', nextSteps: d.analysis.nextSteps||[], temperatureImages: getTempImages(d.analysis), temperatureLabel: d.analysis.temperatureLabel||'', showGasSection: d.analysis.showGasSection ?? null, showHubPredictions: d.analysis.showHubPredictions ?? null, showWeightLoss: d.analysis.showWeightLoss ?? null, generalObservations: d.analysis.generalObservations||'', targetAchieved: d.analysis.targetAchieved||null, targetEvaluation: d.analysis.targetEvaluation||'', anonymise: d.analysis.anonymise || null });
                 }
           };
 
@@ -3889,11 +4289,22 @@
             if (data) applyReportData(data);
             // Couple board metadata into the tool: packing date ← board packing date,
             // PerfoTec employee ← product manager (+ their email/phone), when empty.
+            // An intake payload (a card dragged here from Intake) carries no packing
+            // date, so the form's default — today — used to win and the autosave
+            // wrote it over the card's planned date. There the card decides, as it
+            // does for the product link.
+            const fromIntake = !data || !!data.isPerfoTecIntake;
+            // With several products the picker decides, so the card's link (it
+            // tracks the first) must not be applied first: its product would load
+            // its targets under whichever product is picked, and an autosave before
+            // the pick would no longer be a stub, so Cancel lost the intake for good.
+            const pickPending = !!(data && data.isPerfoTecIntake && Array.isArray(data.products) && data.products.length > 1);
             if (proj) {
               const pmPerson = proj.productManager ? pmList.find(x => x.name === proj.productManager) : null;
               setProject(pr => ({
                 ...pr,
-                packingDate: pr.packingDate || proj.startDate || pr.packingDate,
+                packingDate: fromIntake ? (proj.startDate || pr.packingDate) : (pr.packingDate || proj.startDate || pr.packingDate),
+                productId: pickPending ? pr.productId : fromIntake ? (proj.productId || pr.productId || '') : pr.productId,
                 employee: pr.employee || proj.productManager || '',
                 employeeEmail: pr.employeeEmail || (pmPerson && pmPerson.email) || '',
                 employeePhone: pr.employeePhone || (pmPerson && pmPerson.phone) || ''
@@ -4228,6 +4639,9 @@
           const [docLoadSeq, setDocLoadSeq] = useState(0);
           const [dashState, setDashState] = useState('loading'); // loading | ready | unavailable
           const [dashMsg, setDashMsg] = useState('');
+          // Set when the typed text matched one of the product's OTHER names, so
+          // the link status can explain why the field now says something else.
+          const [aliasNote, setAliasNote] = useState('');
           const [creatingProduct, setCreatingProduct] = useState(null); // null | 'whole' | 'processed'
 
           useEffect(() => {
@@ -4273,7 +4687,18 @@
 
           const handleProductNameChange = (name) => {
             const hit = Products.matchProduct(name, dashProducts);
-            if (hit) { applyDashProduct(hit); return; }
+            if (hit) {
+              // A product found under one of its other trade names still goes in
+              // under its main name — that is what applyDashProduct writes back
+              // into the field — so remember which name was recognised and say so
+              // beside the link, or the field changing under your hands reads as
+              // a bug. Kept out of dashMsg because the live-link effect below
+              // rewrites that on every product change.
+              setAliasNote(Products.matchedAlias(name, hit));
+              applyDashProduct(hit);
+              return;
+            }
+            setAliasNote('');
             setDashMsg('');
             setProject(p => ({
               ...p,
@@ -4334,7 +4759,7 @@
                 ...g,
                 measurements: [...(g.measurements || []), {
                   day: lastDay + 1, samples: newSamples,
-                  quality: 9, notes: '', images: [], qualityParams: [], evaluateQuality: true
+                  quality: '', notes: '', images: [], qualityParams: [], evaluateQuality: true
                 }].sort((a,b) => parseFloat(a.day) - parseFloat(b.day))
               };
             }));
@@ -4416,7 +4841,7 @@
               const lastDay = parseFloat(g.measurements[g.measurements.length - 1]?.day || 0);
               const sCount = g.specs.sampleCount || 3;
               const newSamples = Array.from({length: sCount}, (_, i) => ({ id: Date.now() + i, o2: '', co2: '', weight: '', initialWeight: '' }));
-              return { ...g, measurements: [...g.measurements, { day: lastDay + 1, samples: newSamples, quality: 9, notes: '', images: [], qualityParams: [], evaluateQuality: false }]};
+              return { ...g, measurements: [...g.measurements, { day: lastDay + 1, samples: newSamples, quality: '', notes: '', images: [], qualityParams: [], evaluateQuality: false }]};
             }));
           };
           
@@ -4429,7 +4854,6 @@
             }));
           };
 
-          const updateQuality = (groupId, index, val) => { setGroups(p => p.map(g => g.id !== groupId ? g : { ...g, measurements: g.measurements.map((m, i) => i === index ? { ...m, quality: val } : m) })); };
 
           const addNewVariant = () => {
             const newId = Math.max(...groups.map(g => g.id), 0) + 1;
@@ -4439,9 +4863,9 @@
             
             const genS = (isD0) => Array.from({length: sCount}, (_, i) => ({ id: Date.now()+i, o2: isD0?'20.9':'', co2: isD0?'0.03':'', weight: '', initialWeight: '' }));
 
-            const meas = [{ day: 0, samples: genS(true), quality: 10, notes: 'Start', images: [], qualityParams: [], evaluateQuality: true }];
-            if (p > 0) meas.push({ day: p, samples: genS(false), quality: 9, notes: 'End Packing', images: [], qualityParams: [], evaluateQuality: true });
-            if (p > 0 && o > 0) meas.push({ day: p + o, samples: genS(false), quality: 9, notes: 'Retail Simulation (Open)', images: [], qualityParams: [], evaluateQuality: true });
+            const meas = [{ day: 0, samples: genS(true), quality: '', notes: 'Start', images: [], qualityParams: [], evaluateQuality: true }];
+            if (p > 0) meas.push({ day: p, samples: genS(false), quality: '', notes: 'End Packing', images: [], qualityParams: [], evaluateQuality: true });
+            if (p > 0 && o > 0) meas.push({ day: p + o, samples: genS(false), quality: '', notes: 'Retail Simulation (Open)', images: [], qualityParams: [], evaluateQuality: true });
             
             setGroups([...groups, { 
                 id: newId, 
@@ -4478,7 +4902,7 @@
             const sCount = src.specs?.sampleCount || 3;
             const genS = (isD0) => Array.from({length: sCount}, (_, i) => ({ id: Date.now()+i, o2: isD0?'20.9':'', co2: isD0?'0.03':'', weight: '', initialWeight: '' }));
             const meas = (src.measurements || []).map(m => ({
-              day: m.day, samples: genS(parseFloat(m.day) === 0), quality: 9,
+              day: m.day, samples: genS(parseFloat(m.day) === 0), quality: '',
               notes: parseFloat(m.day) === 0 ? 'Start (Round 2)' : '', images: [], qualityParams: [],
               evaluateQuality: m.evaluateQuality || false
             }));
@@ -4531,7 +4955,12 @@
           });
 
           if (isPreview) {
-            return <PrintPreview clientInfo={clientInfo} project={project} groups={groups} supplyChain={supplyChain} onBack={() => setIsPreview(false)} analysis={analysis} unitSystem={unitSystem} lang={lang} />;
+            // Anonymised: the preview — and so the PDF and the Word file built
+            // from it — only ever sees the cleaned copy. The report itself, and
+            // what autosaves, keep every client detail.
+            const anon = analysis.anonymise && analysis.anonymise.enabled
+              ? anonymiseReport({ clientInfo, project, groups, analysis, supplyChain }, analysis.anonymise) : null;
+            return <PrintPreview clientInfo={anon ? anon.clientInfo : clientInfo} project={anon ? anon.project : project} groups={anon ? anon.groups : groups} supplyChain={anon ? anon.supplyChain : supplyChain} onBack={() => setIsPreview(false)} analysis={anon ? anon.analysis : analysis} unitSystem={unitSystem} lang={lang} anonymised={!!anon} />;
           }
 
           if (isSheet) {
@@ -4579,7 +5008,7 @@
               )}
 
               {/* Modals */}
-              <SampleModal isOpen={sampleModalOpen} onClose={() => setSampleModalOpen(false)} data={editingMeasurement ? editingMeasurement.data : {}} onSave={saveSampleData} day0Samples={editingMeasurement ? editingMeasurement.day0Samples : null} projectCriteria={project.criteria || []} isEvaluationDay={editingMeasurement ? editingMeasurement.isEvaluationDay : false} isDayEditable={editingMeasurement ? editingMeasurement.isDayEditable : false} startWeight={editingMeasurement ? editingMeasurement.startWeight : 0} projectTotalDuration={project.totalDuration} isMAP={editingMeasurement ? editingMeasurement.isMAP : true} rt={rt} />
+              <SampleModal isOpen={sampleModalOpen} onClose={() => setSampleModalOpen(false)} data={editingMeasurement ? editingMeasurement.data : {}} onSave={saveSampleData} day0Samples={editingMeasurement ? editingMeasurement.day0Samples : null} projectCriteria={project.criteria || []} isEvaluationDay={editingMeasurement ? editingMeasurement.isEvaluationDay : false} isDayEditable={editingMeasurement ? editingMeasurement.isDayEditable : false} startWeight={editingMeasurement ? editingMeasurement.startWeight : 0} projectTotalDuration={project.totalDuration} isMAP={editingMeasurement ? editingMeasurement.isMAP : true} rt={rt} onChooseCriteria={() => setCriteriaFocus(n => n + 1)} />
               <DetailsModal isOpen={detailsModalOpen} onClose={() => setDetailsModalOpen(false)} data={editingMeasurement ? editingMeasurement.data : {}} onSave={saveDetailsData} rt={rt} />
 
               {pendingImageReplace && (
@@ -5012,12 +5441,22 @@
                                {dashProducts.map(p => (
                                  <option key={p.id} value={p.label}>{p.state}{p.hasSheet ? ' · ' + rt.dashWithSheet : ''}</option>
                                ))}
+                               {/* The other names each product is sold under. Picking one
+                                   links the product and the field then shows its MAIN name. */}
+                               {Products.aliasEntries(dashProducts).map(a => (
+                                 <option key={a.key} value={a.alias}>→ {a.name}</option>
+                               ))}
                              </datalist>
 
                              <div className="mt-2 min-h-[24px]">
                                {project.productId ? (
-                                 <span className="text-xs font-bold text-green-700 flex items-center gap-1.5">
+                                 <span className="text-xs font-bold text-green-700 flex flex-wrap items-center gap-1.5">
                                    <Check size={13} />{rt.productLinked}
+                                   {aliasNote && (
+                                     <span className="font-medium text-slate-500">
+                                       · {(rt.productAliasMatched || 'found under "{alias}"').replace('{alias}', aliasNote)}
+                                     </span>
+                                   )}
                                  </span>
                                ) : (project.productName || '').trim() ? (
                                  /* The state is chosen here, not taken from the toggle
@@ -5425,8 +5864,8 @@
                     <div className="flex flex-col gap-6">
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                            {/* Global Assessment Criteria — click-to-toggle grid (mirrors Intake/Proposal) */}
-                           <Panel chip fill title={rt.globalCriteria} icon={Beaker} chipClass="bg-blue-100 text-blue-700">
-                              <div className="flex flex-wrap gap-3 mt-4">
+                           <Panel chip fill openSignal={criteriaFocus} title={rt.globalCriteria} icon={Beaker} chipClass="bg-blue-100 text-blue-700">
+                              <div id="global-criteria" className="flex flex-wrap gap-3 mt-4 scroll-mt-24">
                                  {DEFAULT_CRITERIA.map(c => {
                                    const isSelected = (project.criteria || []).includes(c);
                                    return (
@@ -5668,12 +6107,13 @@
                                            <span className="font-bold text-slate-600">{rt.thWeightPlain} <span className="text-base">{avgW}</span></span>
                                          </div>
                                          <div className="px-4 pb-3 flex items-center gap-2">
-                                           <label className="flex items-center gap-2 shrink-0">
+                                           {(() => { const q = measQuality(m); return (
+                                           <span className="flex items-center gap-2 shrink-0" title={q && q.legacy ? rt.legacyQualityHint : rt.qualityAvgHint}>
                                              <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">{rt.thQuality}</span>
-                                             <select className="h-11 bg-slate-50 border-2 border-slate-200 font-bold text-slate-700 px-2 rounded-xl outline-none focus:border-blue-500" value={m.quality || ''} onChange={e => updateQuality(activeGroupId, idx, e.target.value)}>
-                                               {[10,9,8,7,6,5,4,3,2,1].map(n=><option key={n} value={n}>{n}</option>)}
-                                             </select>
-                                           </label>
+                                             <span className={`text-base font-extrabold ${!q ? 'text-slate-300' : q.legacy ? 'text-slate-400 italic' : 'text-slate-700'}`}>{q ? q.value.toFixed(1) : '—'}</span>
+                                             {q && q.legacy && <span className="text-[10px] font-bold text-slate-400">{rt.legacyQualityShort}</span>}
+                                           </span>
+                                           ); })()}
                                            <button onClick={() => removeMeasurementDay(activeGroupId, idx)} disabled={parseFloat(m.day)===0}
                                              aria-label={rt.thActions}
                                              className={`ml-auto p-3 rounded-xl border-2 shrink-0 ${parseFloat(m.day)===0 ? 'bg-slate-50 text-slate-300 border-slate-200' : 'bg-white text-red-500 border-red-100 active:bg-red-50'}`}><Trash2 size={18}/></button>
@@ -5732,11 +6172,11 @@
                                              {isMAP && <td className="p-4 font-extrabold text-blue-700">{isOpened ? '-' : `${avgO2}`}</td>}
                                              {isMAP && <td className="p-4 font-extrabold text-green-700">{isOpened ? '-' : `${avgCO2}`}</td>}
                                              <td className="p-4 text-slate-600 font-bold">{avgW}</td>
-                                             <td className="p-4">
-                                                 <select className="bg-slate-50 border border-slate-200 font-bold text-slate-700 p-2 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 w-full shadow-sm" value={m.quality || ''} onChange={e => updateQuality(activeGroupId, idx, e.target.value)}>
-                                                     {[10,9,8,7,6,5,4,3,2,1].map(n=><option key={n} value={n}>{n}</option>)}
-                                                 </select>
-                                             </td>
+                                             {/* Average of the scores entered via the pencil; there
+                                                 is no separate quality input any more. */}
+                                             {(() => { const q = measQuality(m); return (
+                                               <td className={`p-4 font-extrabold ${!q ? 'text-slate-300' : q.legacy ? 'text-slate-400 italic' : 'text-slate-700'}`} title={q && q.legacy ? rt.legacyQualityHint : rt.qualityAvgHint}>{q ? q.value.toFixed(1) : '—'}</td>
+                                             ); })()}
                                              <td className="p-4 flex justify-end gap-2">
                                                  <button onClick={() => openSampleModal(activeGroupId, idx)} className="text-slate-500 hover:text-green-600 bg-white border border-slate-200 shadow-sm p-2 rounded-lg hover:bg-green-50 transition-colors"><Edit3 size={16}/></button>
                                                  <button onClick={() => openDetailsModal(activeGroupId, idx)} title={parseFloat(m.day) === 0 && !hasPhotos ? rt.packedPhotoHint : undefined} className={`text-slate-500 hover:text-blue-600 bg-white border border-slate-200 shadow-sm p-2 rounded-lg hover:bg-blue-50 transition-colors ${hasPhotos ? 'text-blue-600 border-blue-300 bg-blue-50 ring-2 ring-blue-500/20' : parseFloat(m.day) === 0 ? 'text-red-500 border-red-300 bg-red-50 ring-2 ring-red-500/20' : ''}`}><Camera size={16}/></button>
@@ -5945,6 +6385,56 @@
                            </label>
                          </div>
                        </div>
+                       {/* Anonymised report: a copy for commercial sharing. Only the
+                           preview/PDF/Word get the cleaned data (see anonymiseReport). */}
+                       {(() => {
+                         const anon = { enabled: false, alias: '', extraTerms: '', hideLocation: true, ...(analysis.anonymise || {}) };
+                         const setAnon = (patch) => setAnalysis(prev => ({ ...prev, anonymise: { enabled: false, alias: '', extraTerms: '', hideLocation: true, ...(prev.anonymise || {}), ...patch } }));
+                         const result = anon.enabled ? anonymiseReport({ clientInfo, project, groups, analysis, supplyChain }, anon) : null;
+                         const photoCount = groups.reduce((n, g) => n + (g.measurements || []).reduce((k, m) => k + ((m.images || []).length), 0), 0);
+                         const otherImages = (project.coverImage || project.startImage ? 1 : 0) + getTempImages(analysis).length + groups.filter(g => g.predictedImage).length;
+                         return (
+                           <div className="md:col-span-1 mt-6">
+                             <label className={`${labelClass} text-sm mb-1`}>{rt.anonTitle}</label>
+                             <p className="text-xs text-slate-400 mb-3">{rt.anonHint}</p>
+                             <div className={`flex flex-col gap-3 p-4 rounded-2xl border ${anon.enabled ? 'bg-amber-50 border-amber-300' : 'bg-slate-50 border-slate-200'}`}>
+                               <label className="flex items-center gap-3 cursor-pointer select-none">
+                                 <input type="checkbox" checked={!!anon.enabled} onChange={e => setAnon({ enabled: e.target.checked })} className="w-4 h-4 accent-green-600 shrink-0" />
+                                 <span className="text-sm font-bold text-slate-700">{rt.anonEnable}</span>
+                               </label>
+                               {anon.enabled && (<>
+                                 <div>
+                                   <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-1">{rt.anonAlias}</label>
+                                   <input type="text" className={inputClass} value={anon.alias} placeholder="Client" onChange={e => setAnon({ alias: e.target.value })} />
+                                 </div>
+                                 <div>
+                                   <label className="block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-1">{rt.anonExtra}</label>
+                                   <input type="text" className={inputClass} value={anon.extraTerms} placeholder={rt.anonExtraPlaceholder} onChange={e => setAnon({ extraTerms: e.target.value })} />
+                                 </div>
+                                 <label className="flex items-center gap-3 cursor-pointer select-none">
+                                   <input type="checkbox" checked={anon.hideLocation !== false} onChange={e => setAnon({ hideLocation: e.target.checked })} className="w-4 h-4 accent-green-600 shrink-0" />
+                                   <span className="text-sm font-medium text-slate-700">{rt.anonHideLocation}</span>
+                                 </label>
+                                 <div className="text-xs text-slate-700 bg-white rounded-xl border border-slate-200 p-3 space-y-2">
+                                   <div className="font-bold">{rt.anonRemoved}</div>
+                                   {result.terms.length ? (
+                                     <div className="flex flex-wrap gap-1.5">{result.terms.map(t => <span key={t} className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 font-medium">{t}</span>)}</div>
+                                   ) : <div className="italic text-slate-400">{rt.anonNothingFound}</div>}
+                                   {result.locationTerms.length > 0 && (
+                                     <div className="flex flex-wrap items-center gap-1.5"><span className="font-bold">{rt.anonLocationRemoved}</span>{result.locationTerms.map(t => <span key={t} className="px-2 py-0.5 rounded-md bg-slate-100 border border-slate-200 font-medium">{t}</span>)}</div>
+                                   )}
+                                   <div>{(rt.anonReplaced || '').replace('{n}', result.hits).replace('{alias}', result.alias)}</div>
+                                 </div>
+                                 {(photoCount + otherImages) > 0 && (
+                                   <div className="text-xs font-bold text-amber-900 bg-amber-100 rounded-xl border border-amber-300 p-3">
+                                     {(rt.anonPhotos || '').replace('{n}', photoCount + otherImages)}
+                                   </div>
+                                 )}
+                               </>)}
+                             </div>
+                           </div>
+                         );
+                       })()}
                     </Panel>
                   </div>
                 )}
