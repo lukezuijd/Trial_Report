@@ -16,7 +16,7 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap">
 
     <!-- Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com/3.4.17"></script>
     <!-- PerfoTec Brand 2.0 palette, type and radii for Tailwind. Must load
          AFTER the Play CDN, which is what defines the global `tailwind`. -->
     <script src="brand.js?v=e549b527"></script>
@@ -25,16 +25,16 @@
     <!-- Pinned to Babel 7. v8 (released 2026-05) changed React preset's default
          runtime to "automatic", which emits `import "react/jsx-runtime"` — a
          bare specifier the browser cannot resolve, breaking ESM imports. -->
-    <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.29.10/babel.min.js"></script>
 
     <!-- LOAD CENTRAL STYLING & CONFIGURATION -->
-    <link rel="stylesheet" href="style.css?v=e8637b4c">
+    <link rel="stylesheet" href="style.css?v=df20be12">
     <script src="config.js?v=7b34913e"></script>
     <!-- This page renders its own Board button in the header, so the shared
          floating bar that board-db.js injects would be a second, redundant way
          back. Pages WITHOUT a header button (the Product Dashboard) still get it. -->
     <script>window.PERFOTEC_NO_BACK_BUTTON = true;</script>
-    <script src="board-db.js?v=b978be9b"></script>
+    <script src="board-db.js?v=00b92723"></script>
     <script src="product-tools.js?v=5916a60f"></script>
 </head>
 <body class="bg-slate-50 text-slate-700 antialiased selection:bg-blue-200 selection:text-blue-900">
@@ -60,7 +60,7 @@
           X, Edit3, Camera, FileArchive, LineChart, Globe, AlertCircle,
           Building2, Target, Beaker, Send, Mail, ClipboardList, UserPlus,
           Check
-        } from 'https://esm.sh/lucide-react@0.292.0';
+        } from 'https://esm.sh/lucide-react@0.292.0?deps=react@18.2.0';
 
         // --- LINK WITH CONFIG.JS ---
         const globalConfig = window.PERFOTEC_CONFIG || {};
@@ -951,14 +951,15 @@
 
                       <div className="overflow-hidden rounded-xl border border-slate-200 shadow-sm break-inside-avoid">
                           <table className="report-table w-full text-sm print:text-xs table-fixed">
+                            {/* No Transmission Value column: the TV value is internal and
+                                never goes to the client. It stays in the variant editor. */}
                             <colgroup>
-                                <col style={{width:'16%'}} />
-                                <col style={{width:'13%'}} />
-                                <col style={{width:'13%'}} />
-                                <col style={{width:'17%'}} />
-                                <col style={{width:'11%'}} />
-                                <col style={{width:'12%'}} />
+                                <col style={{width:'20%'}} />
+                                <col style={{width:'14%'}} />
+                                <col style={{width:'15%'}} />
                                 <col style={{width:'18%'}} />
+                                <col style={{width:'12%'}} />
+                                <col style={{width:'21%'}} />
                             </colgroup>
                             <thead>
                               <tr>
@@ -967,7 +968,6 @@
                                 <th className="text-center break-words">{pv.thMaterial}</th>
                                 <th className="text-center break-words">{pv.thDimensions}</th>
                                 <th className="text-center break-words">{pv.thNetWeight}</th>
-                                <th className="text-center break-words">{pv.thTransmission}</th>
                                 <th className="text-center break-words">{pv.thEvalDays}</th>
                               </tr>
                             </thead>
@@ -982,10 +982,9 @@
                                       {g.name}
                                     </td>
                                     <td className="text-center py-4 print:py-2 break-words">{g.specs?.packaging || '-'}</td>
-                                    <td className="text-center py-4 print:py-2 break-words">{g.specs?.material || '-'}</td>
+                                    <td className="text-center py-4 print:py-2 break-words">{[g.specs?.material, String(g.specs?.filmThickness ?? '').trim() && `${String(g.specs.filmThickness).trim()} µm`].filter(Boolean).join(' · ') || '-'}</td>
                                     <td className="text-center py-4 print:py-2 break-words">{g.specs?.length || '-'}x{g.specs?.width || '-'}x{g.specs?.height || '-'} {dimUnit}</td>
                                     <td className="text-center py-4 print:py-2 break-words">{project.startWeight || '-'} {weightUnit}</td>
-                                    <td className="text-center py-4 print:py-2 font-bold break-words">{g.specs?.holes || '-'}</td>
                                     <td className="text-center py-4 print:py-2 font-medium text-slate-500 break-words">{g.measurements.filter(m => parseFloat(m.day) > 0).map(m => `P+${m.day}`).join(', ')}</td>
                                   </tr>
                                 );
@@ -1318,7 +1317,7 @@
               variantName: 'Variant Name', packagingType: 'Packaging Type', atmosphereStrategy: 'Atmosphere Strategy', optMAP: 'MAP (Atmosphere buildup)', optMHP: 'MHP (No atmosphere buildup)', optOpen: 'Open (No packaging)',
               packagingSpecs: 'Packaging Specs & Samples',
               lengthMm: 'Length (mm)', widthMm: 'Width (mm)', heightMm: 'Height (mm)',
-              material: 'Material', transmissionValue: 'Transmission Value', samplesPerMeasurement: 'Samples / Measurement',
+              material: 'Material', filmThickness: 'Film thickness (µm)', transmissionValue: 'Transmission Value', samplesPerMeasurement: 'Samples / Measurement',
               timelineEvents: 'Timeline & Events',
               timelineDesc: 'Select the specific sample numbers (e.g., 1, 2, 3) representing the physical packages to be processed for each action.',
               thDay: 'Day', thMeasure: 'Measure Gas/Wt.', thMeasureWeight: 'Measure Wt.', thOpen: 'Open Pack', thEvaluate: 'Evaluate Quality',
@@ -1424,7 +1423,7 @@
               variantName: 'Variant Naam', packagingType: 'Type Verpakking', atmosphereStrategy: 'Atmosfeer Strategie', optMAP: 'MAP (gericht op atmosfeer)', optMHP: 'MHP (geen atmosfeer opbouw)', optOpen: 'Open (geen verpakking)',
               packagingSpecs: 'Verpakkingsspecificaties & Monsters',
               lengthMm: 'Lengte (mm)', widthMm: 'Breedte (mm)', heightMm: 'Hoogte (mm)',
-              material: 'Materiaal', transmissionValue: 'Transmissiewaarde', samplesPerMeasurement: 'Monsters / Meting',
+              material: 'Materiaal', filmThickness: 'Foliedikte (µm)', transmissionValue: 'Transmissiewaarde', samplesPerMeasurement: 'Monsters / Meting',
               timelineEvents: 'Tijdlijn & Gebeurtenissen',
               timelineDesc: 'Selecteer de specifieke monsternummers (bijv. 1, 2, 3) die de fysieke verpakkingen vertegenwoordigen die per actie worden verwerkt.',
               thDay: 'Dag', thMeasure: 'Meet Gas/Gew.', thMeasureWeight: 'Meet Gew.', thOpen: 'Open Verpakking', thEvaluate: 'Beoordeel Kwaliteit',
@@ -1528,7 +1527,7 @@
               variantName: 'Nombre de Variante', packagingType: 'Tipo de Empaque', atmosphereStrategy: 'Estrategia de Atmósfera', optMAP: 'MAP (Modificación de atmósfera)', optMHP: 'MHP (Sin modificación de atmósfera)', optOpen: 'Abierto (Sin empaque)',
               packagingSpecs: 'Especificaciones y Muestras',
               lengthMm: 'Largo (mm)', widthMm: 'Ancho (mm)', heightMm: 'Alto (mm)',
-              material: 'Material', transmissionValue: 'Valor de Transmisión', samplesPerMeasurement: 'Muestras / Medición',
+              material: 'Material', filmThickness: 'Espesor del film (µm)', transmissionValue: 'Valor de Transmisión', samplesPerMeasurement: 'Muestras / Medición',
               timelineEvents: 'Cronograma y Eventos',
               timelineDesc: 'Seleccione los números de muestra específicos (ej. 1, 2, 3) que representan los paquetes físicos a procesar para cada acción.',
               thDay: 'Día', thMeasure: 'Medir Gas/Peso', thMeasureWeight: 'Medir Peso', thOpen: 'Abrir Paquete', thEvaluate: 'Evaluar Calidad',
@@ -1783,7 +1782,11 @@
             setGroups(prev => prev.map(g => g.id === groupId ? { ...g, predictedImage: null } : g));
           };
 
-          const handleProjectChange = (f, v) => setProject(p => ({...p, [f]: v}));
+          // Whether the title was typed in this session: only then does clearing it
+          // clear the card's title too (a document that merely arrives without one,
+          // from an import or an intake, must not wipe a title set elsewhere).
+          const titleEdited = useRef(false);
+          const handleProjectChange = (f, v) => { if (f === 'reportTitle') titleEdited.current = true; setProject(p => ({...p, [f]: v})); };
 
           // Metric/Imperial toggle — converts project-level dimensions/weight,
           // supply-chain temperatures, and per-variant specs to the other system.
@@ -2216,6 +2219,11 @@
                   // therefore only filled when the board has nothing yet. This is
                   // what makes the board remember the product chosen here.
                   if (project.productId && p.productId !== project.productId) patch.productId = project.productId;
+                  // The project title is typed here (the board has no field for it),
+                  // so it is mirrored, like the product link: the tiles show it. The
+                  // tool's placeholder is no title; a title the user cleared is cleared.
+                  const projectTitle = B.projectTitle ? B.projectTitle(project.reportTitle) : String(project.reportTitle || '').replace(/\s+/g, ' ').trim();
+                  if (projectTitle ? p.title !== projectTitle : (titleEdited.current && p.title)) patch.title = projectTitle;
                   // Mirror coupled fields tool → board: packing date and PerfoTec
                   // employee (= product manager on the board).
                   if (project.packingDate) patch.startDate = project.packingDate;
@@ -3660,9 +3668,12 @@
                                       <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">{pt.widthMm}</label><input type="number" className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.width || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'width', e.target.value)} /></div>
                                       <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">{pt.heightMm}</label><input type="number" className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.height || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'height', e.target.value)} /></div>
                                    </div>
-                                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-6">
                                      <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">{pt.material}</label><input className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.material || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'material', e.target.value)} /></div>
+                                     <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">{pt.filmThickness}</label><input type="number" min="0" step="any" inputMode="decimal" className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.filmThickness || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'filmThickness', e.target.value)} placeholder="µm" /></div>
                                      <div><label className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2 block">{pt.transmissionValue}</label><input type="text" className={inputClass} value={groups.find(g => g.id === activeGroupId).specs.holes || ''} onChange={(e) => handleGroupChange(activeGroupId, 'specs', 'holes', e.target.value)} /></div>
+                                   </div>
+                                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                                      <div><label className="text-xs text-blue-700 font-extrabold uppercase tracking-wider mb-2 block">{pt.samplesPerMeasurement}</label><input type="number" min="1" className={`${inputClass} bg-white border-blue-300 ring-2 ring-blue-50 font-extrabold text-blue-900 text-lg`} value={groups.find(g => g.id === activeGroupId).specs.sampleCount || 3} onChange={(e) => handleSampleCountChange(activeGroupId, parseInt(e.target.value))} /></div>
                                    </div>
                                  </div>
