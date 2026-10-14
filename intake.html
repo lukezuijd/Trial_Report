@@ -15,23 +15,23 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap">
 
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com/3.4.17"></script>
     <!-- PerfoTec Brand 2.0 palette, type and radii for Tailwind. Must load
          AFTER the Play CDN, which is what defines the global `tailwind`. -->
     <script src="brand.js?v=e549b527"></script>
     <!-- Pinned to Babel 7. v8 (released 2026-05) changed React preset's default
          runtime to "automatic", which emits `import "react/jsx-runtime"` — a
          bare specifier the browser cannot resolve, breaking ESM imports. -->
-    <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.29.10/babel.min.js"></script>
     
     <!-- LOAD CENTRAL STYLING & CONFIGURATION -->
-    <link rel="stylesheet" href="style.css?v=e8637b4c">
+    <link rel="stylesheet" href="style.css?v=df20be12">
     <script src="config.js?v=7b34913e"></script>
     <!-- This page renders its own Board button in the header, so the shared
          floating bar that board-db.js injects would be a second, redundant way
          back. Pages WITHOUT a header button (the Product Dashboard) still get it. -->
     <script>window.PERFOTEC_NO_BACK_BUTTON = true;</script>
-    <script src="board-db.js?v=b978be9b"></script>
+    <script src="board-db.js?v=00b92723"></script>
     <script src="product-tools.js?v=5916a60f"></script>
 
     <!-- Print rules live in style.css so Intake, Proposal and Report share one source. -->
@@ -54,7 +54,7 @@
           Utensils, Factory, Thermometer, Clock, ChevronRight, ArrowDown, ArrowUp, 
           Beaker, Save, FolderOpen, FileText, Printer, Edit3, Camera, X, Mail, Send, Activity, UserPlus, Package, FileArchive,
           Check
-        } from 'https://esm.sh/lucide-react@0.292.0';
+        } from 'https://esm.sh/lucide-react@0.292.0?deps=react@18.2.0';
 
         // --- LINK WITH CONFIG.JS ---
         const globalConfig = window.PERFOTEC_CONFIG || {};
