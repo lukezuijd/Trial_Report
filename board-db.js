@@ -183,6 +183,8 @@
     function resetFolderCaches() {
         _metaCache = null;
         _lastRead = null;
+        // A read of the previous folder still in flight must not set the snapshot.
+        _lastReadGen = ++_readGen;
         _lastArtefacts = [];
         _lastProductArtefacts = [];
         _lastRootArtefacts = [];
@@ -309,7 +311,73 @@
         // blank stub also carries and would falsely read as "has content".
         if ((p.productName || '').trim() || (ci.companyName || '').trim()) return true;
         if (Array.isArray(d.products) && d.products.some(function (x) { return x && (x.name || '').trim(); })) return true;
+        // Measured results or photos count too: a report holding measurements
+        // but no product or company name read as empty, so the next open loaded
+        // an older phase file instead and the autosave replaced the report.
+        // (A stub's seeded P+0 row is not a result: see variantHasResults.)
+        if ((d.groups || []).some(function (g) {
+            return variantHasResults(g) || ((g && g.measurements) || []).some(function (m) { return m && Array.isArray(m.images) && m.images.length > 0; });
+        })) return true;
         return false;
+    }
+
+    // A phase file that is an empty object holds nothing. The board's copy used
+    // to write one to "drop" a document, and every tool then refused it as
+    // unrecognised and kept its autosave off, so whatever was typed into the
+    // copy was lost (October 2026). It counts as no file at all.
+    function isEmptiedDoc(d) {
+        return !!d && typeof d === 'object' && !Array.isArray(d) && Object.keys(d).length === 0;
+    }
+
+    // ---- A report document without its results ------------------------------
+    // A report is a mix: project, client and supply chain describe the set-up;
+    // the measurements and the analysis are that trial's results. A copy keeps
+    // the first and blanks the second: the variants, the evaluation days and the
+    // sample slots stay (that is the plan), every measured value, photo, score,
+    // note and conclusion goes.
+    function stripTrialResults(doc) {
+        var out = {};
+        Object.keys(doc || {}).forEach(function (k) { out[k] = doc[k]; });
+        delete out.analysis;      // conclusions, recommendations, next steps
+        delete out.exportDate;    // belongs to the original's export
+        out.groups = ((doc && doc.groups) || []).map(function (g) {
+            var ng = {};
+            Object.keys(g || {}).forEach(function (k) { ng[k] = g[k]; });
+            delete ng.predictedImage;
+            ng.measurements = ((g && g.measurements) || []).map(function (m) {
+                return {
+                    day: m.day,
+                    samples: (m.samples || []).map(function (sm) { return { id: sm && sm.id, o2: '', co2: '', weight: '' }; }),
+                    // qualityParams must stay an array: the report's pencil dialog
+                    // maps over it, and {} blanked the page there.
+                    quality: '', legacyQuality: '', notes: '', images: [], qualityParams: [],
+                    evaluateQuality: Array.isArray(m.evaluate) ? m.evaluate.length > 0 : !!m.evaluateQuality,
+                    measure: m.measure, open: m.open, evaluate: m.evaluate
+                };
+            });
+            return ng;
+        });
+        return out;
+    }
+
+    // Does a report document still carry results — anything measured, scored,
+    // photographed or concluded? The structure (variants, days, sample slots)
+    // is not a result: a stripped copy keeps it on purpose.
+    function trialResultsIn(doc) {
+        if (!doc || typeof doc !== 'object') return false;
+        var filled = function (v) { return v !== undefined && v !== null && String(v).trim() !== ''; };
+        if (doc.analysis && typeof doc.analysis === 'object' && Object.keys(doc.analysis).length) return true;
+        return (doc.groups || []).some(function (g) {
+            return ((g && g.measurements) || []).some(function (m) {
+                if (!m) return false;
+                if (filled(m.quality) || filled(m.legacyQuality) || filled(m.originalQuality) || filled(m.notes)) return true;
+                if (Array.isArray(m.images) && m.images.length) return true;
+                if ((m.qualityParams || []).some(function (q) { return q && (filled(q.score) || filled(q.notes)); })) return true;
+                return (m.samples || []).some(function (sm) {
+                    return !!sm && (filled(sm.o2) || filled(sm.co2) || filled(sm.weight) || filled(sm.initialWeight));
+                });
+            });
+        });
     }
 
     // ---- Quality of one measurement day --------------------------------------
@@ -387,12 +455,589 @@
         return null;
     }
 
+    /* ---- trials of a product ------------------------------------------------
+     * What the Products page and the product dashboard list for one product:
+     * every project linked to it (card.productId) that runs or ran through the
+     * report tool — Accepted, Report or Dashboard, and archived ones (a card is
+     * only archived from Dashboard). Stopped projects are left out, and so is
+     * work still in intake or proposal.
+     * ---------------------------------------------------------------------- */
+    var TRIAL_PHASES = { accepted: true, report: true, dashboard: true };
+
+    function isProductTrial(card, productId) {
+        return !!card && !!productId && card.productId === productId && !card.deletedAt && !card.haltedAt
+            && (!!card.archivedAt || TRIAL_PHASES[card.phase] === true);
+    }
+
+    // Finished = past the report (in Dashboard, or archived from there).
+    function trialStatus(card) {
+        return card && (card.archivedAt || card.phase === 'dashboard') ? 'completed' : 'ongoing';
+    }
+
+    // The facts the overview shows, from the trial's report document:
+    //   target: 'achieved' | 'partial' | 'notAchieved' | null (not assessed);
+    //   packagings: the packaging types used (project and variants);
+    //   best: the highest score on the latest day all scored variants share
+    //     (else each variant's last scored day), by the report's own rule
+    //     (measurementQuality), with variant and day. Day 0 is ~10 for every
+    //     variant, so it never counts as that common day.
+    function summariseTrial(doc) {
+        var d = doc || {};
+        var p = d.project || {};
+        var intakeProduct = d.isPerfoTecIntake && Array.isArray(d.products) ? (d.products[0] || {}) : null;
+        var packagings = [];
+        var addPack = function (v) { v = String(v == null ? '' : v).trim(); if (v && packagings.indexOf(v) < 0) packagings.push(v); };
+        var pk = intakeProduct ? intakeProduct.packagings : p.packagings;
+        (Array.isArray(pk) ? pk : []).forEach(function (x) { addPack(x && x.packagingType); });
+        if (!packagings.length) addPack(p.packagingType);
+        (d.groups || []).forEach(function (g) { addPack(g && g.specs && g.specs.packaging); });
+        // Variants are compared on the same day: the latest day after P+0 on
+        // which every scored variant has a score. Each variant's own last score
+        // let one evaluated only at P+3 (9.0) beat one still good at P+14 (7.5).
+        // Without such a common day, each variant's last score, as before.
+        var scored = [];
+        (d.groups || []).forEach(function (g) {
+            var byDay = {}, last = null;
+            ((g && g.measurements) || []).slice().sort(function (x, y) { return (parseFloat(x.day) || 0) - (parseFloat(y.day) || 0); }).forEach(function (m) {
+                var q = measurementQuality(m);
+                if (!q) return;
+                var day = parseFloat(m.day) || 0;
+                byDay[day] = q;
+                last = { q: q, day: day };
+            });
+            if (last) scored.push({ g: g, byDay: byDay, last: last });
+        });
+        var commonDays = scored.length ? Object.keys(scored[0].byDay).map(Number).filter(function (day) {
+            return day > 0 && scored.every(function (s) { return s.byDay[day] !== undefined; });
+        }) : [];
+        var onDay = commonDays.length && scored.length > 1 ? Math.max.apply(null, commonDays) : null;
+        var best = null;
+        scored.forEach(function (s) {
+            var at = onDay !== null ? { q: s.byDay[onDay], day: onDay } : s.last;
+            if (!best || at.q.value > best.value) best = { value: at.q.value, variant: (s.g && s.g.name) || '', day: at.day, legacy: at.q.legacy };
+        });
+        var a = d.analysis || {};
+        var target = a.targetAchieved === 'achieved' || a.targetAchieved === 'partial' || a.targetAchieved === 'notAchieved' ? a.targetAchieved : null;
+        return {
+            isReport: !!d.isPerfoTecReport,
+            title: projectTitle(p.reportTitle),
+            packingDate: p.packingDate || '',
+            target: target,
+            packagings: packagings,
+            best: best,
+            variants: (d.groups || []).length
+        };
+    }
+
+    // ---- Best practice from the trial table ----------------------------------
+    // One rule for every "best" the dashboard shows (decided Oct 2026):
+    //   * shelf life = the report's rule: the last evaluated day with a score of
+    //     QUALITY_LIMIT (7) or more before the first day below it, open-ended
+    //     ("≥") when it never fell below. A trial that ran to failure keeps its
+    //     good days; it used to be dropped because its LAST score was low.
+    //   * compared only within one variety, packaging type, condition
+    //     (MAP/MHP/OPEN) and temperature band (2 °C);
+    //   * ranked: longest shelf life, then open-ended over closed, then a curve
+    //     over a bare end score, then the gain over the same round's reference,
+    //     then the score on that day, then the most recent round. Never the
+    //     order of the table;
+    //   * "proven" needs at least 2 rounds that reached the winner's shelf life,
+    //     otherwise it is indicative (1 round).
+    // References (controls) count like any variant: a standard film perforated
+    // well is a PerfoTec result too. Their role is shown and used for the gain.
+    var QUALITY_LIMIT = 7;
+    var REFERENCE_NAME = /\b(control|controle|testigo|reference|referentie|referencia|standard|standaard|current|huidige?|actual)\b/i;
+
+    // "day:score|day:score" → [{ d, q }] sorted by day.
+    function parseTrialCurve(raw) {
+        return String(raw == null ? '' : raw).split('|').map(function (s) {
+            var p = s.split(':');
+            return { d: parseFloat(p[0]), q: parseFloat(String(p[1] == null ? '' : p[1]).replace(',', '.')) };
+        }).filter(function (p) { return isFinite(p.d) && isFinite(p.q); }).sort(function (a, b) { return a.d - b.d; });
+    }
+    // { days, open, score } by the report's rule, or null when the curve says
+    // nothing after P+0 (only day 0 scored, or already below the limit then).
+    function curveShelfLife(points, limit) {
+        var lim = limit == null ? QUALITY_LIMIT : limit;
+        var ok = null;
+        for (var i = 0; i < points.length; i++) {
+            if (points[i].q >= lim) ok = points[i];
+            else return ok && ok.d > 0 ? { days: ok.d, open: false, score: ok.q } : null;
+        }
+        return ok && ok.d > 0 ? { days: ok.d, open: true, score: ok.q } : null;
+    }
+    // 'reference' | 'perfotec': the stored role (from the report tool), else
+    // read from the variant name ("Control", "testigo", "standard", ...).
+    function trialRowRole(master, i) {
+        var m = master || {};
+        var r = String(m['pack_opt_' + i + '_role'] || '').toLowerCase();
+        if (r === 'reference' || r === 'perfotec') return r;
+        return REFERENCE_NAME.test(String(m['pack_opt_' + i + '_material'] || '')) ? 'reference' : 'perfotec';
+    }
+    function firstNumber(v) { var n = reportNums(v); return n.length ? parseFloat(n[0]) : NaN; }
+    // The trial rows of a table as objects with their shelf life. opts.type
+    // limits to one packaging type ('Crate/Box' also takes 'Liner'), opts.match
+    // (i) => bool filters rows (e.g. the variety view filter).
+    function trialRows(master, opts) {
+        var m = master || {};
+        var o = opts || {};
+        var n = trialRowCount(m);
+        var rows = [], seen = {};
+        for (var i = 0; i < n; i++) {
+            var f = function (k) { var v = m['pack_opt_' + i + '_' + k]; return v == null ? '' : String(v).trim(); };
+            var type = f('type');
+            if (!['type', 'material', 'o2', 'co2', 'days', 'rating', 'curve'].some(function (k) { return f(k) !== ''; })) continue;
+            if (o.type && !(type === o.type || (o.type === 'Crate/Box' && /^(liner|crate\/box)$/i.test(type)))) continue;
+            if (o.match && !o.match(i)) continue;
+            var curve = parseTrialCurve(f('curve'));
+            var rating = firstNumber(f('rating')), days = firstNumber(f('days'));
+            var sl = curve.length >= 2 ? curveShelfLife(curve) : null;
+            var legacy = false;
+            if (!sl && curve.length < 2 && rating >= QUALITY_LIMIT && days > 0) { sl = { days: days, open: true, score: rating }; legacy = true; }
+            // One report is one round, whichever way its rows came in: the
+            // board's rows carry the project, the dashboard's file import does
+            // not, and keyed on the project one report counted as two rounds
+            // ("proven" from a single trial).
+            var roundNo = parseInt(f('round'), 10);
+            var reportKey = (f('pdf') || f('date')) ? f('pdf').toLowerCase() + '|' + f('date') : f('project');
+            var round = reportKey + (roundNo > 1 ? '#R' + roundNo : '');
+            // The same trial twice (the averaged variety view concatenates
+            // tables) is one trial.
+            var fp = [type, f('material'), round, f('days'), f('rating'), f('curve')].join('|').toLowerCase();
+            if (seen[fp]) continue;
+            seen[fp] = true;
+            var temp = firstNumber(f('temp'));
+            rows.push({
+                i: i, type: type, material: f('material'), variety: f('variety'),
+                condition: (f('condition') || 'MAP').toUpperCase(),
+                temp: isFinite(temp) ? temp : null, tempBand: isFinite(temp) ? Math.round(temp / 2) * 2 : null,
+                weight: f('weight'), o2: f('o2'), co2: f('co2'), trans: f('trans'),
+                date: f('date'), pdf: f('pdf'), round: round, role: trialRowRole(m, i),
+                rating: isFinite(rating) ? rating : null, days: isFinite(days) ? days : null,
+                curve: curve, shelfLife: sl, legacy: legacy, gain: null
+            });
+        }
+        // Gain over the reference of the same round (days of shelf life).
+        var refDays = {};
+        rows.forEach(function (r) {
+            if (r.role !== 'reference') return;
+            var d = r.shelfLife ? r.shelfLife.days : 0;
+            refDays[r.round] = refDays[r.round] == null ? d : Math.max(refDays[r.round], d);
+        });
+        rows.forEach(function (r) { if (r.shelfLife && refDays[r.round] != null) r.gain = r.shelfLife.days - refDays[r.round]; });
+        return rows;
+    }
+    function compareTrials(a, b) {
+        var sa = a.shelfLife, sb = b.shelfLife;
+        if (!!sa !== !!sb) return sa ? -1 : 1;
+        if (!sa) return a.i - b.i;
+        if (sa.days !== sb.days) return sb.days - sa.days;
+        if (sa.open !== sb.open) return sa.open ? -1 : 1;
+        if (a.legacy !== b.legacy) return a.legacy ? 1 : -1;
+        var ga = a.gain == null ? -Infinity : a.gain, gb = b.gain == null ? -Infinity : b.gain;
+        if (ga !== gb) return gb - ga;
+        if (sa.score !== sb.score) return sb.score - sa.score;
+        if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+        return a.i - b.i;
+    }
+    // { groups: [...], best } for one table. Each group is one packaging type +
+    // variety + condition + temperature band with its winner, the rounds that reached
+    // the winner's shelf life and whether that makes it proven. Groups are
+    // ordered: proven first, then by their winner. `best` is the first group
+    // with a winner, or null.
+    function trialBestPractice(master, opts) {
+        var rows = trialRows(master, opts);
+        var byKey = {};
+        rows.forEach(function (r) {
+            // A punnet round and a pallet round are not two rounds of one practice.
+            var type = /^liner$/i.test(r.type) ? 'Crate/Box' : r.type;
+            var key = [type.toLowerCase(), r.variety.toLowerCase(), r.condition, r.tempBand == null ? '?' : r.tempBand].join('|');
+            (byKey[key] = byKey[key] || { key: key, type: type, variety: r.variety, condition: r.condition, tempBand: r.tempBand, trials: [] }).trials.push(r);
+        });
+        var groups = Object.keys(byKey).map(function (k) {
+            var g = byKey[k];
+            g.trials.sort(compareTrials);
+            var w = g.trials[0] && g.trials[0].shelfLife ? g.trials[0] : null;
+            g.winner = w;
+            var rounds = {};
+            if (w) g.trials.forEach(function (t) { if (t.shelfLife && t.shelfLife.days >= w.shelfLife.days) rounds[t.round] = true; });
+            g.rounds = Object.keys(rounds).length;
+            g.proven = !!w && g.rounds >= 2;
+            var temps = g.trials.map(function (t) { return t.temp; }).filter(function (t) { return t != null; });
+            g.tempMin = temps.length ? Math.min.apply(null, temps) : null;
+            g.tempMax = temps.length ? Math.max.apply(null, temps) : null;
+            return g;
+        }).sort(function (a, b) {
+            if (!!a.winner !== !!b.winner) return a.winner ? -1 : 1;
+            if (a.proven !== b.proven) return a.proven ? -1 : 1;
+            if (a.winner && b.winner) return compareTrials(a.winner, b.winner);
+            return b.trials.length - a.trials.length;
+        });
+        return { groups: groups, best: groups[0] && groups[0].winner ? groups[0] : null, rows: rows };
+    }
+
+    // [{ card, status, summary }] for one product (or several ids: the
+    // dashboard's 'All varieties' view). Ongoing first, then newest first.
+    // `cards` may be passed in when the caller already has them.
+    function readProductTrials(productIds, cards) {
+        var ids = Array.isArray(productIds) ? productIds : [productIds];
+        var src = cards ? Promise.resolve(cards) : readManifest().then(function (m) { return m.projects || []; });
+        return src.then(function (list) {
+            var mine = (list || []).filter(function (c) { return ids.some(function (id) { return isProductTrial(c, id); }); });
+            return Promise.all(mine.map(function (c) {
+                return readProjectData(c.id, 'report').catch(function () { return null; }).then(function (doc) {
+                    return { card: c, status: trialStatus(c), summary: summariseTrial(doc) };
+                });
+            }));
+        }).then(function (rows) {
+            var dateOf = function (r) { return String(r.summary.packingDate || r.card.startDate || r.card.updatedAt || ''); };
+            return rows.sort(function (a, b) {
+                if (a.status !== b.status) return a.status === 'ongoing' ? -1 : 1;
+                return dateOf(b).localeCompare(dateOf(a));
+            });
+        });
+    }
+
+    // ---- A trial report into its product's trial table ------------------------
+    // One report becomes one row per variant in the product's trial table
+    // (formData['p2-pack-master']: pack_opt_<i>_<field> plus packOptCount), and
+    // fills the product's baseline properties that are still EMPTY — curated
+    // values stay the master. Shared by the Product Dashboard's file import and
+    // the board's import on a move to Dashboard, so both write the same rows.
+    // A variant already in the table (same report reference, date and variant)
+    // is skipped. Pure: returns { formData, imported, skipped, baselineFilled }
+    // and writes nothing; formData is the one passed in when nothing changed.
+    function reportNums(s) {
+        return String(s == null ? '' : s).replace(/,/g, '.').match(/-?\d+(?:\.\d+)?/g) || [];
+    }
+    // Free-text packaging onto the table's fixed options (substring match).
+    function reportPackType(raw) {
+        var r = String(raw || '').toLowerCase();
+        if (r.indexOf('pallet') >= 0) return 'Pallet';
+        if (/punnet|tray|clamshell|topseal/.test(r)) return 'Punnet';
+        if (/crate|box|liner/.test(r)) return 'Crate/Box';
+        if (/flow|bag|pillow|pouch/.test(r)) return 'Flowpack';
+        return 'Crate/Box';
+    }
+    // 'whole' | 'processed' | '' from a report's processing type.
+    function reportState(report) {
+        var p = (report && report.project) || {};
+        var s = String(p.processingType || p.state || '').toLowerCase().replace(/[\s\-()\/]+/g, ' ').trim();
+        return s.indexOf('process') >= 0 || s.indexOf('cut') >= 0 ? 'processed' : s.indexOf('whole') >= 0 ? 'whole' : '';
+    }
+    // A variant counts once something was measured on it: a quality score, or a
+    // gas or weight reading after day 0 (day 0 holds the template's 20.9/0.03).
+    // The template's empty 'Control' imported as a trial, and its row then kept
+    // the real results out as "already there".
+    function variantHasResults(g) {
+        return ((g && g.measurements) || []).some(function (m) {
+            if (!m) return false;
+            if (measurementQuality(m)) return true;
+            if (!(Number(m.day) > 0)) return false;
+            return (m.samples || []).some(function (smp) {
+                return smp && ['o2', 'co2', 'weight'].some(function (k) { return smp[k] != null && String(smp[k]).trim() !== ''; });
+            });
+        });
+    }
+    // How many rows the trial table holds. The dashboard always shows at least
+    // one, and typing into that first row never set packOptCount: a filled row 0
+    // is a trial, not free space. ('condition' shows MAP by default, so it does
+    // not count as filled.)
+    function trialRowCount(master) {
+        var m = master || {};
+        var n = parseInt(m.packOptCount, 10) || 0;
+        if (n < 1 && Object.keys(m).some(function (k) {
+            return /^pack_opt_0_/.test(k) && k !== 'pack_opt_0_condition' && m[k] != null && String(m[k]).trim() !== '';
+        })) n = 1;
+        return n;
+    }
+    // opts.projectId: the board project the report belongs to. Rows imported
+    // with it carry that project and the variant's id (pack_opt_<i>_project /
+    // _group), and those decide what is already in the table.
+    function applyReportToProduct(formData, report, opts) {
+        opts = opts || {};
+        var projectId = opts.projectId ? String(opts.projectId) : '';
+        var fd = formData || {};
+        var result = { formData: fd, imported: 0, updated: 0, skipped: 0, baselineFilled: 0, noResults: 0 };
+        if (!report || report.isPerfoTecReport !== true || !Array.isArray(report.groups)) return result;
+        var copy = function (o) { var c = {}; Object.keys(o || {}).forEach(function (k) { c[k] = o[k]; }); return c; };
+        var master = copy(fd['p2-pack-master']);
+        var p1c1 = copy(fd['p1-core-1']), p1c2 = copy(fd['p1-core-2']), p1c3 = copy(fd['p1-core-3']);
+        var count = trialRowCount(master);
+        var nums = reportNums;
+        // What is already in the table. A row the board imported names its
+        // project and variant, so the trial is recognised by those: a title edited
+        // afterwards does not make it look new, and another trial that happens to
+        // share its title, date and variant names is not taken for it. Rows
+        // without (the dashboard's own imports, older rows) match as they always
+        // did, on report reference, date and variant name.
+        // A stamp only counts while it still fits its own row (the _stamp holds
+        // the row's material, report reference and date as they were when it was
+        // written): an older dashboard moves those fields when it deletes a row,
+        // but not the stamp, and a drifted stamp is then just ignored.
+        var rowKey = function (p) { return String(master[p + 'material'] || '') + '|' + String(master[p + 'pdf'] || '') + '|' + String(master[p + 'date'] || ''); };
+        var sigs = {}, mine = {};
+        for (var i = 0; i < count; i++) {
+            var p = 'pack_opt_' + i + '_';
+            var rowProject = String(master[p + 'project'] || '');
+            if (projectId && rowProject && String(master[p + 'stamp'] || '') === rowKey(p)) {
+                if (rowProject === projectId) mine[String(master[p + 'group'] || '')] = { i: i, material: String(master[p + 'material'] || '') };
+                continue;
+            }
+            var legacyKey = (String(master[p + 'pdf'] || '') + '|' + String(master[p + 'date'] || '') + '|' + String(master[p + 'material'] || '')).toLowerCase();
+            // A row with neither rating nor curve is a placeholder an older import
+            // wrote before the variant had results; its results may fill it later.
+            if (!sigs[legacyKey]) sigs[legacyKey] = { i: i, placeholder: String(master[p + 'rating'] || '').trim() === '' && String(master[p + 'curve'] || '').trim() === '' };
+        }
+        var proj = report.project || {};
+        var fillIfEmpty = function (obj, key, val) {
+            if (val != null && val !== '' && (obj[key] == null ? '' : String(obj[key])).trim() === '') { obj[key] = String(val); return true; }
+            return false;
+        };
+        // Trial storage temperature = the most frequent temperature among the
+        // supply-chain stages, not proj.tempMin (the critical minimum).
+        var chainTempCounts = {};
+        (report.supplyChain || []).forEach(function (s) {
+            var v = nums(s && s.tempStart)[0];
+            if (v != null) chainTempCounts[v] = (chainTempCounts[v] || 0) + 1;
+        });
+        var tempKeys = Object.keys(chainTempCounts);
+        var chainTemp = tempKeys.length
+            ? tempKeys.map(function (k) { return [k, chainTempCounts[k]]; }).sort(function (a, b) { return b[1] - a[1]; })[0][0]
+            : (nums(proj.rrTemp)[0] || '');
+        var reportDate = String(proj.packingDate || proj.date || '');
+        // Trial Report column: the ORIGINAL source documents the data came from,
+        // else the report title. It feeds the duplicate signature as well.
+        var sourceDocs = Array.isArray(proj.sourceDocuments)
+            ? proj.sourceDocuments.filter(Boolean).join('; ')
+            : String(proj.sourceDocuments || '');
+        var reportRef = sourceDocs || String(proj.reportTitle || '');
+        var qualityOf = function (m) { var q = measurementQuality(m); return q ? String(q.value) : ''; };
+        var namesInReport = {};
+        report.groups.forEach(function (g) { if (g) namesInReport[String(g.name || (g.specs && g.specs.material) || '').toLowerCase()] = true; });
+        report.groups.forEach(function (g) {
+            g = g || {};
+            var specs = g.specs || {};
+            var variantName = g.name || String(specs.material ? specs.material : '');
+            if (!variantHasResults(g)) { result.noResults++; return; }
+            var sig = (reportRef + '|' + reportDate + '|' + variantName).toLowerCase();
+            // The row this variant already has: for rows the board wrote, by
+            // project and variant id (a renamed variant is still that variant,
+            // unless its old name is still in the report: then the id went to
+            // another one), else by report, date and name. A trial imported before
+            // its last days were scored is brought up to date. It used to be
+            // skipped as "already there", and a rename added it a second time.
+            var own = projectId ? mine[String(g.id)] : null;
+            if (own && own.material !== variantName && namesInReport[own.material.toLowerCase()]) own = null;
+            var hit = own ? null : sigs[sig], reuse = -1, placeholder = false;
+            if (hit === true) { result.skipped++; return; } // this variant twice in one report
+            if (own) reuse = own.i;
+            else if (hit) { reuse = hit.i; placeholder = hit.placeholder; }
+            sigs[sig] = true;
+            var sorted = (g.measurements || []).slice().sort(function (a, b) { return (Number(a.day) || 0) - (Number(b.day) || 0); });
+            var lastMeas = sorted.length ? sorted[sorted.length - 1] : {};
+            // Rating and its day describe the same moment: the last day with a quality.
+            var lastRated = sorted.slice().reverse().filter(function (m) { return qualityOf(m) !== ''; })[0];
+            // A day's value is the average of its samples, as the report shows it
+            // (one decimal, the report's rounding). It used to be the first
+            // sample only: one pack out of three. A gas reading outside 0-100 %
+            // is a typing error and left out.
+            var sampleValue = function (m, field) {
+                var gas = field === 'o2' || field === 'co2';
+                var vals = ((m && m.samples) || []).map(function (s) {
+                    var n = s ? reportNums(s[field]) : [];
+                    return n.length && String(s[field]).trim() !== '' ? parseFloat(n[0]) : NaN;
+                }).filter(function (n) { return isFinite(n) && (!gas || (n >= 0 && n <= 100)); });
+                if (!vals.length) return '';
+                var avg = vals.reduce(function (a, b) { return a + b; }, 0) / vals.length;
+                return String(Math.round(Number((avg * 10).toPrecision(12))) / 10);
+            };
+            var lastValid = function (field) { var f = sorted.slice().reverse().filter(function (m) { return sampleValue(m, field) !== ''; })[0]; return f ? sampleValue(f, field) : ''; };
+            var firstValid = function (field) { var f = sorted.filter(function (m) { return sampleValue(m, field) !== ''; })[0]; return f ? sampleValue(f, field) : ''; };
+            // The results of this variant.
+            var res = {
+                weight: firstValid('weight') || String(proj.startWeight || '') || String(specs.startWeight != null ? specs.startWeight : ''),
+                o2: lastValid('o2'),
+                co2: lastValid('co2'),
+                days: lastRated ? String(lastRated.day) : (lastMeas.day != null ? String(lastMeas.day) : ''),
+                rating: lastRated ? qualityOf(lastRated) : '',
+                // The whole quality-over-time curve, "day:score|day:score|...".
+                curve: sorted
+                    .map(function (m) { return { day: Number(m.day) || 0, q: qualityOf(m) }; })
+                    .filter(function (p) { return p.q !== ''; })
+                    .map(function (p) { return p.day + ':' + p.q; }).join('|')
+            };
+            // The role set in the report tool ('reference' | 'perfotec'; blank: the
+            // dashboard reads it from the name) and the round (2 = verification).
+            var role = String(specs.role || '').toLowerCase();
+            if (role !== 'reference' && role !== 'perfotec') role = '';
+            var roundNo = Number(g.round) > 1 ? Number(g.round) : (g.verificationOf != null ? 2 : 0);
+            // What an existing row takes from the report. Each row remembers what
+            // the report said when it was last imported (pack_opt_i_src): a field
+            // follows the report when the REPORT changed it since, and a value
+            // corrected by hand in the dashboard (the report unchanged) stays. An
+            // older row without that record takes empty fields, and the end result
+            // when the report has scored more days since.
+            var RESULT_FIELDS = ['o2', 'co2', 'days', 'rating', 'curve', 'weight'];
+            var updates = {};
+            if (reuse >= 0) {
+                var old = 'pack_opt_' + reuse + '_';
+                var cur = function (k) { return String(master[old + k] == null ? '' : master[old + k]); };
+                var src = null;
+                try { src = JSON.parse(cur('src') || 'null'); } catch (e) { src = null; }
+                var was = function (k) { return src && src[k] != null ? String(src[k]) : ''; };
+                if (placeholder) {
+                    RESULT_FIELDS.forEach(function (k) { if (res[k] !== '') updates[k] = res[k]; });
+                } else if (src) {
+                    RESULT_FIELDS.forEach(function (k) { if (res[k] !== '' && res[k] !== was(k) && res[k] !== cur(k)) updates[k] = res[k]; });
+                    if (src.material != null && variantName !== String(src.material) && variantName !== cur('material')) updates.material = variantName;
+                } else {
+                    var more = parseTrialCurve(res.curve).length > parseTrialCurve(cur('curve')).length;
+                    RESULT_FIELDS.forEach(function (k) { if (res[k] !== '' && res[k] !== cur(k) && (cur(k) === '' || (more && k !== 'weight'))) updates[k] = res[k]; });
+                    if (own && cur('material') !== variantName) updates.material = variantName;
+                }
+                var news = Object.keys(updates).length > 0 || (role && cur('role') !== role) || (roundNo > 1 && cur('round') !== String(roundNo));
+                if (!news) { result.skipped++; return; }
+            }
+            var at = 'pack_opt_' + (reuse >= 0 ? reuse : count++) + '_';
+            // A result the report does not have (no gas measured, say) never
+            // blanks one the row already holds.
+            var put = function (k, v) { if (reuse < 0) master[at + k] = v; else if (Object.prototype.hasOwnProperty.call(updates, k)) master[at + k] = updates[k]; };
+            // A new row gets everything; a placeholder row gets its results, and the
+            // descriptive fields only where they are still empty (hand edits stay).
+            var fill = function (k, v) { if (reuse < 0 || String(master[at + k] == null ? '' : master[at + k]).trim() === '') master[at + k] = v; };
+            fill('type', reportPackType(specs.packaging));
+            if (reuse < 0 || updates.material) master[at + 'material'] = variantName;
+            fill('variety', String(proj.type || proj.variety || ''));
+            fill('temp', chainTemp);
+            // Pack weight: measured sample weight, else the project's, else the group spec.
+            put('weight', res.weight);
+            // Transmission value = number of laser perforations ("holes"), not holeSize.
+            fill('trans', String(specs.holes != null && String(specs.holes).trim() !== '' ? specs.holes : ''));
+            put('o2', res.o2);
+            put('co2', res.co2);
+            fill('company', String(proj.company || ''));
+            fill('country', String(proj.country || ''));
+            put('days', res.days);
+            put('rating', res.rating);
+            master[at + 'date'] = reportDate;
+            master[at + 'pdf'] = reportRef;
+            var variantConcl = String((report.analysis && report.analysis.variantConclusions ? report.analysis.variantConclusions[String(g.id)] : '') || '');
+            var sourceNote = sourceDocs ? 'Extracted from: ' + sourceDocs + (proj.reportTitle ? ' (trial: ' + proj.reportTitle + ')' : '') : '';
+            fill('notes', variantConcl + (sourceNote ? (variantConcl ? '\n\n' : '') + sourceNote : ''));
+            put('curve', res.curve);
+            var rawAtm = String(specs.atmosphereStrategy || '').trim();
+            fill('condition', rawAtm === 'Open' ? 'OPEN' : rawAtm === 'MHP' ? 'MHP' : 'MAP');
+            if (role) master[at + 'role'] = role;
+            else if (reuse < 0) delete master[at + 'role'];
+            // A verification round (R2) is a round of its own: with its Round 1
+            // it can make a result "proven".
+            if (roundNo > 1) master[at + 'round'] = String(roundNo);
+            else if (reuse < 0) delete master[at + 'round'];
+            // What the report says now, for the next import to compare with.
+            master[at + 'src'] = JSON.stringify({ o2: res.o2, co2: res.co2, days: res.days, rating: res.rating, curve: res.curve, weight: res.weight, material: variantName });
+            if (projectId) {
+                master[at + 'project'] = projectId;
+                master[at + 'group'] = String(g.id);
+                // The stamp describes the row as it now is (a name kept by hand included).
+                master[at + 'stamp'] = String(master[at + 'material'] == null ? '' : master[at + 'material']) + '|' + reportRef + '|' + reportDate;
+            } else if (reuse < 0) {
+                // A new row in a slot an older dashboard left stamps in (it did not
+                // move them). A board row brought up to date keeps its identity.
+                delete master[at + 'project']; delete master[at + 'group']; delete master[at + 'stamp'];
+            }
+            if (reuse >= 0 && !placeholder) result.updated++;
+            else result.imported++;
+        });
+        // Baseline product properties: only fields that are still empty.
+        var acpN = nums(proj.acpO2), co2MaxN = nums(proj.co2Max), tempN = nums(proj.tempMin);
+        var o2T = nums(proj.o2Target), co2T = nums(proj.co2Target);
+        if (fillIfEmpty(p1c1, 'acp', acpN[0])) result.baselineFilled++;
+        if (fillIfEmpty(p1c1, 'critCO2', co2MaxN[0])) result.baselineFilled++;
+        if (fillIfEmpty(p1c1, 'minTemp', tempN[0])) result.baselineFilled++;
+        if (fillIfEmpty(p1c3, 'targetO2Min', o2T[0])) result.baselineFilled++;
+        if (fillIfEmpty(p1c3, 'targetO2Max', o2T[1] != null ? o2T[1] : o2T[0])) result.baselineFilled++;
+        if (fillIfEmpty(p1c3, 'targetCO2Min', co2T[0])) result.baselineFilled++;
+        if (fillIfEmpty(p1c3, 'targetCO2Max', co2T[1] != null ? co2T[1] : co2T[0])) result.baselineFilled++;
+        // Respiration rates measured with the FRM, at the measured temperature.
+        var rrTempN = nums(proj.rrTemp)[0];
+        if (rrTempN != null) {
+            if (fillIfEmpty(p1c2, 'temp' + rrTempN + '_O2', nums(proj.rrO2)[0])) result.baselineFilled++;
+            if (fillIfEmpty(p1c2, 'temp' + rrTempN + '_CO2', nums(proj.rrCO2)[0])) result.baselineFilled++;
+        }
+        if (!result.imported && !result.updated && !result.baselineFilled) return result;
+        var next = copy(fd);
+        if (result.imported || result.updated) { master.packOptCount = count; next['p2-pack-master'] = master; }
+        if (result.baselineFilled) { next['p1-core-1'] = p1c1; next['p1-core-2'] = p1c2; next['p1-core-3'] = p1c3; }
+        result.formData = next;
+        return result;
+    }
+
+    // A board project's trial into the product it is LINKED to, on disk. Runs
+    // when a card moves to Dashboard, and again from the note on the card. The
+    // link is the authority: no guessing by product name (that once put "Flat
+    // Bean" into "Green Beans"). Expected obstacles resolve rather than throw,
+    // so the board can say what stands in the way:
+    //   { ok: false, reason: 'no-card' | 'not-linked' | 'no-report' | 'not-a-report'
+    //       | 'product-missing' | 'state-mismatch' | 'no-trial-data' | 'busy' }
+    //   { ok: true, imported, skipped, baselineFilled, alreadyThere }
+    // opts.force adds a trial whose processing state differs from the product's.
+    // The card itself is not touched here: the board clears its note through its
+    // own save path, which keeps its snapshot of the card in step.
+    function importTrialIntoProduct(projectId, opts) {
+        opts = opts || {};
+        return readCard(projectId).then(function (card) {
+            if (!card || card.deletedAt) return { ok: false, reason: 'no-card' };
+            if (!card.productId) return { ok: false, reason: 'not-linked', productName: card.product || '' };
+            return readPhaseFile(projectId, 'report').then(function (report) {
+                if (!report) return { ok: false, reason: 'no-report' };
+                if (report.isPerfoTecReport !== true || !Array.isArray(report.groups)) return { ok: false, reason: 'not-a-report' };
+                var attempt = function (tries) {
+                    return readProduct(card.productId).then(function (product) {
+                        // (runs under the product's lock, see withProductLock below)
+                        if (!product || product.deletedAt) return { ok: false, reason: 'product-missing', productId: card.productId, productName: card.product || '' };
+                        var label = [product.name, product.variety].filter(Boolean).join(' ');
+                        var rs = reportState(report);
+                        if (rs && product.state && rs !== product.state && !opts.force) {
+                            return { ok: false, reason: 'state-mismatch', reportState: rs, productState: product.state, productId: product.id, productName: label };
+                        }
+                        var r = applyReportToProduct(product.formData, report, { projectId: projectId });
+                        // The trial is its variants: no new row means it is either in
+                        // already, or has no results yet — never a write of baseline
+                        // properties alone.
+                        if (!r.imported && !r.updated) {
+                            return r.skipped
+                                ? { ok: true, alreadyThere: true, imported: 0, updated: 0, skipped: r.skipped, baselineFilled: 0, productId: product.id, productName: label }
+                                : { ok: false, reason: 'no-trial-data', productId: product.id, productName: label };
+                        }
+                        var next = {};
+                        Object.keys(product).forEach(function (k) { next[k] = product[k]; });
+                        next.formData = r.formData;
+                        return writeProductRecordUnlocked(next, { baseRev: product.rev }).then(function () {
+                            return { ok: true, alreadyThere: false, imported: r.imported, updated: r.updated, skipped: r.skipped, baselineFilled: r.baselineFilled, productId: product.id, productName: label };
+                        }, function (err) {
+                            // Someone saved the product between the read and the
+                            // write: build on their version instead (once).
+                            if (err && err.code === 'CONFLICT') return tries < 1 ? attempt(tries + 1) : { ok: false, reason: 'busy', productId: product.id, productName: label };
+                            throw err;
+                        });
+                    });
+                };
+                // Read, convert and write as one step per product, so two pushes
+                // into it (two cards dragged in a row) queue instead of racing.
+                return withProductLock(card.productId, function () { return attempt(0); });
+            });
+        });
+    }
+
     // Read a project's data, preferring `preferPhase`'s file but falling back to
     // the most-advanced phase file that has REAL content (newest → oldest). This
     // makes a tool open with the latest meaningful content even when its own phase
     // file is missing OR is a blank stub that shadowed earlier data (the drag
     // "opens empty" bug). If nothing has content, returns the first file that
-    // exists (so a genuinely new project still opens); null if none exist.
+    // exists (so a genuinely new project still opens); null if none exist. An
+    // emptied file ({}) does not count as existing: handed to a tool, it reads
+    // as unrecognised and switches the autosave off.
     function readProjectData(projectId, preferPhase) {
         return requireGrantedRoot().then(function (root) {
             return getProjectDir(root, projectId, false).then(function (dir) {
@@ -410,7 +1055,7 @@
                     if (idx >= files.length) return firstExisting;
                     return readJSONFromDir(dir, files[idx]).then(function (d) {
                         if (d && hasContent(d)) return d;
-                        return tryNext(idx + 1, firstExisting || d || null);
+                        return tryNext(idx + 1, firstExisting || (isEmptiedDoc(d) ? null : d) || null);
                     });
                 }
                 return tryNext(0, null);
@@ -418,6 +1063,90 @@
                 if (err && err.name === 'NotFoundError') return null;
                 throw err;
             });
+        });
+    }
+
+    // ---- Project titles ------------------------------------------------------
+    // A project's title is typed in the proposal and report tools
+    // (project.reportTitle), which mirror it onto the card as they save. For a
+    // card from before that the board shows it from the phase file — read, never
+    // written back: a background write would race the board's own saves. And
+    // only the head of the file: a report averages 8 MB and reaches 136 MB, the
+    // title sits at the top (under 8 KB in every live file, September 2026).
+    // Report first: it is the later of the two.
+    var TITLE_HEAD_BYTES = 65536;
+    // The tools' own placeholders are not a title anybody chose.
+    var TITLE_PLACEHOLDERS = { 'quality report map test': 1, 'trial proposal': 1, 'trial voorstel': 1, 'propuesta de prueba': 1 };
+    function projectTitle(raw) {
+        var s = String(raw == null ? '' : raw).replace(/\s+/g, ' ').trim();
+        return TITLE_PLACEHOLDERS[s.toLowerCase()] ? '' : s;
+    }
+    function titleFromHead(text) {
+        var m = /"reportTitle"\s*:\s*"((?:[^"\\]|\\.)*)"/.exec(text || '');
+        if (!m) return '';
+        try { return projectTitle(JSON.parse('"' + m[1] + '"')); } catch (e) { return ''; }
+    }
+    // What a file's head held, per browser, keyed on the file's size and date:
+    // a file is read again only once it changed. Even a head read makes OneDrive
+    // download the whole file when it is kept online-only.
+    var TITLE_CACHE_KEY = 'perfotec-project-titles';
+    function titleCache() {
+        try { return JSON.parse(window.localStorage.getItem(TITLE_CACHE_KEY) || '{}') || {}; } catch (e) { return {}; }
+    }
+    function rememberTitle(key, file, title) {
+        var c = titleCache();
+        c[key] = { s: file.size, m: file.lastModified, t: title };
+        try { window.localStorage.setItem(TITLE_CACHE_KEY, JSON.stringify(c)); } catch (e) { /* private mode */ }
+    }
+    function readProjectTitle(projectId) {
+        return requireGrantedRoot().then(function (root) {
+            return getProjectDir(root, projectId, false);
+        }).then(function (dir) {
+            var files = [PHASE_BY_KEY.report.file, PHASE_BY_KEY.proposal.file];
+            function tryNext(i) {
+                if (i >= files.length) return '';
+                var key = projectId + '/' + files[i];
+                return dir.getFileHandle(files[i]).then(function (fh) {
+                    return fh.getFile();
+                }).then(function (file) {
+                    var hit = titleCache()[key];
+                    if (hit && hit.s === file.size && hit.m === file.lastModified) return hit.t || '';
+                    return file.slice(0, TITLE_HEAD_BYTES).text().then(function (head) {
+                        var t = titleFromHead(head);
+                        rememberTitle(key, file, t);
+                        return t;
+                    });
+                }).then(function (t) {
+                    return t || tryNext(i + 1);
+                }, function (err) {
+                    if (err && err.name === 'NotFoundError') return tryNext(i + 1);
+                    throw err;
+                });
+            }
+            return tryNext(0);
+        }).catch(function (err) {
+            if (err && err.name === 'NotFoundError') return '';
+            throw err;
+        });
+    }
+
+    // The first `maxBytes` of a project's phase file as text, or null when the
+    // file does not exist: a field written at the top of the document (the
+    // report's docRev) without reading a 100 MB report.
+    function readPhaseFileHead(projectId, phaseKey, maxBytes) {
+        var phase = PHASE_BY_KEY[phaseKey];
+        if (!phase) return Promise.reject(new Error('Unknown phase: ' + phaseKey));
+        return requireGrantedRoot().then(function (root) {
+            return getProjectDir(root, projectId, false);
+        }).then(function (dir) {
+            return dir.getFileHandle(phase.file);
+        }).then(function (fh) {
+            return fh.getFile();
+        }).then(function (file) {
+            return file.slice(0, maxBytes || 4096).text();
+        }).catch(function (err) {
+            if (err && err.name === 'NotFoundError') return null;
+            throw err;
         });
     }
 
@@ -429,6 +1158,94 @@
                 return writeJSONToDir(dir, phase.file, dataObj);
             });
         }));
+    }
+
+    // ---- The documents of a copied project ------------------------------------
+    // A copy is a NEW trial with the same set-up, so it gets its own documents.
+    // Set-up documents (intake, proposal) are carried over as they are; a report
+    // never is, because its measurements are the original trial's results.
+    //   * With a set-up document to carry, the report is left out: the tools
+    //     fall back to that document, and the board's forward-copy builds the
+    //     copy's report from its own proposal when it gets there.
+    //   * With only a report, its set-up (stripTrialResults) becomes the copy's
+    //     PROPOSAL, the set-up document of a new trial. Kept as the copy's
+    //     report instead, it outlived the proposal: move the copy back to
+    //     Proposal, adjust it, move it on, and Report still showed the
+    //     original's set-up, because the forward-copy never overwrites a
+    //     report that has content.
+    // Afterwards every report document the copy owns is checked for results and
+    // stripped again if any got through. It is never emptied: until October 2026
+    // this check compared the trial's shape, which a stripped report keeps by
+    // design, so it emptied the copy's only document every time (isEmptiedDoc).
+    // keys: the original's phase keys (its card's `files`). Resolves with the
+    // copy's `files` map.
+    function copyProjectFiles(sourceId, targetId, keys) {
+        var files = {}, report = null, carried = false;
+        // Accepted and Report share report.json: read and write each file once.
+        var byFile = {}, order = [];
+        (keys || []).forEach(function (k) {
+            var ph = PHASE_BY_KEY[k];
+            if (!ph) return;
+            if (!byFile[ph.file]) { byFile[ph.file] = []; order.push(ph.file); }
+            if (byFile[ph.file].indexOf(k) === -1) byFile[ph.file].push(k);
+        });
+        var chain = Promise.resolve();
+        order.forEach(function (name) {
+            var ks = byFile[name];
+            chain = chain.then(function () {
+                return readPhaseFile(sourceId, ks[0]).then(function (data) {
+                    if (!data || !hasContent(data)) return;
+                    if (data.isPerfoTecReport) { report = data; return; }
+                    return writePhaseFile(targetId, ks[0], data).then(function () {
+                        ks.forEach(function (k) { files[k] = true; });
+                        carried = true;
+                    });
+                }).catch(function () { /* skip this document, keep the rest */ });
+            });
+        });
+        return chain.then(function () {
+            if (!report || carried) return;
+            return writePhaseFile(targetId, 'proposal', stripTrialResults(report)).then(function () {
+                files.proposal = true;
+            }, function () { /* leave it out rather than write half a document */ });
+        }).then(function () {
+            var check = Promise.resolve();
+            Object.keys(files).forEach(function (k) {
+                check = check.then(function () {
+                    return readPhaseFile(targetId, k).then(function (mine) {
+                        if (!mine || !mine.isPerfoTecReport || !trialResultsIn(mine)) return;
+                        if (typeof console !== 'undefined') console.warn('copyProjectFiles: results reached ' + k + ' of the copy, stripped them');
+                        return writePhaseFile(targetId, k, stripTrialResults(mine));
+                    }).catch(function () { /* written above from a set-up; leave it */ });
+                });
+            });
+            return check;
+        }).then(function () { return files; });
+    }
+
+    // A copy made before October 2026 could be left with nothing but an emptied
+    // file (see copyProjectFiles). Opening it gives it its set-up from the
+    // original after all — only when the copy holds nothing else, so nothing
+    // anyone typed is ever replaced. Resolves with the files written ({} when
+    // there was nothing to repair).
+    function repairEmptiedCopy(copyId, sourceId, keys) {
+        if (!copyId || !sourceId) return Promise.resolve({});
+        var names = [];
+        PHASES.forEach(function (p) { if (names.indexOf(p.file) === -1) names.push(p.file); });
+        names.push(SEED_FILE);
+        return requireGrantedRoot().then(function (root) {
+            return getProjectDir(root, copyId, false).then(function (dir) {
+                return Promise.all(names.map(function (n) { return readJSONFromDir(dir, n); }));
+            }, function (err) {
+                if (err && err.name === 'NotFoundError') return [];
+                throw err;
+            });
+        }).then(function (docs) {
+            var emptied = docs.some(isEmptiedDoc);
+            var other = docs.some(function (d) { return d != null && !isEmptiedDoc(d); });
+            if (!emptied || other) return {};
+            return copyProjectFiles(sourceId, copyId, keys && keys.length ? keys : PHASES.map(function (p) { return p.key; }));
+        });
     }
 
     // Best-effort removal of a project's folder. Manifest cleanup is the
@@ -675,7 +1492,29 @@
         return isFinite(n) && n >= 0 ? n : 0;
     }
 
+    // One product written at a time. Its rev check is a read and then a write,
+    // so two writers overlapping in between both pass it and the later one wins
+    // silently — two trials pushed into one product at once kept one. Web Locks
+    // make it hold across this browser's tabs (board and dashboard share an
+    // origin); a promise chain per product where they are missing. Other
+    // machines are still only caught by the rev check itself.
+    var _productChains = {};
+    function withProductLock(id, fn) {
+        if (typeof navigator !== 'undefined' && navigator && navigator.locks && typeof navigator.locks.request === 'function') {
+            return navigator.locks.request('perfotec-product:' + id, function () { return fn(); });
+        }
+        var prev = _productChains[id] || Promise.resolve();
+        var run = prev.then(fn, fn);
+        _productChains[id] = run.then(function () { }, function () { });
+        return run;
+    }
+
     function writeProductRecord(record, opts) {
+        if (!record || !record.id) return Promise.reject(new Error('Product needs an id'));
+        return withProductLock(record.id, function () { return writeProductRecordUnlocked(record, opts); });
+    }
+
+    function writeProductRecordUnlocked(record, opts) {
         opts = opts || {};
         if (!record || !record.id) return Promise.reject(new Error('Product needs an id'));
         var baseRev = (opts.baseRev != null) ? revOf(opts.baseRev) : revOf(record.rev);
@@ -717,21 +1556,27 @@
     // deletedAt — so there is no index entry left to remove. force, because the
     // record was just read from disk and the delete is the user's decision, not
     // an edit racing someone else's.
+    // Read and write as one step under the product's lock: read outside it, a
+    // trial imported in between was written over by the tombstone.
     function deleteProduct(id) {
-        return readProduct(id).then(function (rec) {
-            if (!rec) return null;
-            rec.deletedAt = new Date().toISOString();
-            return writeProductRecord(rec, { baseRev: rec.rev, force: true });
+        return withProductLock(id, function () {
+            return readProduct(id).then(function (rec) {
+                if (!rec) return null;
+                rec.deletedAt = new Date().toISOString();
+                return writeProductRecordUnlocked(rec, { baseRev: rec.rev, force: true });
+            });
         });
     }
 
     function restoreProduct(id) {
-        return readProduct(id).then(function (rec) {
-            if (!rec) return null;
-            // Remove the key rather than nulling it, so a restored product is
-            // indistinguishable from one that was never deleted.
-            delete rec.deletedAt;
-            return writeProductRecord(rec, { baseRev: rec.rev, force: true });
+        return withProductLock(id, function () {
+            return readProduct(id).then(function (rec) {
+                if (!rec) return null;
+                // Remove the key rather than nulling it, so a restored product is
+                // indistinguishable from one that was never deleted.
+                delete rec.deletedAt;
+                return writeProductRecordUnlocked(rec, { baseRev: rec.rev, force: true });
+            });
         });
     }
 
@@ -1405,6 +2250,7 @@
     }
 
     var _lastRootArtefacts = [];
+    var _lastDeletedStamps = [];
 
     // List the root itself for sync artefacts. Cheap (a dozen entries) and the
     // only way a conflict copy of a shared root file gets noticed at all.
@@ -1449,6 +2295,10 @@
             }));
         }).then(function (cards) {
             var byId = {}, kept = [];
+            // Who deleted a card, and when, is evidence of activity that the
+            // board's list never sees — capture it on the read that happens anyway.
+            _lastDeletedStamps = cards.filter(function (c) { return c && c.deletedAt && c.updatedBy && c.updatedAt; })
+                .map(function (c) { return { user: String(c.updatedBy), at: c.updatedAt }; });
             cards.forEach(function (c) {
                 if (!c) return;
                 if (!includeDeleted && c.deletedAt) return;
@@ -1495,6 +2345,42 @@
             next.updatedAt = new Date().toISOString();
             next.updatedBy = getUserLabel() || next.updatedBy || '';
             return IO.writeJSON(cardPath(card.id), next).then(function () { return next; });
+        });
+    }
+
+    // A product merged into another (the dashboard's pipeline merge): the cards
+    // that pointed at the product that goes away point at the one that stays.
+    // Each card is written against its own rev; one someone else just moved is
+    // read again and retried once. Resolves with the number of cards relinked.
+    function relinkProductCards(fromId, toId, toName) {
+        if (!fromId || !toId || fromId === toId) return Promise.resolve(0);
+        var relabel = function (c) { c.productId = toId; if (toName) c.product = toName; };
+        return dbMode().then(function (mode) {
+            if (mode === 'legacy') {
+                return readManifest().then(function (m) {
+                    var n = 0;
+                    (m.projects || []).forEach(function (c) { if (c && c.productId === fromId) { relabel(c); n++; } });
+                    return n ? writeManifest(m).then(function () { return n; }) : 0;
+                });
+            }
+            return readCards(true).then(function (cards) {
+                var n = 0;
+                return cards.filter(function (c) { return c && c.productId === fromId; }).reduce(function (chain, c) {
+                    return chain.then(function () {
+                        var next = {};
+                        Object.keys(c).forEach(function (k) { next[k] = c[k]; });
+                        relabel(next);
+                        return writeCard(next, { baseRev: c.rev }).then(function () { n++; }, function (err) {
+                            if (!err || err.code !== 'CONFLICT') throw err;
+                            return readCard(c.id).then(function (fresh) {
+                                if (!fresh || fresh.productId !== fromId) return;
+                                relabel(fresh);
+                                return writeCard(fresh, { baseRev: fresh.rev }).then(function () { n++; });
+                            });
+                        });
+                    });
+                }, Promise.resolve()).then(function () { return n; });
+            });
         });
     }
 
@@ -1731,7 +2617,7 @@
         var beat = function () {
             permissionState().then(function (state) {
                 if (state !== 'granted') return;   // no folder bound yet, nothing to announce
-                return touchPresence();
+                return touchPresence().then(function () { return touchSeen(); });
             }).catch(function () { /* never surface */ });
         };
         beat();
@@ -1753,6 +2639,97 @@
     // Announce from every page that loads this file, so the list covers the board
     // AND the tools. Deferred to a task so the module has finished evaluating.
     setTimeout(startPresence, 0);
+
+    /* ---- last seen ----------------------------------------------------------
+     * Presence answers "who is here right now"; this answers "when was this
+     * person last here", and has to survive what presence does not:
+     *   * a colleague on an older copy of the tools. The first presence code
+     *     deleted every presence file older than 24 hours — everyone's last
+     *     seen with it — and a copy from before presence writes none at all;
+     *   * work done in a tool: editing an intake or report re-stamps no card
+     *     when no card field changes, and a card only remembers its LAST writer.
+     * So: a folder no older version knows about (.seen), written by every page
+     * every few minutes, plus what even old versions leave behind — the
+     * per-project locks, and who deleted a card.
+     * ---------------------------------------------------------------------- */
+    var SEEN_DIR = '.seen';
+    var SEEN_EVERY_MS = 5 * 60 * 1000;
+    var _seenAt = 0;
+
+    // One file per SESSION, like presence, so two devices never write one file.
+    function touchSeen() {
+        var user = getUserLabel();
+        if (!user) return Promise.resolve(false);
+        var now = Date.now();
+        if (now - _seenAt < SEEN_EVERY_MS) return Promise.resolve(false);
+        _seenAt = now;
+        return IO.writeJSON([SEEN_DIR, sessionId() + '.json'], {
+            user: user, sessionId: sessionId(), page: presencePage(), at: new Date(now).toISOString()
+        }).then(function () { return true; }).catch(function () { _seenAt = 0; return false; });
+    }
+
+    // Every trace of someone having worked here, as [{ user, at, source }]. The
+    // caller keeps the newest per person. Never rejects.
+    function readActivity() {
+        var out = [];
+        var noop = function () { };
+        var seen = IO.list([SEEN_DIR]).then(function (entries) {
+            var files = entries.filter(function (e) { return e.kind === 'file' && /\.json$/i.test(e.name); });
+            return Promise.all(files.map(function (e) {
+                return IO.readJSON([SEEN_DIR, e.name]).then(function (r) { return r && r.user && r.at ? { r: r, file: e.name } : null; }).catch(function () { return null; });
+            })).then(function (rows) {
+                // Keep each person's newest file, sweep the rest (never the newest).
+                var newest = {}, superseded = [];
+                rows.filter(Boolean).forEach(function (x) {
+                    var name = String(x.r.user).trim(), t = Date.parse(x.r.at) || 0;
+                    var prev = newest[name];
+                    if (!prev) { newest[name] = { x: x, t: t }; return; }
+                    if (t > prev.t) { superseded.push(prev.x.file); newest[name] = { x: x, t: t }; }
+                    else superseded.push(x.file);
+                });
+                Object.keys(newest).forEach(function (n) { out.push({ user: n, at: newest[n].x.r.at, page: newest[n].x.r.page || '', source: 'seen' }); });
+                superseded.forEach(function (file) { IO.remove([SEEN_DIR, file]).catch(noop); });
+            });
+        }).catch(noop);
+        // A lock is left behind by every version since cards exist, whichever
+        // tool had the project open — the evidence for a colleague on an old copy.
+        var locks = IO.list([PROJECTS_DIR]).then(function (dirs) {
+            return Promise.all(dirs.filter(function (d) { return d.kind === 'directory'; }).map(function (d) {
+                return IO.readJSON([PROJECTS_DIR, d.name, LOCK_FILE]).then(function (l) {
+                    if (l && l.user && l.at) out.push({ user: String(l.user), at: l.at, source: 'lock' });
+                }).catch(noop);
+            }));
+        }).catch(noop);
+        _lastDeletedStamps.forEach(function (d) { out.push({ user: d.user, at: d.at, source: 'deleted-card' }); });
+        return Promise.all([seen, locks]).then(function () { return out; });
+    }
+
+    // Who a typed name label is in the people registry. The board used to ask
+    // for a name with "e.g. Luke" as the example, so labels are often a first
+    // name or a nickname ("Chris" for Christiaan Mulder) that never matched
+    // the registry's full names: one colleague showed up as two people, and the
+    // one assigned to the projects never had a "last seen".
+    //   the same name in any case -> that person;
+    //   the ONE registry name whose first name IS the label -> that person
+    //   ("Bas" is Bas de Vries, although Bastiaan de Vries also starts so);
+    //   otherwise the ONE registry name that starts with the label (3+ letters)
+    //   -> that person; ambiguous or unknown -> the label as typed.
+    function resolvePersonName(label, names) {
+        var l = String(label == null ? '' : label).replace(/\s+/g, ' ').trim();
+        if (!l) return '';
+        var list = [];
+        (names || []).forEach(function (n) {
+            n = String(n == null ? '' : n).replace(/\s+/g, ' ').trim();
+            if (n && list.indexOf(n) < 0) list.push(n);
+        });
+        var low = l.toLowerCase();
+        for (var i = 0; i < list.length; i++) if (list[i].toLowerCase() === low) return list[i];
+        if (low.length < 3) return l;
+        var first = list.filter(function (n) { return n.toLowerCase().split(' ')[0] === low; });
+        if (first.length === 1) return first[0];
+        var hits = list.filter(function (n) { return n.toLowerCase().indexOf(low) === 0; });
+        return hits.length === 1 ? hits[0] : l;
+    }
 
     // ---- migration: board.json -> cards/ -----------------------------------
     // Idempotent: does nothing once meta.json exists. The original board.json is
@@ -1818,8 +2795,13 @@
     // { rev, json }. Only ids in here may be deleted by a write — a card that
     // appeared after our read belongs to someone else and is left alone.
     var _lastRead = null;
+    // Reads can overlap (a focus reload during a save's own re-read). Only a read
+    // that STARTED after the one behind the current snapshot may replace it, so a
+    // slow older read never moves the snapshot back behind the folder.
+    var _readGen = 0, _lastReadGen = 0;
 
     function readManifest() {
+        var gen = ++_readGen;
         return dbMode().then(function (mode) {
             if (mode === 'legacy') return readLegacyManifest();
             return Promise.all([readCards(false), readPeople()]).then(function (res) {
@@ -1845,7 +2827,7 @@
                 // write as the duplicate-id case above.
                 migratePhases(manifest);
                 cards.forEach(function (c) { snap.cards[c.id] = { rev: c.rev, json: JSON.stringify(c) }; });
-                _lastRead = snap;
+                if (gen > _lastReadGen) { _lastRead = snap; _lastReadGen = gen; }
                 return manifest;
             });
         });
@@ -1896,16 +2878,19 @@
                 // self-conflict) and — worse — writePeople took its rev-mismatch
                 // branch, which merges additively by name: a person just deleted
                 // came back, and a rename left both spellings in the list.
-                return readManifest().then(function () {
+                // The folder as re-read is also the result: the board takes it into
+                // memory, so its next save does not diff an older copy against it.
+                return readManifest().then(function (fresh) {
                     if (conflicts.length) {
                         var e = new Error(conflicts.length === 1
                             ? conflicts[0].message + '. Reload the board to see their version.'
                             : conflicts.length + ' cards were changed by someone else while you were editing. Reload the board.');
                         e.code = 'CONFLICTS';
                         e.conflicts = conflicts;
+                        e.fresh = fresh;   // the folder as re-read, winners included
                         throw e;
                     }
-                    return true;
+                    return fresh;
                 });
             }));
         });
@@ -1966,9 +2951,17 @@
             try { beforeObj = JSON.parse(before.json); } catch (e) { throw err; }
             var theirs = err.theirs;
             var mine = cardFieldDiff(beforeObj, card);
-            if (!mine.keys.length) return theirs;          // nothing of ours to apply
             var theirChange = cardFieldDiff(beforeObj, theirs);
-            var collides = mine.keys.some(function (k) { return theirChange.keys.indexOf(k) !== -1; });
+            // Both sides bringing a field to the same value — two writers clearing
+            // the same "not yet in the dashboard" note, say — is agreement, not a
+            // conflict to put in front of the user.
+            var agreed = function (k) {
+                if (mine.removed.indexOf(k) !== -1) return !(k in theirs);
+                return JSON.stringify(mine.set[k]) === JSON.stringify(theirs[k]);
+            };
+            var todo = mine.keys.filter(function (k) { return !agreed(k); });
+            if (!todo.length) return theirs;               // nothing of ours left to apply
+            var collides = todo.some(function (k) { return theirChange.keys.indexOf(k) !== -1; });
             if (collides) throw err;                        // a real disagreement
             var merged = {};
             Object.keys(theirs).forEach(function (k) { merged[k] = theirs[k]; });
@@ -2093,6 +3086,7 @@
         if (name === BACKUP_DIR) return true;
         if (name === LOCK_FILE) return true;
         if (name === PRESENCE_DIR) return true;   // who was online last month is not data
+        if (name === SEEN_DIR) return true;
         if (kind === 'file' && isSyncArtefact(name)) return true;
         return false;
     }
@@ -2336,6 +3330,7 @@
         readCards: readCards,
         readCard: readCard,
         writeCard: writeCard,
+        relinkProductCards: relinkProductCards,
         listCardIds: listCardIds,
         softDeleteCard: softDeleteCard,
         restoreCard: restoreCard,
@@ -2361,6 +3356,8 @@
         stopPresence: stopPresence,
         sessionId: sessionId,
         PRESENCE_STALE_MS: PRESENCE_STALE_MS,
+        readActivity: readActivity,
+        resolvePersonName: resolvePersonName,
         readLegacyManifest: readLegacyManifest,
         // Backups
         BACKUP_DIR: BACKUP_DIR,
@@ -2376,7 +3373,27 @@
         readPhaseFile: readPhaseFile,
         readProjectData: readProjectData,
         hasContent: hasContent,
+        copyProjectFiles: copyProjectFiles,
+        repairEmptiedCopy: repairEmptiedCopy,
+        stripTrialResults: stripTrialResults,
+        trialResultsIn: trialResultsIn,
         measurementQuality: measurementQuality,
+        isProductTrial: isProductTrial,
+        trialStatus: trialStatus,
+        summariseTrial: summariseTrial,
+        qualityLimit: QUALITY_LIMIT,
+        parseTrialCurve: parseTrialCurve,
+        curveShelfLife: curveShelfLife,
+        trialRowRole: trialRowRole,
+        trialRows: trialRows,
+        trialBestPractice: trialBestPractice,
+        readProductTrials: readProductTrials,
+        applyReportToProduct: applyReportToProduct,
+        trialRowCount: trialRowCount,
+        importTrialIntoProduct: importTrialIntoProduct,
+        readProjectTitle: readProjectTitle,
+        readPhaseFileHead: readPhaseFileHead,
+        projectTitle: projectTitle,
         measurementLegacyQuality: measurementLegacyQuality,
         writePhaseFile: writePhaseFile,
         deleteProjectFiles: deleteProjectFiles,
@@ -2393,6 +3410,7 @@
         writeProductIndex: writeProductIndex,
         legacyProductIndexPresent: legacyProductIndexPresent,
         readProduct: readProduct,
+        saveProductConflictCopy: saveProductConflictCopy,
         readAllProducts: readAllProducts,
         writeProduct: writeProduct,
         writeProductRecord: writeProductRecord,
