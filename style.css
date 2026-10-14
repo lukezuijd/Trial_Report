@@ -509,8 +509,11 @@ h1, h2, h3, h4, h5, h6 {
     /* Legacy alias — some older markup used #print-area */
     #print-area { width: 100%; padding: 0; margin: 0; }
 
-    /* --- Tool-specific outer shells that must collapse on print --- */
-    .bg-slate-600, .bg-slate-100 {
+    /* --- Tool-specific outer shells that must collapse on print ---
+       Only the shells around the printed page: inside it the same classes are
+       content (the grey header bands of the criteria tables, photo frames),
+       which lost their band and padding in the PDF but not in Word. */
+    .bg-slate-600:not(#print-content *), .bg-slate-100:not(#print-content *) {
         background-color: var(--brand-white) !important;
         padding: 0 !important;
     }
@@ -536,6 +539,22 @@ h1, h2, h3, h4, h5, h6 {
     table,
     .report-table,
     .report-section-title + * {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    /* Opt-in for a table that can be longer than a page (one row per
+       variant): it runs on over pages between rows, its header repeats, and a
+       row, or a tbody marked .print-keep, is never split. Kept whole like the
+       rest, such a table was pushed to the next page and left its chapter
+       title alone on an otherwise empty one. */
+    table.print-flow {
+        break-inside: auto !important;
+        page-break-inside: auto !important;
+    }
+    table.print-flow thead { display: table-header-group; }
+    table.print-flow tr,
+    table.print-flow tbody.print-keep {
         break-inside: avoid;
         page-break-inside: avoid;
     }
@@ -641,6 +660,30 @@ h1, h2, h3, h4, h5, h6 {
     /* Tables that cannot become anything else on a phone: let them scroll
        sideways inside their own container instead of widening the page. */
     .overflow-x-auto { -webkit-overflow-scrolling: touch; }
+}
+
+/* An anonymised report with images nobody checked yet: Ctrl+P prints a notice,
+   not the report. The preview's PDF button asks first and then sets
+   body.print-approved for that one print. */
+.print-blocked-note { display: none; }
+@media print {
+    body:not(.print-approved) .print-blocked #print-content { display: none !important; }
+    body:not(.print-approved) .print-blocked .print-blocked-note { display: block !important; visibility: visible !important; }
+}
+
+/* Controls that appear on mouse hover (delete a photo, a contact, a variant)
+   have no hover on a touch screen: they were invisible there but still took
+   taps, so a tap beside the variant list deleted a variant. Show them. The
+   variant card's move/copy/delete block also leaves its absolute corner spot,
+   which on a phone hung below the card over the blank space under the list. */
+@media (hover: none) {
+    .hover-reveal { opacity: 1 !important; }
+    .variant-actions {
+        position: static !important;
+        flex-direction: row !important;
+        justify-content: flex-end;
+        margin-top: 0.5rem;
+    }
 }
 
 /* Nothing may push the page wider than the screen. Horizontal page scroll makes
