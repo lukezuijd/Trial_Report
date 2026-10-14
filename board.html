@@ -14,16 +14,16 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap">
 
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com/3.4.17"></script>
     <!-- PerfoTec Brand 2.0 palette, type and radii for Tailwind. Must load
          AFTER the Play CDN, which is what defines the global `tailwind`. -->
     <script src="brand.js?v=e549b527"></script>
     <!-- Pinned to Babel 7 (v8 breaks the ESM importmap integration). -->
-    <script src="https://unpkg.com/@babel/standalone@7/babel.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.29.10/babel.min.js"></script>
 
-    <link rel="stylesheet" href="style.css?v=e8637b4c">
+    <link rel="stylesheet" href="style.css?v=df20be12">
     <script src="config.js?v=7b34913e"></script>
-    <script src="board-db.js?v=b978be9b"></script>
+    <script src="board-db.js?v=00b92723"></script>
 </head>
 <body class="bg-[var(--pf-mist)] text-[var(--pf-charcoal)]">
     <a href="#main-content" class="skip-to-content">Skip to content</a>
@@ -33,8 +33,9 @@
     </div>
 
     <script type="text/babel" data-type="module" data-presets="react">
-        import React, { useState, useEffect, useMemo, useCallback, useRef } from 'https://esm.sh/react@18.2.0';
+        import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from 'https://esm.sh/react@18.2.0';
         import { createRoot } from 'https://esm.sh/react-dom@18.2.0/client';
+        import { createPortal } from 'https://esm.sh/react-dom@18.2.0';
         import {
             FolderOpen, Plus, Filter, X, Trash2, Pencil, ExternalLink,
             GripVertical, AlertTriangle, RefreshCw, Calendar, User, Building2,
@@ -42,8 +43,8 @@
             ClipboardList, FileText, BarChart3, UserCog, Lock, CloudOff,
             Image as ImageIcon, Upload, Settings, ChevronLeft, ChevronRight, List,
             Archive, RotateCcw, Search, Users, Info,
-            PauseCircle, Ban, Copy
-        } from 'https://esm.sh/lucide-react@0.292.0';
+            PauseCircle, Ban, Copy, Target, Trophy
+        } from 'https://esm.sh/lucide-react@0.292.0?deps=react@18.2.0';
 
         const Board = window.PerfoTecBoard;
 
@@ -105,7 +106,7 @@
                 // Shared database (schema 2.0)
                 whoTitle: 'Who are you?',
                 whoDesc: 'The team shares one database. Your name is stamped on every change so everyone can see who moved a card — and so the board can show when a colleague is already working on a project.',
-                whoPlaceholder: 'e.g. Luke',
+                whoPlaceholder: 'Your full name', whoPick: 'Choose your name...', whoOther: 'Someone else (type the name)', whoAlias: 'as {names}', whoInProject: 'working in a project',
                 whoSave: 'Save', whoChange: 'Change name',
                 whoOnline: 'Working in this database', whoOnlineNone: 'Nobody here yet', whoOnlineYou: 'you',
                 whoOnlineGroup: 'Online now', whoOfflineGroup: 'Also connected', whoNeverSeen: 'not seen yet',
@@ -121,7 +122,21 @@
                 lockedBy: '{name} is working on this',
                 moveLost: "That move did not save — someone changed the card first. The board has been re-read; try again.",
                 importPending: "Trial not yet in the dashboard",
-                importPendingHint: "Open the Product Dashboard once and this trial is loaded into its product.",
+                importPendingHint: "Click to add it to its product now, or to see what is in the way.",
+                pushTitle: 'Trial → Product Dashboard', pushWorking: 'Adding the trial to its product in the Product Dashboard…',
+                pushDone: '{n} variant(s) added to {product}.', pushUpdated: '{n} variant(s) in {product} brought up to date with the report.', pushBaselineOnly: 'No new variants, but the empty product properties of {product} were filled in.',
+                pushAlready: 'This trial is already in {product} ({n} variant(s)). The note is gone.',
+                pushNotLinked: 'This project is not linked to a product yet{name}. Open the report, pick the product in the header and try again.',
+                pushNoReport: 'This project has no report yet, so there is nothing to add.',
+                pushNotReport: 'The report file of this project is not a trial report the dashboard can read.',
+                pushProductMissing: 'The product this project is linked to{name} is not in the Product Dashboard (any more). Link the project to an existing product in the report, or restore the product in the dashboard.',
+                pushStateMismatch: 'The processing type differs: the report says "{report}", {product} is set to "{productState}". Check the link before adding it.',
+                pushNoData: 'The report has no variants with results to add yet.',
+                pushBusy: 'Someone saved {product} at the same moment. Try again.',
+                pushError: 'Adding the trial failed: {msg}',
+                pushRetry: 'Try again', pushForce: 'Add anyway', pushRemoveNote: 'Remove the note', pushOpenReport: 'Open the report', pushOpenDashboard: 'Open in the dashboard', pushClose: 'Close',
+                pushNoticeDone: 'Trial added to the Product Dashboard: {product}.', pushNoticeAlready: 'This trial was already in {product}; nothing changed.',
+                pushNoCard: 'This project is no longer on the board — perhaps someone else removed it. Reload the board.', pushNoticeFailed: 'This trial is not in the Product Dashboard yet.', pushNoticeHint: 'Click the orange note on the card to try again.',
                 conflictTitle: 'Someone else was faster',
                 conflictLine: '{name} changed "{card}" while you were editing it.',
                 conflictSomeone: 'A colleague',
@@ -165,9 +180,11 @@
                 trashDays: "deleted {n} days ago",
                 confirmPurge: "Erase \"{name}\" for good?\n\nThis is the one delete that cannot be undone.",
                 productsTitle: 'Products', noProducts: 'No products in this folder yet. Open the Product Dashboard to add them.',
+                productSearch: 'Search products…', productSearchCount: '{n} of {total}', productNoMatch: 'No product matches “{q}”.',
                 productSheetYes: 'Product sheet', productSheetNo: 'No sheet',
                 productProjects: '{n} projects', productProject: '1 project', productNoProjects: 'No projects',
                 productArchived: '{n} archived', productUpdated: 'Updated', productOpen: 'Open in the dashboard',
+                trialsButton: '{n} trials', trialsButtonOne: '1 trial', trialsTitle: 'Trials', trialsLoading: 'Loading trials...', trialsNone: 'No trials run through the report tool yet.', trialsHidden: '{n} linked project(s) not shown: stopped, or not in the report phase yet.', trialOpen: 'Open in the report tool', trialPacked: 'packed', trialCompleted: 'Completed', trialOngoing: 'Ongoing', trialArchived: 'Archived', trialTargetAchieved: 'Target achieved', trialTargetPartial: 'Partly achieved', trialTargetNot: 'Not achieved', trialTargetNone: 'Target not assessed', trialBest: 'Best score', trialBestHint: 'Highest end score of any variant (average quality on its last evaluated day)',
                 // Archive — finished projects are parked, never deleted.
                 archiveProject: 'Archive this project',
                 // A project that stops before the finish is not the same thing as a
@@ -223,6 +240,7 @@
                 unarchive: 'Put back on the board', unarchiveShort: 'Restore',
                 fCommercial: 'Commercial lead (PerfoTec)', fPM: 'Product Manager (PerfoTec)',
                 fStart: 'Packing date', fNext: 'Next action', fPhase: 'Phase',
+                fDateRange: 'Packing date (trial)', fDateFrom: 'From', fDateTo: 'To', shownOf: '{n} of {total}',
                 fPhoto: 'Product photo (optional)', uploadPhoto: 'Upload product photo', removePhoto: 'Remove',
                 fActions: 'Actions / next steps', addAction: 'Add action', actionPlaceholder: 'What needs to happen',
                 autoTag: 'auto', moreActions: 'more', selectNone: '— none —', addNewOption: '＋ Add new…', addPersonPrompt: 'Name of the new person:',
@@ -241,6 +259,7 @@
                 all: 'All', search: 'Search…',
                 emptyColumn: 'Drop a card or JSON file here', noProjects: 'No projects yet — click a phase header to start a document, or use “New project”.',
                 notJson: 'Only .json files can be imported.', importFailed: 'Could not import',
+                dashboardNeedsReport: '{name} is not a report. Only a report can go straight into Dashboard: drop it on its own phase instead.',
                 openPhase: 'Open in tool', startPhase: 'Start this phase', untitled: 'No client yet', projOne: 'project', projMany: 'projects',
                 dashHint: 'Trial data will be imported into the dashboard automatically.',
                 titlePlaceholder: 'e.g. Westfalia — Avocado Peru',
@@ -262,7 +281,7 @@
                 // Gedeelde database (schema 2.0)
                 whoTitle: 'Wie ben je?',
                 whoDesc: 'Het team werkt op één database. Je naam wordt bij elke wijziging vastgelegd, zodat iedereen ziet wie een kaart heeft verplaatst — en zodat het board kan laten zien wanneer een collega al in een project werkt.',
-                whoPlaceholder: 'bijv. Luke',
+                whoPlaceholder: 'Je volledige naam', whoPick: 'Kies je naam...', whoOther: 'Iemand anders (typ de naam)', whoAlias: 'als {names}', whoInProject: 'werkt in een project',
                 whoSave: 'Opslaan', whoChange: 'Naam wijzigen',
                 whoOnline: 'Werkt in deze database', whoOnlineNone: 'Nog niemand hier', whoOnlineYou: 'jij',
                 whoOnlineGroup: 'Nu online', whoOfflineGroup: 'Ook gekoppeld', whoNeverSeen: 'nog niet gezien',
@@ -278,7 +297,21 @@
                 lockedBy: '{name} werkt hierin',
                 moveLost: "Die verplaatsing is niet opgeslagen — iemand wijzigde de kaart net eerder. Het board is opnieuw ingelezen; probeer het nog eens.",
                 importPending: "Trial nog niet in het dashboard",
-                importPendingHint: "Open het Product Dashboard één keer, dan wordt deze trial in zijn product geladen.",
+                importPendingHint: "Klik om hem nu aan zijn product toe te voegen, of om te zien wat in de weg zit.",
+                pushTitle: 'Trial → Product Dashboard', pushWorking: 'De trial wordt aan zijn product in het Product Dashboard toegevoegd…',
+                pushDone: '{n} variant(en) toegevoegd aan {product}.', pushUpdated: '{n} variant(en) in {product} bijgewerkt met het rapport.', pushBaselineOnly: 'Geen nieuwe varianten, wel de lege producteigenschappen van {product} ingevuld.',
+                pushAlready: 'Deze trial staat al in {product} ({n} variant(en)). De melding is weg.',
+                pushNotLinked: 'Dit project is nog niet aan een product gekoppeld{name}. Open het rapport, kies het product in de kop en probeer het opnieuw.',
+                pushNoReport: 'Dit project heeft nog geen rapport, dus er is niets toe te voegen.',
+                pushNotReport: 'Het rapportbestand van dit project is geen trialrapport dat het dashboard kan lezen.',
+                pushProductMissing: 'Het product waaraan dit project gekoppeld is{name} staat niet (meer) in het Product Dashboard. Koppel het project in het rapport aan een bestaand product, of zet het product in het dashboard terug.',
+                pushStateMismatch: 'Het verwerkingstype verschilt: het rapport zegt "{report}", {product} staat op "{productState}". Controleer de koppeling voordat je hem toevoegt.',
+                pushNoData: 'Het rapport heeft nog geen varianten met resultaten om toe te voegen.',
+                pushBusy: 'Iemand sloeg {product} op hetzelfde moment op. Probeer het opnieuw.',
+                pushError: 'Toevoegen mislukt: {msg}',
+                pushRetry: 'Opnieuw proberen', pushForce: 'Toch toevoegen', pushRemoveNote: 'Melding weghalen', pushOpenReport: 'Rapport openen', pushOpenDashboard: 'Openen in het dashboard', pushClose: 'Sluiten',
+                pushNoticeDone: 'Trial toegevoegd aan het Product Dashboard: {product}.', pushNoticeAlready: 'Deze trial stond al in {product}; er is niets veranderd.',
+                pushNoCard: 'Dit project staat niet meer op het bord — misschien heeft iemand anders het weggehaald. Laad het bord opnieuw.', pushNoticeFailed: 'Deze trial staat nog niet in het Product Dashboard.', pushNoticeHint: 'Klik op de oranje melding op de kaart om het opnieuw te proberen.',
                 conflictTitle: 'Iemand anders was sneller',
                 conflictLine: '{name} heeft "{card}" gewijzigd terwijl jij ermee bezig was.',
                 conflictSomeone: 'Een collega',
@@ -322,9 +355,11 @@
                 trashDays: "{n} dagen geleden verwijderd",
                 confirmPurge: "\"{name}\" definitief wissen?\n\nDit is de enige verwijdering die niet terug te draaien is.",
                 productsTitle: 'Producten', noProducts: 'Nog geen producten in deze map. Open het Product Dashboard om ze toe te voegen.',
+                productSearch: 'Zoek een product…', productSearchCount: '{n} van {total}', productNoMatch: 'Geen product gevonden voor “{q}”.',
                 productSheetYes: 'Product sheet', productSheetNo: 'Geen sheet',
                 productProjects: '{n} projecten', productProject: '1 project', productNoProjects: 'Geen projecten',
                 productArchived: '{n} gearchiveerd', productUpdated: 'Bijgewerkt', productOpen: 'Openen in het dashboard',
+                trialsButton: '{n} testen', trialsButtonOne: '1 test', trialsTitle: 'Testen', trialsLoading: 'Testen laden...', trialsNone: 'Nog geen testen via de rapporttool.', trialsHidden: '{n} gekoppeld(e) project(en) niet getoond: gestopt, of nog niet in de rapportfase.', trialOpen: 'Openen in de rapporttool', trialPacked: 'verpakt', trialCompleted: 'Afgerond', trialOngoing: 'Loopt nog', trialArchived: 'Gearchiveerd', trialTargetAchieved: 'Doel behaald', trialTargetPartial: 'Deels behaald', trialTargetNot: 'Niet behaald', trialTargetNone: 'Doel niet beoordeeld', trialBest: 'Beste score', trialBestHint: 'Hoogste eindscore van een variant (gemiddelde kwaliteit op de laatste beoordeelde dag)',
                 // Archief — afgeronde projecten worden geparkeerd, nooit verwijderd.
                 archiveProject: 'Dit project archiveren',
                 haltProject: 'Dit project on hold zetten of annuleren',
@@ -377,6 +412,7 @@
                 unarchive: 'Terugzetten op het board', unarchiveShort: 'Terugzetten',
                 fCommercial: 'Commercieel verantwoordelijk (PerfoTec)', fPM: 'Product Manager (PerfoTec)',
                 fStart: 'Inpakdatum', fNext: 'Volgende actie', fPhase: 'Fase',
+                fDateRange: 'Inpakdatum (trial)', fDateFrom: 'Van', fDateTo: 'Tot en met', shownOf: '{n} van {total}',
                 fPhoto: 'Productfoto (optioneel)', uploadPhoto: 'Productfoto uploaden', removePhoto: 'Verwijderen',
                 fActions: 'Acties / volgende stappen', addAction: 'Actie toevoegen', actionPlaceholder: 'Wat er moet gebeuren',
                 autoTag: 'auto', moreActions: 'meer', selectNone: '— geen —', addNewOption: '＋ Nieuw toevoegen…', addPersonPrompt: 'Naam van de nieuwe persoon:',
@@ -395,6 +431,7 @@
                 all: 'Alle', search: 'Zoeken…',
                 emptyColumn: 'Sleep hier een kaart of JSON-bestand', noProjects: 'Nog geen projecten — klik op een fase-header om een document te starten, of gebruik “Nieuw project”.',
                 notJson: 'Alleen .json-bestanden kunnen worden geïmporteerd.', importFailed: 'Kon niet importeren',
+                dashboardNeedsReport: '{name} is geen rapport. Alleen een rapport kan direct naar Dashboard: sleep het naar zijn eigen fase.',
                 openPhase: 'Open in tool', startPhase: 'Start deze fase', untitled: 'Nog geen klant', projOne: 'project', projMany: 'projecten',
                 dashHint: 'Trial-data wordt automatisch in het dashboard geïmporteerd.',
                 titlePlaceholder: 'bijv. Westfalia — Avocado Peru',
@@ -416,7 +453,7 @@
                 // Base de datos compartida (schema 2.0)
                 whoTitle: '¿Quién eres?',
                 whoDesc: 'El equipo comparte una base de datos. Su nombre se registra en cada cambio, para que todos vean quién movió una tarjeta — y para que el panel pueda mostrar cuándo un colega ya está trabajando en un proyecto.',
-                whoPlaceholder: 'ej. Luke',
+                whoPlaceholder: 'Su nombre completo', whoPick: 'Elija su nombre...', whoOther: 'Otra persona (escriba el nombre)', whoAlias: 'como {names}', whoInProject: 'trabajando en un proyecto',
                 whoSave: 'Guardar', whoChange: 'Cambiar nombre',
                 whoOnline: 'Trabajando en esta base de datos', whoOnlineNone: 'Todavía no hay nadie', whoOnlineYou: 'tú',
                 whoOnlineGroup: 'En línea ahora', whoOfflineGroup: 'También conectados', whoNeverSeen: 'aún no visto',
@@ -432,7 +469,21 @@
                 lockedBy: '{name} está trabajando aquí',
                 moveLost: "Ese movimiento no se guardó — alguien cambió la tarjeta antes. El panel se ha vuelto a leer; inténtelo de nuevo.",
                 importPending: "Ensayo aún no en el panel",
-                importPendingHint: "Abra el Panel de Productos una vez y este ensayo se cargará en su producto.",
+                importPendingHint: "Haga clic para añadirlo ahora a su producto, o para ver qué lo impide.",
+                pushTitle: 'Ensayo → Panel de Productos', pushWorking: 'Añadiendo el ensayo a su producto en el Panel de Productos…',
+                pushDone: '{n} variante(s) añadida(s) a {product}.', pushUpdated: '{n} variante(s) de {product} actualizada(s) con el informe.', pushBaselineOnly: 'Sin variantes nuevas, pero se completaron las propiedades vacías de {product}.',
+                pushAlready: 'Este ensayo ya está en {product} ({n} variante(s)). El aviso se ha quitado.',
+                pushNotLinked: 'Este proyecto aún no está vinculado a un producto{name}. Abra el informe, elija el producto en la cabecera y vuelva a intentarlo.',
+                pushNoReport: 'Este proyecto aún no tiene informe, así que no hay nada que añadir.',
+                pushNotReport: 'El archivo de informe de este proyecto no es un informe de ensayo que el panel pueda leer.',
+                pushProductMissing: 'El producto al que está vinculado este proyecto{name} no está (ya) en el Panel de Productos. Vincule el proyecto a un producto existente en el informe, o restaure el producto en el panel.',
+                pushStateMismatch: 'El tipo de procesado no coincide: el informe dice "{report}", {product} está como "{productState}". Compruebe el vínculo antes de añadirlo.',
+                pushNoData: 'El informe aún no tiene variantes con resultados que añadir.',
+                pushBusy: 'Alguien guardó {product} al mismo tiempo. Vuelva a intentarlo.',
+                pushError: 'No se pudo añadir el ensayo: {msg}',
+                pushRetry: 'Reintentar', pushForce: 'Añadir igualmente', pushRemoveNote: 'Quitar el aviso', pushOpenReport: 'Abrir el informe', pushOpenDashboard: 'Abrir en el panel', pushClose: 'Cerrar',
+                pushNoticeDone: 'Ensayo añadido al Panel de Productos: {product}.', pushNoticeAlready: 'Este ensayo ya estaba en {product}; no ha cambiado nada.',
+                pushNoCard: 'Este proyecto ya no está en el panel; quizá lo quitó otra persona. Vuelva a cargar el panel.', pushNoticeFailed: 'Este ensayo aún no está en el Panel de Productos.', pushNoticeHint: 'Haga clic en el aviso naranja de la tarjeta para volver a intentarlo.',
                 conflictTitle: 'Alguien fue más rápido',
                 conflictLine: '{name} ha cambiado "{card}" mientras usted lo editaba.',
                 conflictSomeone: 'Un colega',
@@ -476,9 +527,11 @@
                 trashDays: "eliminado hace {n} días",
                 confirmPurge: "¿Borrar \"{name}\" definitivamente?\n\nEsta es la única eliminación que no se puede deshacer.",
                 productsTitle: 'Productos', noProducts: 'Todavía no hay productos en esta carpeta. Abra el Panel de Productos para añadirlos.',
+                productSearch: 'Buscar producto…', productSearchCount: '{n} de {total}', productNoMatch: 'Ningún producto coincide con «{q}».',
                 productSheetYes: 'Ficha de producto', productSheetNo: 'Sin ficha',
                 productProjects: '{n} proyectos', productProject: '1 proyecto', productNoProjects: 'Sin proyectos',
                 productArchived: '{n} archivados', productUpdated: 'Actualizado', productOpen: 'Abrir en el panel',
+                trialsButton: '{n} ensayos', trialsButtonOne: '1 ensayo', trialsTitle: 'Ensayos', trialsLoading: 'Cargando ensayos...', trialsNone: 'Aún no hay ensayos en la herramienta de informes.', trialsHidden: '{n} proyecto(s) vinculado(s) no mostrado(s): detenidos o aún no en la fase de informe.', trialOpen: 'Abrir en la herramienta de informes', trialPacked: 'envasado', trialCompleted: 'Finalizado', trialOngoing: 'En curso', trialArchived: 'Archivado', trialTargetAchieved: 'Objetivo logrado', trialTargetPartial: 'Parcialmente logrado', trialTargetNot: 'No logrado', trialTargetNone: 'Objetivo sin evaluar', trialBest: 'Mejor puntuación', trialBestHint: 'Puntuación final más alta de una variante (calidad media en su último día evaluado)',
                 // Archivo — los proyectos terminados se aparcan, nunca se eliminan.
                 archiveProject: 'Archivar este proyecto',
                 haltProject: 'Pausar o cancelar este proyecto',
@@ -531,6 +584,7 @@
                 unarchive: 'Devolver al board', unarchiveShort: 'Devolver',
                 fCommercial: 'Responsable comercial (PerfoTec)', fPM: 'Product Manager (PerfoTec)',
                 fStart: 'Fecha de empaque', fNext: 'Próxima acción', fPhase: 'Fase',
+                fDateRange: 'Fecha de empaque (prueba)', fDateFrom: 'Desde', fDateTo: 'Hasta', shownOf: '{n} de {total}',
                 fPhoto: 'Foto del producto (opcional)', uploadPhoto: 'Subir foto del producto', removePhoto: 'Quitar',
                 fActions: 'Acciones / próximos pasos', addAction: 'Añadir acción', actionPlaceholder: 'Qué debe pasar',
                 autoTag: 'auto', moreActions: 'más', selectNone: '— ninguno —', addNewOption: '＋ Añadir nuevo…', addPersonPrompt: 'Nombre de la nueva persona:',
@@ -549,6 +603,7 @@
                 all: 'Todos', search: 'Buscar…',
                 emptyColumn: 'Suelte una tarjeta o archivo JSON', noProjects: 'Aún no hay proyectos — haga clic en un encabezado de fase para iniciar un documento, o use “Nuevo proyecto”.',
                 notJson: 'Solo se pueden importar archivos .json.', importFailed: 'No se pudo importar',
+                dashboardNeedsReport: '{name} no es un informe. Solo un informe puede ir directamente al Panel: suéltelo en su propia fase.',
                 openPhase: 'Abrir en herramienta', startPhase: 'Iniciar esta fase', untitled: 'Sin cliente', projOne: 'proyecto', projMany: 'proyectos',
                 dashHint: 'Los datos de la prueba se importarán al panel automáticamente.',
                 titlePlaceholder: 'p.ej. Westfalia — Aguacate Perú',
@@ -613,6 +668,29 @@
             return out.sort((a, b) => a.alias.localeCompare(b.alias));
         };
 
+        // The product list reads alphabetically, by the name it shows. The index
+        // itself comes in folder-listing order, which differs per machine and per
+        // sync, so the tab used to show "Apple · Processed" after "Flat Beans" and
+        // reshuffle on a reload. Same name: whole before processed, then the id,
+        // so the order never depends on how the folder was read.
+        const foldText = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        const productStateRank = (p) => p && p.state === 'whole' ? 0 : p && p.state === 'processed' ? 1 : 2;
+        const compareProducts = (a, b) =>
+            productLabel(a).localeCompare(productLabel(b), undefined, { sensitivity: 'base', numeric: true })
+            || productStateRank(a) - productStateRank(b)
+            || String(a.id).localeCompare(String(b.id));
+
+        // Live product filter: every typed word must appear somewhere in the name,
+        // variety or one of the other names, also in the middle of a word, ignoring
+        // case and accents. "ccoli" finds Broccoli and Broccolini, "broc flo"
+        // finds Broccoli Florets, "uchuva" finds Physalis.
+        const productMatches = (p, query) => {
+            const words = foldText(query).split(/\s+/).filter(Boolean);
+            if (!words.length) return true;
+            const hay = [productLabel(p), ...productAliases(p)].map(foldText).join(' ');
+            return words.every(w => hay.includes(w));
+        };
+
         // People entries may be legacy strings or { name, email, phone } objects.
         const normPeople = (arr) => (arr || [])
             .map(p => typeof p === 'string' ? { name: p, email: '', phone: '' } : { name: (p && p.name) || '', email: (p && p.email) || '', phone: (p && p.phone) || '' })
@@ -638,6 +716,8 @@
         // A card's heading is the client, or the product when there is no client
         // yet. Sorting uses the same value, so the order matches what you read.
         const cardHeading = (p) => (p.client || p.product || p.title || '').trim();
+        // A card's project title as shown: the tools' placeholders are no title.
+        const shownTitle = (x) => (Board.projectTitle ? Board.projectTitle(x) : String(x || '').replace(/\s+/g, ' ').trim());
 
         // Column order is fixed and never storage order: the folder hands back its
         // card files in whatever order the filesystem feels like, which is why the
@@ -717,8 +797,51 @@
         // Person picker + a manage popover to rename (prompt), delete (confirm) and
         // edit each person's email/phone. `peopleList` is an array of
         // { name, email, phone }. Destructive actions are guarded against 1-click.
+        // A panel anchored to a button but rendered on <body>. Inside the project
+        // dialog it was clipped: the dialog scrolls, a scroll container cuts off
+        // whatever sticks out of it, and a 288px panel right-aligned to a gear in a
+        // half-width column always sticks out on the left. Out here nothing can
+        // clip it; it is kept on screen — shifted sideways, opened upwards when
+        // there is more room above, capped at the space there is with its own
+        // scrollbar — and follows the button when anything scrolls or resizes.
+        const FloatingPanel = ({ anchorRef, width = 288, className = '', children }) => {
+            const panelRef = useRef(null);
+            const [pos, setPos] = useState(null);
+            useLayoutEffect(() => {
+                const place = () => {
+                    const a = anchorRef.current, el = panelRef.current;
+                    if (!a || !el) return;
+                    const r = a.getBoundingClientRect();
+                    const vw = window.innerWidth, vh = window.innerHeight, m = 8, gap = 4;
+                    const w = Math.min(width, vw - 2 * m);
+                    const left = Math.max(m, Math.min(r.right - w, vw - w - m));
+                    const natural = el.scrollHeight;
+                    const below = vh - r.bottom - gap - m, above = r.top - gap - m;
+                    const up = natural > below && above > below;
+                    const maxHeight = Math.max(80, up ? above : below);
+                    const top = up ? Math.max(m, r.top - gap - Math.min(natural, maxHeight)) : r.bottom + gap;
+                    setPos(p => (p && p.left === left && p.top === top && p.width === w && p.maxHeight === maxHeight) ? p : { left, top, width: w, maxHeight });
+                };
+                place();
+                // The panel's own content can grow (a person added); re-place then too.
+                const ro = window.ResizeObserver ? new ResizeObserver(place) : null;
+                if (ro && panelRef.current) ro.observe(panelRef.current);
+                window.addEventListener('resize', place);
+                window.addEventListener('scroll', place, true);   // capture: any scrolling parent
+                return () => { if (ro) ro.disconnect(); window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); };
+            }, [anchorRef, width]);
+            return createPortal(
+                <div ref={panelRef} className={`bg-white rounded-xl shadow-2xl border border-slate-100 p-1.5 overflow-auto ${className}`}
+                    style={pos ? { position: 'fixed', zIndex: 60, ...pos } : { position: 'fixed', zIndex: 60, left: 0, top: 0, width, visibility: 'hidden' }}>
+                    {children}
+                </div>,
+                document.body
+            );
+        };
+
         const PeopleField = ({ label, icon, value, peopleList, onChange, onAdd, onRename, onDelete, onUpdate, inputCls, t }) => {
             const [managing, setManaging] = useState(false);
+            const gearRef = useRef(null);
             // Always include the current value, even if it isn't (yet) in the saved
             // registry — otherwise a project's existing person is missing.
             const list = (peopleList || []).slice();
@@ -731,12 +854,12 @@
                         <div className="flex-1 min-w-0">
                             <PersonSelect value={value} options={names} onChange={onChange} onAddNew={onAdd} inputCls={inputCls} t={t} />
                         </div>
-                        <button type="button" onClick={() => setManaging(m => !m)} title={t.managePeople}
+                        <button ref={gearRef} type="button" onClick={() => setManaging(m => !m)} title={t.managePeople}
                             className={`p-2 rounded-lg border shrink-0 ${managing ? 'border-[#084BCD] text-[#084BCD] bg-blue-50' : 'border-slate-200 text-slate-500 hover:bg-slate-100'}`}>
                             <Settings size={15} />
                         </button>
                         {managing && (
-                            <div className="absolute z-30 top-full right-0 mt-1 w-72 bg-white rounded-xl shadow-2xl border border-slate-100 p-1.5 max-h-72 overflow-auto">
+                            <FloatingPanel anchorRef={gearRef} width={288}>
                                 {list.length === 0 && <p className="text-xs text-slate-400 p-2">{t.noPeople}</p>}
                                 {list.map(p => (
                                     <div key={p.name} className="px-2 py-1.5 rounded-lg hover:bg-slate-50 space-y-1">
@@ -757,7 +880,7 @@
                                             className="w-full px-2 py-1 text-xs border border-slate-200 rounded-md outline-none focus:border-[#008837]" />
                                     </div>
                                 ))}
-                            </div>
+                            </FloatingPanel>
                         )}
                     </div>
                 </Field>
@@ -957,7 +1080,7 @@
             </span>
         ) : null;
 
-        const ProjectCard = ({ t, project, lock, onDragStart, onEdit, onDelete, onArchive, onHalt, onCopy, onOpen, onActionOpen, onActionToggle }) => {
+        const ProjectCard = ({ t, project, lock, fallbackTitle, onDragStart, onEdit, onDelete, onArchive, onHalt, onCopy, onOpen, onActionOpen, onActionToggle, onPushTrial }) => {
             const color = PHASE_COLORS[project.phase] || BRAND.blue;
             const isReport = project.phase === 'report';
             const isAccepted = project.phase === 'accepted';
@@ -977,6 +1100,10 @@
             })();
             const hasImg = !!project.image;
             const heading = cardHeading(project) || t.untitled;
+            // The project's own title, from the proposal/report tools. Under the
+            // client; left out when it IS the heading (a card without a client).
+            const projTitle = shownTitle(project.title) || shownTitle(fallbackTitle);
+            const showTitle = !!projTitle && projTitle.toLowerCase() !== heading.toLowerCase();
             const showProductRow = project.product && project.client;
             const acts = getActions(project);
             const open = () => onOpen(project, project.phase);
@@ -1046,6 +1173,9 @@
                     {/* Content */}
                     <div className="relative py-2.5 pr-2.5 pl-3">
                         <p className={`font-extrabold text-[13.5px] leading-tight break-words pr-16 ${project.client ? 'text-slate-900' : 'text-slate-400 italic'}`}>{heading}</p>
+                        {showTitle && (
+                            <p className="mt-0.5 pr-16 text-[11.5px] leading-snug font-medium text-slate-600 break-words line-clamp-2" title={projTitle}>{projTitle}</p>
+                        )}
                         {showProductRow && (
                             <p className="flex items-center gap-1 mt-0.5 text-[11.5px] font-semibold text-slate-700">
                                 <Package size={12} className="shrink-0" style={{ color }} aria-hidden="true" />
@@ -1098,13 +1228,17 @@
                         {/* The trial has been moved to Dashboard but its results are
                             not in the product dashboard yet. Visible rather than
                             silent: nothing else on the board would tell you the
-                            import is still outstanding. */}
+                            import is still outstanding. A click pushes it, or says
+                            what stands in the way. */}
                         {project.dashboardImportPending && (
-                            <div className="mt-1.5 flex items-center gap-1 rounded-md border border-orange-200 bg-orange-50/90 px-1.5 py-0.5 text-[10px] font-bold text-orange-800"
+                            <button type="button"
+                                onClick={(e) => { e.stopPropagation(); if (onPushTrial) onPushTrial(project); }}
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') e.stopPropagation(); }}
+                                className="mt-1.5 max-w-full flex items-center gap-1 rounded-md border border-orange-200 bg-orange-50/90 hover:bg-orange-100 hover:border-orange-300 px-1.5 py-0.5 text-[10px] font-bold text-orange-800 transition-colors"
                                 title={t.importPendingHint}>
                                 <ArrowRight size={10} className="shrink-0" />
                                 <span className="truncate">{t.importPending}</span>
-                            </div>
+                            </button>
                         )}
 
                         <div className="mt-1.5 flex flex-wrap items-center gap-x-2.5 gap-y-0.5 text-[11px] leading-tight">
@@ -1163,7 +1297,7 @@
         };
 
         // === Column ===
-        const Column = ({ t, phase, projects, locks, onDragStart, onDrop, dragOver, onOpen, onEdit, onDelete, onArchive, onHalt, onCopy, onHeaderClick, onActionOpen, onActionToggle }) => {
+        const Column = ({ t, phase, projects, locks, titles, onDragStart, onDrop, dragOver, onOpen, onEdit, onDelete, onArchive, onHalt, onCopy, onHeaderClick, onActionOpen, onActionToggle, onPushTrial }) => {
             const [over, setOver] = useState(false);
             const color = PHASE_COLORS[phase.key];
             const PhaseIcon = PHASE_ICONS[phase.key] || Package;
@@ -1200,7 +1334,7 @@
                             <p className="text-[11px] text-slate-400 text-center py-5 select-none">{t.emptyColumn}</p>
                         )}
                         {projects.map(p => (
-                            <ProjectCard key={p.id} t={t} project={p} lock={locks && locks[p.id]} onDragStart={onDragStart} onOpen={onOpen} onEdit={onEdit} onDelete={onDelete} onArchive={onArchive} onHalt={onHalt} onCopy={onCopy} onActionOpen={onActionOpen} onActionToggle={onActionToggle} />
+                            <ProjectCard key={p.id} t={t} project={p} lock={locks && locks[p.id]} fallbackTitle={titles && titles[p.id]} onDragStart={onDragStart} onOpen={onOpen} onEdit={onEdit} onDelete={onDelete} onArchive={onArchive} onHalt={onHalt} onCopy={onCopy} onActionOpen={onActionOpen} onActionToggle={onActionToggle} onPushTrial={onPushTrial} />
                         ))}
                     </div>
                 </div>
@@ -1214,16 +1348,68 @@
             { key: 'commercial', labelKey: 'fCommercial' },
             { key: 'productManager', labelKey: 'fPM' }
         ];
+        // An empty filter, and how many parts of one are on (the badge on the
+        // Filter button). The packing-date range counts as one.
+        const EMPTY_FILTERS = { q: '', client: '', product: '', commercial: '', productManager: '', from: '', to: '' };
+        const filterCount = (f) => (f.q ? 1 : 0) + FILTER_FIELDS.filter(x => f[x.key]).length + (f.from || f.to ? 1 : 0);
+        // A card's packing date as YYYY-MM-DD, however it was written (the board
+        // stores ISO; a CRM import can carry 18-09-2026).
+        const isoDay = (v) => {
+            const s = String(v || '').trim();
+            let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+            if (m) return m[1] + '-' + m[2] + '-' + m[3];
+            m = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})$/.exec(s);
+            return m ? m[3] + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0') : '';
+        };
+        // One rule for the board and the archive. A date range leaves out a card
+        // without a packing date: there is nothing to compare it with.
+        const matchesFilters = (p, f, titles) => {
+            if (f.client && p.client !== f.client) return false;
+            if (f.product && p.product !== f.product) return false;
+            if (f.commercial && p.commercial !== f.commercial) return false;
+            if (f.productManager && p.productManager !== f.productManager) return false;
+            if (f.from || f.to) {
+                const d = isoDay(p.startDate);
+                if (!d || (f.from && d < f.from) || (f.to && d > f.to)) return false;
+            }
+            const q = String(f.q || '').trim().toLowerCase();
+            if (q) {
+                const actionText = getActions(p).map(a => a.text).join(' ');
+                const hay = [p.title, titles && titles[p.id], p.client, p.product, p.commercial, p.productManager, p.nextAction, actionText, p.haltedNote]
+                    .filter(Boolean).join(' ').toLowerCase();
+                if (!hay.includes(q)) return false;
+            }
+            return true;
+        };
+        // What this browser tab was looking at. The board is left for a tool or
+        // the dashboard and comes back through the tool's Board button, the
+        // dashboard's link or the browser's back button, each of which loads
+        // board.html afresh — so it always came back on the board, unfiltered,
+        // wherever you had been. Per tab (sessionStorage): a new tab starts clean.
+        const UI_STATE_KEY = 'perfotec-board-ui';
+        const BOARD_VIEWS = ['board', 'products', 'archive', 'trash'];
+        const readUiState = () => {
+            try {
+                const v = JSON.parse(window.sessionStorage.getItem(UI_STATE_KEY) || 'null');
+                return v && typeof v === 'object' ? v : {};
+            } catch (e) { return {}; }
+        };
+        const restoredFilters = (f) => {
+            const out = { ...EMPTY_FILTERS };
+            if (f && typeof f === 'object') Object.keys(EMPTY_FILTERS).forEach(k => { if (typeof f[k] === 'string') out[k] = f[k]; });
+            return out;
+        };
         // === Products view ===
         // An overview of the product side of the same database, and a way into it.
         // Creating and editing product data stays in the Product Dashboard, where
         // all of that form logic already lives.
-        const ProductCard = ({ t, product, projectCount, archivedCount, onOpen }) => {
+        const ProductCard = ({ t, product, projectCount, archivedCount, trialCount = 0, onOpen, onOpenTrials }) => {
             const label = productLabel(product) || '—';
             const stateLabel = product.state === 'processed' ? 'Processed' : product.state === 'whole' ? 'Whole' : (product.state || '');
             return (
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 transition-all overflow-hidden flex flex-col">
                 <button type="button" onClick={() => onOpen(product)} title={t.productOpen}
-                    className="text-left bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 transition-all overflow-hidden flex flex-col focus:outline-none focus:ring-2 focus:ring-offset-2"
+                    className="text-left flex flex-col flex-1 focus:outline-none focus:ring-2 focus:ring-inset"
                     style={{ '--tw-ring-color': BRAND.blue }}>
                     <div className="h-24 bg-slate-100 relative shrink-0">
                         {product.imageUrl
@@ -1266,8 +1452,93 @@
                         )}
                     </div>
                 </button>
+                {/* Its own button, never nested in the card's: the trials run in the
+                    report tool, the card itself opens the dashboard. */}
+                {trialCount > 0 && (
+                    <button type="button" onClick={() => onOpenTrials(product)}
+                        className="border-t border-slate-100 px-4 py-2.5 text-xs font-bold flex items-center justify-between gap-2 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-inset"
+                        style={{ color: BRAND.blue, '--tw-ring-color': BRAND.blue }}>
+                        <span className="flex items-center gap-1.5"><FileText size={13} />{trialCount === 1 ? t.trialsButtonOne : t.trialsButton.replace('{n}', trialCount)}</span>
+                        <ChevronRight size={14} />
+                    </button>
+                )}
+                </div>
             );
         };
+
+        // === Trials of a product ===
+        // Every project linked to the product that ran (or runs) through the report
+        // tool, archived ones included, stopped ones not (Board.readProductTrials).
+        // Each row opens its report. The facts come from the report document
+        // itself, so the list is as current as the report.
+        const TARGET_STYLE = {
+            achieved: { bg: BRAND.green + '15', fg: BRAND.green },
+            partial: { bg: '#FFF4E5', fg: '#B45309' },
+            notAchieved: { bg: '#FEE2E2', fg: '#B91C1C' },
+        };
+        const TrialsModal = ({ t, product, rows, hiddenCount, onOpenTrial, onClose }) => {
+            const label = product ? (productLabel(product) || '—') : '';
+            const fmtDate = (iso) => { const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}-${m[2]}-${m[1]}` : ''; };
+            const targetLabel = (v) => v === 'achieved' ? t.trialTargetAchieved : v === 'partial' ? t.trialTargetPartial : v === 'notAchieved' ? t.trialTargetNot : t.trialTargetNone;
+            return (
+                <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+                        <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-slate-100">
+                            <div className="min-w-0">
+                                <h2 className="text-lg font-bold brand-heading truncate" style={{ color: BRAND.blue }}>{t.trialsTitle}</h2>
+                                <p className="text-xs text-slate-500 truncate">{label}{product && product.state ? ' · ' + (product.state === 'processed' ? t.stateProcessed : t.stateWhole) : ''}</p>
+                            </div>
+                            <button type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 shrink-0" aria-label={t.cancel}><X size={18} /></button>
+                        </div>
+                        <div className="p-4 sm:p-6 overflow-y-auto space-y-3">
+                            {rows === null && <p className="text-sm text-slate-400">{t.trialsLoading}</p>}
+                            {rows && rows.length === 0 && <p className="text-sm text-slate-400">{t.trialsNone}</p>}
+                            {rows && rows.map(({ card, status, summary }) => {
+                                const ts = TARGET_STYLE[summary.target] || { bg: '#F2F5F9', fg: '#8A97AD' };
+                                const done = status === 'completed';
+                                const b = summary.best;
+                                const headline = card.client || summary.title || card.title || '—';
+                                const projTitle = summary.title || shownTitle(card.title);
+                                return (
+                                    <button key={card.id} type="button" onClick={() => onOpenTrial(card)} title={t.trialOpen}
+                                        className="w-full text-left rounded-xl border border-slate-200 hover:border-slate-300 hover:shadow-sm transition-all p-4 flex gap-4 items-center">
+                                        <div className="flex-1 min-w-0 space-y-2">
+                                            <div className="flex items-baseline gap-2 flex-wrap">
+                                                <span className="font-bold text-sm text-slate-900">{headline}</span>
+                                                {(summary.packingDate || card.startDate) && <span className="text-[11px] text-slate-400">{t.trialPacked} {fmtDate(summary.packingDate || card.startDate)}</span>}
+                                            </div>
+                                            {projTitle && projTitle.toLowerCase() !== String(headline).toLowerCase() && (
+                                                <div className="text-[13px] font-medium text-slate-700 -mt-1 break-words">{projTitle}</div>
+                                            )}
+                                            <div className="flex flex-wrap items-center gap-1.5">
+                                                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md flex items-center gap-1"
+                                                    style={done ? { backgroundColor: BRAND.green + '15', color: BRAND.green } : { backgroundColor: BRAND.blue + '15', color: BRAND.blue }}>
+                                                    {done ? <Check size={11} /> : <RefreshCw size={11} />}{done ? t.trialCompleted : t.trialOngoing}
+                                                </span>
+                                                {card.archivedAt && <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md bg-slate-100 text-slate-500 flex items-center gap-1"><Archive size={10} />{t.trialArchived}</span>}
+                                                <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md flex items-center gap-1" style={{ backgroundColor: ts.bg, color: ts.fg }}>
+                                                    <Target size={11} />{targetLabel(summary.target)}
+                                                </span>
+                                            </div>
+                                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600">
+                                                <span className="flex items-center gap-1.5"><Package size={13} className="text-slate-400" />{summary.packagings.length ? summary.packagings.join(', ') : '—'}</span>
+                                                <span className="flex items-center gap-1.5" title={t.trialBestHint}>
+                                                    <Trophy size={13} className="text-slate-400" />{t.trialBest}{' '}
+                                                    {b ? <><strong style={{ color: b.value >= 7 ? BRAND.green : b.value >= 5 ? '#B45309' : '#B91C1C' }}>{b.value.toFixed(1)}</strong><span className="text-slate-400">{b.variant ? ' · ' + b.variant : ''} · P+{b.day}</span></> : <span className="text-slate-400">—</span>}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <ChevronRight size={18} className="text-slate-300 shrink-0" />
+                                    </button>
+                                );
+                            })}
+                            {hiddenCount > 0 && <p className="text-[11px] text-slate-400 pt-1">{t.trialsHidden.replace('{n}', hiddenCount)}</p>}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
 
         // === Archive view ===
         // Archiving is a view decision, never a deletion: the card keeps its phase,
@@ -1338,13 +1609,9 @@
             );
         };
 
-        const ArchiveView = ({ t, projects, onOpen, onUnarchive, onDelete }) => {
-            const [q, setQ] = useState('');
-            const needle = q.trim().toLowerCase();
-            const rows = needle
-                ? projects.filter(p => [p.client, p.product, p.commercial, p.productManager, p.title]
-                    .filter(Boolean).join(' ').toLowerCase().includes(needle))
-                : projects;
+        // `rows` are the projects the archive filter lets through; `query` is
+        // that filter's search text, so this box and the Filter panel are one.
+        const ArchiveView = ({ t, projects, rows, query, onQuery, onOpen, onUnarchive, onDelete }) => {
             return (
                 <div className="max-w-[1100px] mx-auto px-4 md:px-6 pt-6 pb-8">
                     <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
@@ -1352,7 +1619,8 @@
                             <h2 className="brand-heading text-lg uppercase tracking-tight flex items-center gap-2" style={{ color: BRAND.blue }}>
                                 <Archive size={18} style={{ color: BRAND.green }} />{t.archiveTitle}
                                 <span className="text-xs font-bold normal-case tracking-normal text-slate-400">
-                                    {t.archiveCount.replace('{n}', projects.length)}
+                                    {rows.length === projects.length ? t.archiveCount.replace('{n}', projects.length)
+                                        : t.shownOf.replace('{n}', rows.length).replace('{total}', projects.length)}
                                 </span>
                             </h2>
                             <p className="mt-1 text-sm text-slate-500 max-w-2xl">{t.archiveDesc}</p>
@@ -1360,7 +1628,7 @@
                         {projects.length > 0 && (
                             <label className="relative shrink-0">
                                 <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden="true" />
-                                <input type="search" value={q} onChange={(e) => setQ(e.target.value)}
+                                <input type="search" value={query} onChange={(e) => onQuery(e.target.value)}
                                     placeholder={t.archiveSearch} aria-label={t.archiveSearch}
                                     className="w-64 pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none focus:border-[#008837]" />
                             </label>
@@ -1437,7 +1705,22 @@
                             </select>
                         </label>
                     ))}
-                    <button type="button" onClick={() => setFilters({ q: '', client: '', product: '', commercial: '', productManager: '' })}
+                    <div>
+                        <span className="text-xs font-bold uppercase tracking-wide text-slate-500">{t.fDateRange}</span>
+                        <div className="mt-1 grid grid-cols-2 gap-2">
+                            <label className="block">
+                                <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{t.fDateFrom}</span>
+                                <input type="date" className={selCls} value={filters.from || ''} max={filters.to || undefined}
+                                    onChange={e => setFilters(prev => ({ ...prev, from: e.target.value }))} />
+                            </label>
+                            <label className="block">
+                                <span className="text-[10px] font-bold uppercase tracking-wide text-slate-400">{t.fDateTo}</span>
+                                <input type="date" className={selCls} value={filters.to || ''} min={filters.from || undefined}
+                                    onChange={e => setFilters(prev => ({ ...prev, to: e.target.value }))} />
+                            </label>
+                        </div>
+                    </div>
+                    <button type="button" onClick={() => setFilters({ ...EMPTY_FILTERS })}
                         className="w-full text-sm font-bold text-slate-600 hover:bg-slate-100 rounded-lg py-2">{t.clear}</button>
                 </div>
             );
@@ -1673,6 +1956,7 @@
                     <span className="flex-1 min-w-0">
                         <span className={`block text-sm truncate ${r.online ? 'font-semibold text-slate-800' : 'text-slate-500'}`}>
                             {r.user}{r.self && <span className="ml-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">({t.whoOnlineYou})</span>}
+                            {r.aliases && r.aliases.length > 0 && <span className="ml-1 text-[10px] text-slate-400">{t.whoAlias.replace('{names}', r.aliases.join(', '))}</span>}
                         </span>
                         {r.pages && r.pages.length > 0 && (
                             <span className="block text-[11px] text-slate-400 truncate">{r.pages.join(', ')}</span>
@@ -1762,13 +2046,7 @@
         // Stopped projects, kept deliberately separate from the Archive: the
         // Archive is where finished trials go, this is where unfinished ones wait.
         // Grouped so "waiting" and "off the table" never blur into one list.
-        const HaltedView = ({ t, projects, onOpen, onResume, onSwitchKind, onDelete }) => {
-            const [q, setQ] = useState('');
-            const needle = q.trim().toLowerCase();
-            const rows = needle
-                ? projects.filter(p => [p.client, p.product, p.commercial, p.productManager, p.title, p.haltedNote]
-                    .filter(Boolean).join(' ').toLowerCase().includes(needle))
-                : projects;
+        const HaltedView = ({ t, projects, rows, query, onQuery, onOpen, onResume, onSwitchKind, onDelete }) => {
             const held = rows.filter(p => p.haltedKind !== 'cancelled');
             const cancelled = rows.filter(p => p.haltedKind === 'cancelled');
 
@@ -1849,7 +2127,8 @@
                             <h2 className="brand-heading text-lg uppercase tracking-tight flex items-center gap-2" style={{ color: BRAND.blue }}>
                                 <PauseCircle size={18} style={{ color: BRAND.green }} />{t.haltTitle}
                                 <span className="text-xs font-bold normal-case tracking-normal text-slate-400">
-                                    {t.haltCount.replace('{n}', projects.length)}
+                                    {rows.length === projects.length ? t.haltCount.replace('{n}', projects.length)
+                                        : t.shownOf.replace('{n}', rows.length).replace('{total}', projects.length)}
                                 </span>
                             </h2>
                             <p className="mt-1 text-sm text-slate-500 max-w-2xl">{t.haltDesc}</p>
@@ -1857,7 +2136,7 @@
                         {projects.length > 0 && (
                             <label className="relative shrink-0">
                                 <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden="true" />
-                                <input type="search" value={q} onChange={(e) => setQ(e.target.value)}
+                                <input type="search" value={query} onChange={(e) => onQuery(e.target.value)}
                                     placeholder={t.haltSearch} aria-label={t.haltSearch}
                                     className="w-64 pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none focus:border-[#008837]" />
                             </label>
@@ -1881,13 +2160,15 @@
         // two kinds side by side underneath. They stay strictly separate — a
         // finished trial and an abandoned one are different facts — but they are
         // one destination, so the header keeps three tabs instead of four.
-        const ArchiveHub = ({ t, archived, halted, onOpen, onUnarchive, onResume, onSwitchKind, onDelete }) => {
-            // Land on whichever side has something in it, preferring Completed.
-            const [tab, setTab] = useState(archived.length === 0 && halted.length > 0 ? 'stopped' : 'done');
+        // The sub-tab is kept by the App (remembered with the rest of the view);
+        // the counts are what the archive filter lets through.
+        const ArchiveHub = ({ t, archived, halted, archivedRows, haltedRows, tab: chosenTab, onTab, query, onQuery, onOpen, onUnarchive, onResume, onSwitchKind, onDelete }) => {
+            // Until one is picked: whichever side has something in it, preferring Completed.
+            const tab = chosenTab || (archived.length === 0 && halted.length > 0 ? 'stopped' : 'done');
             const Pick = ({ id, icon: Icon, label, hint, count }) => {
                 const on = tab === id;
                 return (
-                    <button type="button" role="tab" aria-selected={on} onClick={() => setTab(id)} title={hint}
+                    <button type="button" role="tab" aria-selected={on} onClick={() => onTab(id)} title={hint}
                         className={`flex items-center gap-1.5 text-sm font-bold px-3 py-1.5 rounded-md transition-colors ${on ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}>
                         <Icon size={15} style={on ? { color: BRAND.green } : {}} aria-hidden="true" />
                         {label}
@@ -1899,21 +2180,28 @@
                 <div>
                     <div className="max-w-[1100px] mx-auto px-4 md:px-6 pt-6">
                         <div className="inline-flex items-center gap-0.5 bg-slate-100 rounded-lg p-0.5" role="tablist">
-                            <Pick id="done" icon={Archive} label={t.hubDone} hint={t.hubDoneHint} count={archived.length} />
-                            <Pick id="stopped" icon={PauseCircle} label={t.hubStopped} hint={t.hubStoppedHint} count={halted.length} />
+                            <Pick id="done" icon={Archive} label={t.hubDone} hint={t.hubDoneHint} count={archivedRows.length} />
+                            <Pick id="stopped" icon={PauseCircle} label={t.hubStopped} hint={t.hubStoppedHint} count={haltedRows.length} />
                         </div>
                     </div>
                     {/* Each side keeps its own view: the columns, the wording and the
                         actions genuinely differ (unarchive vs resume / switch kind). */}
                     {tab === 'done'
-                        ? <ArchiveView t={t} projects={archived} onOpen={onOpen} onUnarchive={onUnarchive} onDelete={onDelete} />
-                        : <HaltedView t={t} projects={halted} onOpen={onOpen} onResume={onResume} onSwitchKind={onSwitchKind} onDelete={onDelete} />}
+                        ? <ArchiveView t={t} projects={archived} rows={archivedRows} query={query} onQuery={onQuery} onOpen={onOpen} onUnarchive={onUnarchive} onDelete={onDelete} />
+                        : <HaltedView t={t} projects={halted} rows={haltedRows} query={query} onQuery={onQuery} onOpen={onOpen} onResume={onResume} onSwitchKind={onSwitchKind} onDelete={onDelete} />}
                 </div>
             );
         };
 
-        const NameModal = ({ t, initial, onSave, onClose }) => {
-            const [name, setName] = useState(initial || '');
+        // Pick yourself from the people registry. A free text box with "e.g. Luke"
+        // as the example produced first names and nicknames that matched no one
+        // in the registry, so a colleague's work was credited to a second person.
+        const NameModal = ({ t, initial, names = [], onSave, onClose }) => {
+            const registry = [...new Set((names || []).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+            const resolved = initial && Board.resolvePersonName ? Board.resolvePersonName(initial, registry) : (initial || '');
+            const [choice, setChoice] = useState(registry.includes(resolved) ? resolved : ((initial || registry.length === 0) ? '__other' : ''));
+            const [other, setOther] = useState(registry.includes(resolved) ? '' : (initial || ''));
+            const name = choice === '__other' ? other : choice;
             const canSave = !!name.trim();
             const save = () => { if (canSave) { onSave(name.trim()); onClose(); } };
             return (
@@ -1924,10 +2212,21 @@
                         </div>
                         <h2 className="text-lg font-bold brand-heading mb-2">{t.whoTitle}</h2>
                         <p className="text-sm text-slate-500 leading-relaxed mb-5">{t.whoDesc}</p>
-                        <input autoFocus type="text" value={name} onChange={e => setName(e.target.value)}
-                            onKeyDown={e => { if (e.key === 'Enter') save(); }}
-                            placeholder={t.whoPlaceholder}
-                            className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500 mb-5" />
+                        {registry.length > 0 && (
+                            <select autoFocus value={choice} onChange={e => setChoice(e.target.value)}
+                                className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500 mb-3 bg-white">
+                                <option value="">{t.whoPick}</option>
+                                {registry.map(n => <option key={n} value={n}>{n}</option>)}
+                                <option value="__other">{t.whoOther}</option>
+                            </select>
+                        )}
+                        {choice === '__other' && (
+                            <input autoFocus={registry.length === 0} type="text" value={other} onChange={e => setOther(e.target.value)}
+                                onKeyDown={e => { if (e.key === 'Enter') save(); }}
+                                placeholder={t.whoPlaceholder}
+                                className="w-full border border-slate-300 rounded-lg px-3 py-2.5 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500 mb-3" />
+                        )}
+                        <div className="mb-2" />
                         <div className="flex justify-end gap-2">
                             {initial ? <button type="button" onClick={onClose} className="text-sm font-bold text-slate-500 px-4 py-2 rounded-lg hover:bg-slate-100">{t.backupClose}</button> : null}
                             <button type="button" onClick={save} disabled={!canSave}
@@ -2035,6 +2334,63 @@
             );
         };
 
+        // The outcome of pushing a trial into the Product Dashboard, and what to do
+        // about it. Every obstacle importTrialIntoProduct reports gets a sentence
+        // and, where there is one, the action that removes it.
+        const PushTrialDialog = ({ t, project, state, result, onRetry, onForce, onRemoveNote, onClose }) => {
+            const r = result || {};
+            const product = r.productName || (project && project.product) || '';
+            const named = (x) => x ? ' ("' + x + '")' : '';
+            const stateName = (v) => v === 'processed' ? t.stateProcessed : v === 'whole' ? t.stateWhole : v;
+            const done = state === 'done' && r.ok;
+            const text = state !== 'done' ? t.pushWorking
+                : r.ok ? (r.alreadyThere ? t.pushAlready.replace('{product}', product).replace('{n}', r.skipped || 0)
+                    : r.imported ? t.pushDone.replace('{n}', r.imported).replace('{product}', product)
+                    : r.updated ? t.pushUpdated.replace('{n}', r.updated).replace('{product}', product)
+                    : t.pushBaselineOnly.replace('{product}', product))
+                : r.reason === 'not-linked' ? t.pushNotLinked.replace('{name}', named(r.productName))
+                : r.reason === 'no-report' ? t.pushNoReport
+                : r.reason === 'not-a-report' ? t.pushNotReport
+                : r.reason === 'product-missing' ? t.pushProductMissing.replace('{name}', named(r.productName))
+                : r.reason === 'state-mismatch' ? t.pushStateMismatch.replace('{report}', stateName(r.reportState)).replace('{product}', product).replace('{productState}', stateName(r.productState))
+                : r.reason === 'no-trial-data' ? t.pushNoData
+                : r.reason === 'busy' ? t.pushBusy.replace('{product}', product)
+                : r.reason === 'no-card' ? t.pushNoCard
+                : t.pushError.replace('{msg}', r.message || r.reason || '?');
+            const btn = 'px-3.5 py-2 rounded-lg text-sm font-bold border border-slate-200 text-slate-700 hover:bg-slate-50';
+            const openReport = () => window.location.assign('report.html?boardProject=' + encodeURIComponent(project.id));
+            return (
+                <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md">
+                        <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-slate-100">
+                            <div className="min-w-0">
+                                <h2 className="text-lg font-bold brand-heading truncate" style={{ color: BRAND.blue }}>{t.pushTitle}</h2>
+                                <p className="text-xs text-slate-500 truncate">{[project.client, project.product].filter(Boolean).join(' · ')}</p>
+                            </div>
+                            <button type="button" onClick={onClose} className="p-1.5 rounded-lg hover:bg-slate-100 shrink-0" aria-label={t.pushClose}><X size={18} /></button>
+                        </div>
+                        <div className="px-6 py-5 flex items-start gap-3">
+                            {state !== 'done'
+                                ? <RefreshCw size={20} className="shrink-0 mt-0.5 animate-spin" style={{ color: BRAND.blue }} />
+                                : done ? <Check size={20} className="shrink-0 mt-0.5" style={{ color: BRAND.green }} />
+                                : <AlertTriangle size={20} className="shrink-0 mt-0.5 text-amber-600" />}
+                            <p className="text-sm text-slate-700 leading-relaxed">{text}</p>
+                        </div>
+                        {state === 'done' && (
+                            <div className="px-6 pb-5 flex flex-wrap justify-end gap-2">
+                                {done && r.productId && <a className={btn} href={'dashboard.html?product=' + encodeURIComponent(r.productId)}>{t.pushOpenDashboard}</a>}
+                                {!done && ['not-linked', 'product-missing', 'state-mismatch', 'no-report', 'no-trial-data', 'not-a-report'].includes(r.reason) && <button type="button" className={btn} onClick={openReport}>{t.pushOpenReport}</button>}
+                                {!done && ['not-linked', 'product-missing', 'no-report', 'not-a-report'].includes(r.reason) && <button type="button" className={btn} onClick={onRemoveNote}>{t.pushRemoveNote}</button>}
+                                {!done && r.reason === 'state-mismatch' && <button type="button" className={btn} onClick={onForce}>{t.pushForce}</button>}
+                                {!done && ['busy', 'error'].includes(r.reason || 'error') && <button type="button" className={btn} onClick={onRetry}>{t.pushRetry}</button>}
+                                <button type="button" className="px-3.5 py-2 rounded-lg text-sm font-bold text-white" style={{ backgroundColor: BRAND.blue }} onClick={onClose}>{t.pushClose}</button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
         // === App ===
         const App = () => {
             const [lang, setLang] = useState(getInitialLang);
@@ -2047,14 +2403,25 @@
             const [editing, setEditing] = useState(null); // project object or null
             const [showFilter, setShowFilter] = useState(false);
             const [showAgenda, setShowAgenda] = useState(false);
-            const [filters, setFilters] = useState({ q: '', client: '', product: '', commercial: '', productManager: '' });
+            // Restored from this browser tab (see readUiState), so a trip to a tool
+            // and back keeps the view and its filters.
+            const [savedUi] = useState(readUiState);
+            const [filters, setFilters] = useState(() => restoredFilters(savedUi.filters));
+            // The archive filters on its own: the board and the archive answer
+            // different questions, and one filter for both emptied the other.
+            const [archiveFilters, setArchiveFilters] = useState(() => restoredFilters(savedUi.archiveFilters));
+            const [archiveTab, setArchiveTab] = useState(savedUi.archiveTab === 'done' || savedUi.archiveTab === 'stopped' ? savedUi.archiveTab : null);
             const [dragId, setDragId] = useState(null);
             const [syncState, setSyncState] = useState(null); // .sync/pipedrive-state.json
             // Products live in the same folder as the projects (see board-db.js).
             // Only the light index is read here — never the full records, which
             // carry the attached product-sheet HTML.
             const [productIndex, setProductIndex] = useState([]);
-            const [view, setView] = useState('board'); // 'board' | 'products' | 'archive' | 'trash'
+            // Alphabetical once, for every list that shows products (see compareProducts).
+            const sortedProducts = useMemo(() => [...productIndex].sort(compareProducts), [productIndex]);
+            const [productQuery, setProductQuery] = useState(typeof savedUi.productQuery === 'string' ? savedUi.productQuery : '');
+            const shownProducts = useMemo(() => sortedProducts.filter(p => productMatches(p, productQuery)), [sortedProducts, productQuery]);
+            const [view, setView] = useState(BOARD_VIEWS.includes(savedUi.view) ? savedUi.view : 'board'); // 'board' | 'products' | 'archive' | 'trash'
             // The recycle bin holds BOTH halves of the database: deleted project
             // cards and deleted products. One bin, because it is one folder and a
             // person looking for something they lost should not have to guess
@@ -2123,6 +2490,9 @@
             // Who else has the database open. Polled, not pushed: a folder cannot
             // notify us, and one small directory listing a minute is cheap.
             const [presence, setPresence] = useState([]);
+            // Every other trace of work (durable last-seen, project locks, deleted
+            // cards): the evidence behind "last seen" for whoever is not online.
+            const [activity, setActivity] = useState([]);
             const [lastLoadedAt, setLastLoadedAt] = useState(null);
             const [showPresence, setShowPresence] = useState(false);
             const [showInfo, setShowInfo] = useState(false);
@@ -2138,10 +2508,28 @@
             const manifestRef = useRef(manifest);
             const applyManifest = useCallback((m) => { manifestRef.current = m; setManifest(m); }, []);
 
+            // Cards from before the tools put the project title on the card: show
+            // it from the head of the phase file (Board.readProjectTitle, cached per
+            // file). Display only — the board never writes it: a background write
+            // races the board's own queued saves and older board copies. The tools
+            // store it on the card the next time the project is saved there.
+            const titleFill = useRef({ tried: new Set(), running: false });
+            const [headTitles, setHeadTitles] = useState({});
+
+            // Saves queued or running, and a counter bumped by each (see commit()).
+            const commitSeq = useRef(0);
+            const pendingCommits = useRef(0);
             const loadManifest = useCallback(async () => {
                 try {
+                    const seq = commitSeq.current;
                     const m = await Board.readManifest();
-                    applyManifest(m);
+                    // A save was queued, ran or finished while this read was on its
+                    // way: m may predate it, and that save's own re-read (adopted by
+                    // commit) is newer. Applying m undid the user's edit on screen.
+                    if (seq === commitSeq.current && pendingCommits.current === 0) applyManifest(m);
+                    // A file may have changed since (a rename in a tool): look again,
+                    // which costs a metadata call per card while it has not.
+                    titleFill.current.tried.clear();
                     setError('');
                     // So the info panel can say how current the board is. Without it
                     // there is no way to tell a quiet afternoon from a board that
@@ -2157,8 +2545,12 @@
                     Promise.all((m.projects || []).map(p =>
                         Board.readLock(p.id).then(l => [p.id, l]).catch(() => [p.id, null])
                     )).then(pairs => {
+                        // Show the person, not the label typed in their browser.
+                        const registry = [...((m.people && m.people.commercials) || []), ...((m.people && m.people.productManagers) || [])]
+                            .map(x => typeof x === 'string' ? x : (x && x.name) || '')
+                            .concat((m.projects || []).flatMap(p => [p.commercial, p.productManager]).filter(Boolean));
                         const next = {};
-                        pairs.forEach(([id, l]) => { if (l) next[id] = l; });
+                        pairs.forEach(([id, l]) => { if (l) next[id] = Board.resolvePersonName ? { ...l, user: Board.resolvePersonName(l.user, registry) || l.user } : l; });
                         setLocks(next);
                     });
                 } catch (e) {
@@ -2167,6 +2559,25 @@
                     else setError(e.message || String(e));
                 }
             }, [applyManifest]);
+
+            useEffect(() => {
+                const q = titleFill.current;
+                if (status !== 'ready' || q.running || !Board.readProjectTitle) return;
+                const todo = (manifest.projects || []).filter(p => p && p.id && !shownTitle(p.title)
+                    && !p.deletedAt && !p.archivedAt && !p.haltedAt && p.phase !== 'intake' && !q.tried.has(p.id));
+                if (!todo.length) return;
+                q.running = true;
+                (async () => {
+                    try {
+                        for (const p of todo) {
+                            q.tried.add(p.id);
+                            let title = '';
+                            try { title = await Board.readProjectTitle(p.id); } catch (e) { title = ''; }
+                            setHeadTitles(h => (h[p.id] || '') === title ? h : { ...h, [p.id]: title });
+                        }
+                    } finally { q.running = false; }
+                })();
+            }, [status, manifest]);
 
             // Initial state detection
             useEffect(() => {
@@ -2251,6 +2662,16 @@
                 return () => { stopped = true; clearInterval(id); window.removeEventListener('focus', onFocus); };
             }, [status, dbFormat]);
 
+            useEffect(() => {
+                if (status !== 'ready' || dbFormat !== 'cards' || !Board.readActivity) return;
+                let stopped = false;
+                const read = () => { Board.readActivity().then(list => { if (!stopped) setActivity(list); }).catch(() => { }); };
+                read();
+                const id = setInterval(read, 5 * 60000);
+                window.addEventListener('focus', read);
+                return () => { stopped = true; clearInterval(id); window.removeEventListener('focus', read); };
+            }, [status, dbFormat]);
+
             // Which storage format the linked folder uses, and the daily backup.
             // Both run once per page load — the focus-reload above must not fire
             // a backup every time you tab back to the board.
@@ -2302,7 +2723,10 @@
                         .replace('{name}', (c.theirs && c.theirs.updatedBy) || t.conflictSomeone)
                         .replace('{card}', (c.theirs && (c.theirs.client || c.theirs.product)) || c.cardId)
                     ).join(' '));
-                    await loadManifest();
+                    // commit() has already taken the folder as re-read with the error
+                    // (the winning versions included); a full reload here would also
+                    // throw away edits queued behind the failed write.
+                    if (!e.fresh) await loadManifest();
                     return;
                 }
                 setError(e.message || String(e));
@@ -2318,18 +2742,95 @@
             //     calls cannot both diff against the same card snapshot — which is
             //     what produced spurious "someone else was faster" conflicts.
             const writeChain = useRef(Promise.resolve());
+            // After a write, board-db has re-read the folder (the snapshot its next
+            // diff is taken against). Take that version into memory as well. Left
+            // behind, every card someone else changed in the meantime — a product
+            // picked in the report in another tab, a colleague's edit — was written
+            // back from the board's older copy on the NEXT save, with the
+            // snapshot's rev, so nothing flagged it. Cards edited here since this
+            // write was queued keep their local version.
+            // A card edited here after the write that just finished was sent: put
+            // only this side's changes (sent -> now) onto the disk version, so an
+            // edit made on an older copy does not revert someone else's fields.
+            const rebaseCard = (fp, s, c) => {
+                const out = { ...fp };
+                Object.keys(c).forEach(k => { if (k !== 'rev' && JSON.stringify(c[k]) !== JSON.stringify(s[k])) out[k] = c[k]; });
+                Object.keys(s).forEach(k => { if (!(k in c)) delete out[k]; });
+                return out;
+            };
+            const adoptFresh = useCallback((sent, fresh) => {
+                if (!fresh || !Array.isArray(fresh.projects)) return;
+                const cur = manifestRef.current;
+                const sentById = new Map((sent.projects || []).map(p => [p.id, p]));
+                const curById = new Map((cur.projects || []).map(p => [p.id, p]));
+                const projects = [];
+                fresh.projects.forEach(fp => {
+                    const s = sentById.get(fp.id), c = curById.get(fp.id);
+                    if (s && !c) return;                                   // removed here since: the queued write tombstones it
+                    if (!c || c === s) { projects.push(fp); return; }      // untouched here: the disk version wins
+                    projects.push(s ? rebaseCard(fp, s, c) : c);           // edited here since
+                });
+                // Cards created here after this write was sent are not on disk yet.
+                (cur.projects || []).forEach(c => { if (!sentById.has(c.id) && !projects.some(p => p.id === c.id)) projects.push(c); });
+                applyManifest({ ...cur, ...fresh, projects, people: cur.people === sent.people ? (fresh.people || cur.people) : cur.people });
+            }, [applyManifest]);
             const commit = useCallback((patch) => {
                 beginMutation();
-                const next = { ...manifestRef.current, ...patch };
-                applyManifest(next);
-                const job = writeChain.current
-                    .then(() => Board.writeManifest(next), () => Board.writeManifest(next))
-                    .then(() => setConflictNote(null), (e) => handleWriteError(e));
+                applyManifest({ ...manifestRef.current, ...patch });
+                commitSeq.current++;
+                pendingCommits.current++;
+                // The payload is taken when the write RUNS, not when it is queued:
+                // by then memory holds the previous write's re-read plus every edit
+                // made here since. Captured at queue time, a second quick edit wrote
+                // the older copies of cards someone else had just changed back over
+                // them, with the snapshot's rev, so nothing flagged it.
+                const run = () => {
+                    const sent = manifestRef.current;
+                    return Board.writeManifest(sent).then(
+                        (fresh) => { pendingCommits.current--; setConflictNote(null); adoptFresh(sent, fresh); },
+                        (e) => { pendingCommits.current--; if (e && e.fresh) adoptFresh(sent, e.fresh); return handleWriteError(e); });
+                };
+                const job = writeChain.current.then(run, run);
                 writeChain.current = job.catch(() => {});
                 return job;
-            }, [applyManifest, handleWriteError]);
+            }, [applyManifest, handleWriteError, adoptFresh]);
 
             const persist = useCallback((nextProjects) => commit({ projects: nextProjects }), [commit]);
+
+            // ---- Trial → Product Dashboard -----------------------------------
+            // A card moved to Dashboard gets its trial into the product it is
+            // linked to right away (Board.importTrialIntoProduct writes the product
+            // record). The note on the card only stays when that could not be done,
+            // and clicking it tries again and says what is in the way. It used to
+            // wait for someone to open the Product Dashboard — the current version,
+            // and freshly loaded, since it only looked when it started.
+            const [pushDialog, setPushDialog] = useState(null); // { projectId, state: 'working'|'done', result }
+            const [pushNotice, setPushNotice] = useState(null); // { ok, text }
+            const dropImportNote = (projectId) => {
+                const cur = (manifestRef.current.projects || []).find(p => p.id === projectId);
+                if (!cur || !cur.dashboardImportPending) return Promise.resolve();
+                return persist((manifestRef.current.projects || []).map(p => {
+                    if (p.id !== projectId) return p;
+                    const { dashboardImportPending, ...rest } = p;
+                    return rest;
+                }));
+            };
+            const pushTrial = async (project, opts = {}) => {
+                if (!project || !Board.importTrialIntoProduct) return;
+                if (!opts.quiet) setPushDialog({ projectId: project.id, state: 'working', result: null });
+                let result;
+                try { result = await Board.importTrialIntoProduct(project.id, { force: !!opts.force }); }
+                catch (e) { result = { ok: false, reason: 'error', message: e.message || String(e) }; }
+                if (result.ok) await dropImportNote(project.id);
+                if (opts.quiet) {
+                    const product = result.productName || project.product || '';
+                    setPushNotice(result.ok ? { ok: true, text: (result.alreadyThere ? t.pushNoticeAlready : t.pushNoticeDone).replace('{product}', product) } : { ok: false, text: t.pushNoticeFailed });
+                    setTimeout(() => setPushNotice(n => (n && n.ok === result.ok ? null : n)), result.ok ? 6000 : 12000);
+                } else {
+                    setPushDialog(d => (d && d.projectId === project.id ? { projectId: project.id, state: 'done', result } : d));
+                }
+                return result;
+            };
             // What every mutation must build on. Render code reads `manifest`
             // instead — that has to stay reactive.
             const currentProjects = () => manifestRef.current.projects || [];
@@ -2423,9 +2924,17 @@
             };
 
             const saveProject = async (data) => {
+                // The card as the dialog opened it: what the user changed is what
+                // differs from this, and only that is written onto the card as it is
+                // NOW. Writing the dialog's whole copy put its open-time product link,
+                // phase, title and files back over changes made meanwhile elsewhere.
+                const base = (editing && editing.id === data.id) ? editing : null;
+                const current = currentProjects().find(p => p.id === data.id);
                 // Back-fill the product link for anything typed rather than picked
-                // (and for Pipedrive-owned cards, where the name is read-only).
-                if (!data.productId && (data.product || '').trim()) {
+                // (and for Pipedrive-owned cards, where the name is read-only) — but
+                // not over a link that arrived while the dialog was open.
+                const productTyped = !base || (data.product || '') !== (base.product || '');
+                if (!data.productId && (data.product || '').trim() && (productTyped || !(current && current.productId))) {
                     try {
                         const id = await Board.resolveProductId(data.product, { products: productIndex });
                         if (id) data = { ...data, productId: id };
@@ -2436,10 +2945,34 @@
                 if (exists) {
                     next = currentProjects().map(p => {
                         if (p.id !== data.id) return p;
-                        const merged = { ...p, ...data, updatedAt: new Date().toISOString() };
+                        // The dialog holds the card as it was when it opened; the
+                        // "not yet in the dashboard" note may have been cleared by the
+                        // push since, and is never the dialog's to set.
+                        const { dashboardImportPending: _pendingAtOpen, ...fields } = data;
+                        if (!base) {
+                            const merged = { ...p, ...fields, updatedAt: new Date().toISOString() };
+                            if (data.phase !== p.phase) merged.phaseChangedAt = new Date().toISOString();
+                            return merged;
+                        }
+                        const SKIP = { id: 1, rev: 1, updatedAt: 1, updatedBy: 1, actions: 1, nextAction: 1 };
+                        const merged = { ...p };
+                        Object.keys(fields).forEach(k => {
+                            if (SKIP[k]) return;
+                            if (JSON.stringify(fields[k]) !== JSON.stringify(base[k])) merged[k] = fields[k];
+                        });
+                        // Actions: the tools' own (auto/measurement) ones as they are
+                        // now; the dialog's manual list only when the user changed it.
+                        const isAuto = (a) => a && (a.auto || a.kind === 'measurement');
+                        const manualOf = (list) => (Array.isArray(list) ? list : []).filter(a => !isAuto(a));
+                        const dialogManual = manualOf(fields.actions);
+                        if (JSON.stringify(dialogManual) !== JSON.stringify(manualOf(base.actions)) || base.nextAction) {
+                            merged.actions = [...(Array.isArray(p.actions) ? p.actions : []).filter(isAuto), ...dialogManual];
+                            delete merged.nextAction;
+                        }
                         // The sync arbitrates phase changes on both sides by
                         // timestamp, so every board-side move must be stamped.
-                        if (data.phase !== p.phase) merged.phaseChangedAt = new Date().toISOString();
+                        if (fields.phase !== base.phase && merged.phase !== p.phase) merged.phaseChangedAt = new Date().toISOString();
+                        merged.updatedAt = new Date().toISOString();
                         return merged;
                     });
                 } else {
@@ -2553,7 +3086,7 @@
             const toolForPhase = (phaseKey) =>
                 Board.phaseByKey[phaseKey === 'dashboard' ? 'report' : phaseKey];
 
-            const openInTool = (project, phaseKey) => {
+            const openInTool = async (project, phaseKey) => {
                 const phase = toolForPhase(phaseKey);
                 let url = phase.tool + '?boardProject=' + encodeURIComponent(project.id);
 
@@ -2561,6 +3094,15 @@
                 // is being worked on. Fire-and-forget: navigation must not wait on
                 // it, and a lock we cannot write is not worth blocking the user.
                 if (dbFormat === 'cards') Board.touchLock(project.id);
+                // A copy made before October 2026 can hold nothing but an emptied
+                // file, which every tool refuses (autosave off, typing lost). Give
+                // it its set-up from the original first; a copy with anything of
+                // its own is left alone. This one does wait: the tool must find it.
+                if (dbFormat === 'cards' && project.copiedFrom && Board.repairEmptiedCopy) {
+                    const original = currentProjects().find(p => p.id === project.copiedFrom);
+                    try { await Board.repairEmptiedCopy(project.id, project.copiedFrom, Object.keys((original && original.files) || {})); }
+                    catch (e) { /* open it anyway */ }
+                }
                 window.location.assign(url); // open in the current tab
             };
 
@@ -2644,6 +3186,38 @@
             };
 
             // Products open in the dashboard, which owns all product editing.
+            // Trials overview of one product (Products tab).
+            const [trialsFor, setTrialsFor] = useState(null);   // { product, rows|null, hidden }
+            const openTrials = (product) => {
+                const all = (manifest.projects || []).filter(p => p.productId === product.id && !p.deletedAt);
+                const shown = all.filter(p => Board.isProductTrial(p, product.id)).length;
+                setTrialsFor({ product, rows: null, hidden: all.length - shown });
+                Board.readProductTrials(product.id, manifest.projects)
+                    .then(rows => setTrialsFor(cur => cur && cur.product.id === product.id ? { ...cur, rows } : cur))
+                    .catch(() => setTrialsFor(cur => cur && cur.product.id === product.id ? { ...cur, rows: [] } : cur));
+            };
+            // A trial opens in the report tool, archived or not.
+            const openTrial = (card) => window.location.assign(Board.phaseByKey.report.tool + '?boardProject=' + encodeURIComponent(card.id));
+            // Came back from a report opened in a product's trials list: open that
+            // list again, once the products and the projects have been read.
+            const reopenTrialsFor = useRef(view === 'products' ? savedUi.trials || null : null);
+            useEffect(() => {
+                const id = reopenTrialsFor.current;
+                if (!id || !lastLoadedAt || !productIndex.length) return;
+                reopenTrialsFor.current = null;
+                const product = productIndex.find(p => p.id === id);
+                if (product && view === 'products') openTrials(product);
+            }, [lastLoadedAt, productIndex, view]);
+            // Remember where this tab is, every time it changes.
+            useEffect(() => {
+                try {
+                    window.sessionStorage.setItem(UI_STATE_KEY, JSON.stringify({
+                        view, filters, archiveFilters, archiveTab, productQuery,
+                        trials: trialsFor && trialsFor.product ? trialsFor.product.id : null
+                    }));
+                } catch (e) { /* private mode: the board just starts on its default view */ }
+            }, [view, filters, archiveFilters, archiveTab, productQuery, trialsFor]);
+
             const openProductInDashboard = (product) => {
                 const url = Board.phaseByKey.dashboard.tool + '?product=' + encodeURIComponent(product.id);
                 window.location.assign(url);
@@ -2707,17 +3281,48 @@
                 for (const f of jsons) {
                     try {
                         const data = JSON.parse(await f.text());
+                        // The Dashboard column has no document of its own: its cards
+                        // open in the report tool, and the push into the product reads
+                        // the REPORT file. A report dropped here therefore goes into
+                        // report.json, the card lands in Dashboard and is pushed right
+                        // away, exactly as if it had been dragged there from Report.
+                        // It used to be stored as dashboard.json, which no tool reads,
+                        // so the card opened empty and never reached the product
+                        // (October 2026). Only a report can go there directly.
+                        const toDashboard = phaseKey === 'dashboard';
+                        if (toDashboard && !(data && data.isPerfoTecReport === true && Array.isArray(data.groups))) {
+                            setError(t.dashboardNeedsReport.replace('{name}', f.name));
+                            continue;
+                        }
+                        const fileKey = toDashboard ? 'report' : phaseKey;
                         const id = Board.newId();
-                        await Board.writePhaseFile(id, phaseKey, data);
+                        await Board.writePhaseFile(id, fileKey, data);
                         const meta = deriveMeta(data);
+                        // Keep a product link the document carries, but only when that
+                        // product exists: the link is the authority for the push, and
+                        // a name is never guessed into one.
+                        const docProductId = (data.project && data.project.productId) || '';
+                        const productId = docProductId && productIndex.some(p => p.id === docProductId) ? docProductId : '';
                         let image = '';
                         const imgSrc = (data.project && (data.project.coverImage || data.project.startImage)) ||
                             (Array.isArray(data.products) && data.products[0] && data.products[0].photo) || '';
                         if (imgSrc) { const s = await Board.scaleImage(imgSrc, 480); if (s) image = s; }
-                        added.push({ id, title: '', ...meta, image, phase: phaseKey, files: { [phaseKey]: true }, actions: [], updatedAt: new Date().toISOString() });
+                        added.push({ id, title: '', ...meta, ...(productId ? { productId } : {}), image, phase: phaseKey,
+                            files: { [fileKey]: true }, ...(toDashboard ? { dashboardImportPending: true } : {}),
+                            actions: [], updatedAt: new Date().toISOString() });
                     } catch (err) { setError(t.importFailed + ' ' + f.name); }
                 }
-                if (added.length) await persist([...currentProjects(), ...added]);
+                if (added.length) {
+                    await persist([...currentProjects(), ...added]);
+                    // Same as a card moved into Dashboard: push each trial into its
+                    // product now. One that is not linked yet keeps the note on the
+                    // card, and clicking it says what to do.
+                    for (const a of added) {
+                        if (a.phase !== 'dashboard') continue;
+                        const landed = currentProjects().find(p => p.id === a.id);
+                        if (landed) await pushTrial(landed, { quiet: true });
+                    }
+                }
             };
 
             const onDrop = async (phaseKey, droppedFiles) => {
@@ -2779,6 +3384,7 @@
                 // Dashboard appeared to work and then sprang back to Report.
                 const landed = (manifestRef.current.projects || []).find(p => p.id === project.id);
                 if (!landed || landed.phase !== phaseKey) { setError(t.moveLost); return; }
+                if (phaseKey === 'dashboard') pushTrial(landed, { quiet: true });
             };
 
             // A project stores `product` as free text (Pipedrive owns it on CRM
@@ -2829,12 +3435,24 @@
             // or not. Three sources, best evidence wins for "last seen".
             const roster = useMemo(() => {
                 const by = new Map();
+                // Labels are typed per browser ("Chris"), the registry has full names
+                // ("Christiaan Mulder"): resolve every label to its person first,
+                // or one colleague is two rows and the assigned one is never seen.
+                // Everyone the database names in full: the registry, and whoever is
+                // assigned on a card (a name can be on a card but in no picklist).
+                const registry = [...(people.commercials || []), ...(people.productManagers || [])].map(p => p.name)
+                    .concat((manifest.projects || []).flatMap(p => [p.commercial, p.productManager]).filter(Boolean));
+                const resolve = (name) => Board.resolvePersonName ? Board.resolvePersonName(name, registry) : (name || '').trim();
                 const take = (name) => {
-                    const key = (name || '').trim();
+                    const raw = (name || '').replace(/\s+/g, ' ').trim();
+                    const key = resolve(raw);
                     if (!key) return null;
-                    if (!by.has(key)) by.set(key, { user: key, online: false, self: false, pages: [], lastAt: 0 });
-                    return by.get(key);
+                    if (!by.has(key)) by.set(key, { user: key, aliases: [], online: false, self: false, pages: [], lastAt: 0 });
+                    const r = by.get(key);
+                    if (raw && raw !== key && !r.aliases.includes(raw)) r.aliases.push(raw);
+                    return r;
                 };
+                const seenAt = (r, at) => { const ts = Date.parse(at || ''); if (ts && ts > r.lastAt) r.lastAt = ts; };
                 // 1. The registry — a colleague belongs here even if they have
                 //    never opened the board.
                 [...(people.commercials || []), ...(people.productManagers || [])].forEach(p => take(p.name));
@@ -2854,13 +3472,27 @@
                     if (ts && ts > r.lastAt) r.lastAt = ts;
                 });
                 // 3. Presence — authoritative for both online and last seen.
+                const me = resolve(userLabel);
                 presence.forEach(e => {
                     const r = take(e.user);
                     if (!r) return;
-                    const ts = Date.parse(e.at || '');
-                    if (ts && ts > r.lastAt) r.lastAt = ts;
-                    if (e.self) r.self = true;
+                    seenAt(r, e.at);
+                    if (e.self || (me && r.user === me)) r.self = true;
                     if (e.online) { r.online = true; if (e.page && !r.pages.includes(e.page)) r.pages.push(e.page); }
+                });
+                // 4. Everything else that proves someone worked here: the durable
+                //    last-seen, project locks (left by every version, from any tool)
+                //    and deleted cards. Last seen only — never "online".
+                activity.forEach(e => { const r = take(e.user); if (r) seenAt(r, e.at); });
+                // 5. A fresh project lock (under two minutes, re-read every minute) is
+                //    someone in a tool right now — the only live sign from a colleague
+                //    whose copy of the tools predates presence.
+                Object.values(locks || {}).forEach(l => {
+                    const r = take(l.user);
+                    if (!r) return;
+                    seenAt(r, l.at);
+                    r.online = true;
+                    if (!r.pages.length) r.pages.push(t.whoInProject);
                 });
                 const now = Date.now();
                 const label = (r) => {
@@ -2876,21 +3508,11 @@
                     .sort((x, y) => (x.online === y.online)
                         ? (y.lastAt - x.lastAt) || x.user.localeCompare(y.user)
                         : (x.online ? -1 : 1));
-            }, [people, manifest.projects, presence, t]);
+            }, [people, manifest.projects, presence, activity, locks, userLabel, t]);
 
-            const matches = (p) => {
-                if (filters.client && p.client !== filters.client) return false;
-                if (filters.product && p.product !== filters.product) return false;
-                if (filters.commercial && p.commercial !== filters.commercial) return false;
-                if (filters.productManager && p.productManager !== filters.productManager) return false;
-                if (filters.q) {
-                    const actionText = getActions(p).map(a => a.text).join(' ');
-                    const hay = [p.title, p.client, p.product, p.commercial, p.productManager, p.nextAction, actionText].filter(Boolean).join(' ').toLowerCase();
-                    if (!hay.includes(filters.q.toLowerCase())) return false;
-                }
-                return true;
-            };
-            const filtered = useMemo(() => activeProjects.filter(matches).sort(compareProjects), [activeProjects, filters]);
+            const filtered = useMemo(() => activeProjects.filter(p => matchesFilters(p, filters, headTitles)).sort(compareProjects), [activeProjects, filters, headTitles]);
+            const archivedRows = useMemo(() => archivedProjects.filter(p => matchesFilters(p, archiveFilters, headTitles)), [archivedProjects, archiveFilters, headTitles]);
+            const haltedRows = useMemo(() => haltedProjects.filter(p => matchesFilters(p, archiveFilters, headTitles)), [haltedProjects, archiveFilters, headTitles]);
 
             // Always edit the STORED record, never the display view: `product`
             // there may be the resolved product name, and saving that back would
@@ -2921,33 +3543,6 @@
             //   * action dates and their done flags — the checklist text carries over
             //     as a template, but a brand-new project must not claim work that was
             //     done on the original.
-            // Strip a report document back to its set-up: keep who and what, drop
-            // every measured value and every conclusion. Used only when a copy has
-            // no other document to fall back on.
-            const stripTrialResults = (doc) => {
-                const out = { ...doc };
-                delete out.analysis;      // conclusions, recommendations, next steps
-                delete out.exportDate;    // belongs to the original's export
-                out.groups = (doc.groups || []).map(g => ({
-                    // id, name and specs describe the trial arm — that is set-up.
-                    ...g,
-                    predictedImage: undefined,
-                    measurements: (g.measurements || []).map(m => ({
-                        // Keep the schedule (which day is evaluated) and the sample
-                        // slots, blank what was measured in them.
-                        day: m.day,
-                        samples: (m.samples || []).map(sm => ({ id: sm.id, o2: '', co2: '', weight: '' })),
-                        // qualityParams must stay an array: the report's pencil
-                        // dialog maps over it, and {} blanked the page there. The
-                        // planned evaluation days come along with the schedule.
-                        quality: '', legacyQuality: '', notes: '', images: [], qualityParams: [],
-                        evaluateQuality: Array.isArray(m.evaluate) ? m.evaluate.length > 0 : !!m.evaluateQuality,
-                        measure: m.measure, open: m.open, evaluate: m.evaluate
-                    }))
-                }));
-                return out;
-            };
-
             const copyProject = async (project) => {
                 const source = currentProjects().find(p => p.id === project.id) || project;
                 const at = new Date().toISOString();
@@ -2957,7 +3552,7 @@
                 ['pipedriveDealUrl', 'crmFlag', 'crmFlagDetail', 'crmSyncedAt',
                  'archivedAt', 'archivedBy',
                  'haltedAt', 'haltedBy', 'haltedKind', 'haltedNote',
-                 'dashboardImportPending', 'deletedAt', 'updatedBy']
+                 'dashboardImportPending', 'deletedAt', 'updatedBy', 'rev']
                     .forEach(k => { delete copy[k]; });
 
                 copy.id = id;
@@ -2966,69 +3561,15 @@
                 copy.copiedFrom = source.id;
                 copy.updatedAt = at;
                 copy.phaseChangedAt = at;   // the copy's clock starts now, not the original's
-                copy.files = {};
 
                 beginMutation();
-                // Give the copy its own documents. Set-up documents are carried over
-                // verbatim; a finished report is not.
-                //
-                // A report document (isPerfoTecReport) is a mix: project/clientInfo/
-                // supplyChain describe the set-up, while groups[].measurements[] and
-                // analysis are the previous trial's results. Carrying it over is what
-                // made a copy show the old round's 72 samples.
-                //   * if a set-up document came across too, the report is skipped
-                //     entirely — readProjectData falls back to the proposal, and the
-                //     ordinary forward-copy rebuilds the report from THIS card's
-                //     proposal when it reaches that phase;
-                //   * if the report is the only document there is, it is copied with
-                //     the results stripped, so the client and product details are
-                //     still saved rather than leaving a blank form.
-                const carried = [];
-                let reportKey = null, reportDoc = null;
-                for (const key of Object.keys(source.files || {})) {
-                    if (!Board.phaseByKey[key]) continue;
-                    try {
-                        const data = await Board.readPhaseFile(source.id, key);
-                        if (!data || !Board.hasContent(data)) continue;
-                        if (data.isPerfoTecReport) { reportKey = key; reportDoc = data; continue; }
-                        await Board.writePhaseFile(id, key, data);
-                        copy.files[key] = true;
-                        carried.push(key);
-                    } catch (e) { /* skip this document, keep the rest */ }
-                }
-                if (reportKey && reportDoc && carried.length === 0) {
-                    try {
-                        await Board.writePhaseFile(id, reportKey, stripTrialResults(reportDoc));
-                        copy.files[reportKey] = true;
-                    } catch (e) { /* leave it out rather than write a half document */ }
-                }
-
-                // Post-condition. The loop above is written to never hand the copy
-                // the original's trial, but this bug has been fixed twice, so it is
-                // checked rather than trusted: if any document the copy now owns
-                // describes the same trial as the original's, drop it and let the
-                // ordinary forward-copy rebuild it from this card's own proposal.
-                const trialShape = (d) => {
-                    if (!d) return null;
-                    const g = d.groups || [];
-                    return JSON.stringify([
-                        g.map(x => x.name),
-                        g.flatMap(x => (x.measurements || []).map(m => String(m.day))),
-                        g.flatMap(x => (x.measurements || []).map(m => (m.samples || []).length))
-                    ]);
-                };
-                for (const key of Object.keys(copy.files)) {
-                    try {
-                        const mine = await Board.readPhaseFile(id, key);
-                        if (!mine || !mine.isPerfoTecReport) continue;
-                        const theirs = await Board.readPhaseFile(source.id, key);
-                        const a = trialShape(mine);
-                        if (a && a !== '[[],[],[]]' && a === trialShape(theirs)) {
-                            await Board.writePhaseFile(id, key, {});
-                            delete copy.files[key];
-                            console.warn('copyProject: dropped ' + key + ' — it still described the original trial');
-                        }
-                    } catch (e) { /* a document we cannot read cannot be the original's */ }
+                // Its own documents: the set-up comes along, the original's results
+                // never do. PerfoTecBoard.copyProjectFiles says how, and why a report
+                // that is the only document becomes the copy's proposal.
+                try {
+                    copy.files = await Board.copyProjectFiles(source.id, id, Object.keys(source.files || {}));
+                } catch (e) {
+                    copy.files = {};   // the card still comes; its tools open a blank form
                 }
 
                 await persist([...currentProjects(), copy]);
@@ -3037,7 +3578,10 @@
                 // one of them is edited.
                 setEditing(copy);
             };
-            const activeFilterCount = (filters.q ? 1 : 0) + FILTER_FIELDS.filter(f => filters[f.key]).length;
+            // The Filter button acts on the view you are in.
+            const viewFilters = view === 'archive' ? archiveFilters : filters;
+            const setViewFilters = view === 'archive' ? setArchiveFilters : setFilters;
+            const activeFilterCount = filterCount(viewFilters);
 
             // ---- Render gates ----
             // NOT a component: a plain function that returns the page around
@@ -3079,7 +3623,7 @@
                                                 // wrapping; the split lives inside the view instead.
                                                 { key: 'archive', label: t.viewArchiveHub, icon: Archive, count: archivedProjects.length + haltedProjects.length }
                                             ].map(v => (
-                                                <button key={v.key} type="button" role="tab" aria-selected={view === v.key} onClick={() => setView(v.key)}
+                                                <button key={v.key} type="button" role="tab" aria-selected={view === v.key} onClick={() => { setView(v.key); setShowFilter(false); }}
                                                     className={`flex items-center gap-1.5 text-sm font-bold px-3 py-1.5 rounded-md transition-colors ${view === v.key ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500 hover:text-slate-700'}`}>
                                                     <v.icon size={15} style={view === v.key ? { color: BRAND.green } : {}} />
                                                     <span className="hidden sm:inline">{v.label}</span>
@@ -3123,21 +3667,27 @@
                                             )}
                                         </div>
                                         <button type="button" onClick={loadManifest} className="p-2 rounded-lg hover:bg-slate-100 text-slate-500" title={t.reload}><RefreshCw size={16} /></button>
-                                        {/* Agenda, filter and "new project" act on projects only. */}
+                                        {/* Agenda and "new project" act on the board's projects;
+                                            the filter on the board's or the archive's. */}
+                                        {view === 'board' && (
+                                            <button type="button" onClick={() => setShowAgenda(true)}
+                                                className="flex items-center gap-1.5 text-sm font-bold px-3 py-2 rounded-lg border text-slate-600 border-slate-200 hover:bg-slate-100" title={t.agenda}>
+                                                <Calendar size={15} /><span className="hidden sm:inline">{t.agenda}</span>
+                                            </button>
+                                        )}
+                                        {(view === 'board' || view === 'archive') && (
+                                            <div className="relative">
+                                                <button type="button" onClick={() => setShowFilter(v => !v)}
+                                                    className={`flex items-center gap-1.5 text-sm font-bold px-3 py-2 rounded-lg border ${activeFilterCount ? 'text-white' : 'text-slate-600 border-slate-200 hover:bg-slate-100'}`}
+                                                    style={activeFilterCount ? { backgroundColor: BRAND.blue, borderColor: BRAND.blue } : {}}>
+                                                    <Filter size={15} />{t.filter}{activeFilterCount > 0 && <span className="ml-0.5">({activeFilterCount})</span>}
+                                                </button>
+                                                {showFilter && <FilterPanel t={t} projects={view === 'archive' ? [...archivedProjects, ...haltedProjects] : activeProjects}
+                                                    filters={viewFilters} setFilters={setViewFilters} onClose={() => setShowFilter(false)} />}
+                                            </div>
+                                        )}
                                         {view === 'board' && (
                                             <>
-                                                <button type="button" onClick={() => setShowAgenda(true)}
-                                                    className="flex items-center gap-1.5 text-sm font-bold px-3 py-2 rounded-lg border text-slate-600 border-slate-200 hover:bg-slate-100" title={t.agenda}>
-                                                    <Calendar size={15} /><span className="hidden sm:inline">{t.agenda}</span>
-                                                </button>
-                                                <div className="relative">
-                                                    <button type="button" onClick={() => setShowFilter(v => !v)}
-                                                        className={`flex items-center gap-1.5 text-sm font-bold px-3 py-2 rounded-lg border ${activeFilterCount ? 'text-white' : 'text-slate-600 border-slate-200 hover:bg-slate-100'}`}
-                                                        style={activeFilterCount ? { backgroundColor: BRAND.blue, borderColor: BRAND.blue } : {}}>
-                                                        <Filter size={15} />{t.filter}{activeFilterCount > 0 && <span className="ml-0.5">({activeFilterCount})</span>}
-                                                    </button>
-                                                    {showFilter && <FilterPanel t={t} projects={activeProjects} filters={filters} setFilters={setFilters} onClose={() => setShowFilter(false)} />}
-                                                </div>
                                                 <button type="button" onClick={() => setEditing(emptyProject())}
                                                     className="flex items-center gap-1.5 text-sm font-bold text-white px-3 py-2 rounded-lg" style={{ backgroundColor: BRAND.green }}>
                                                     <Plus size={16} />{t.newProject}
@@ -3190,6 +3740,20 @@
                         </Notice>
                     )}
                     {/* Not an error: our write lost a race and the board was re-read. */}
+                    {pushNotice && (
+                        <Notice tone={pushNotice.ok ? 'blue' : 'amber'} icon={pushNotice.ok ? Check : AlertTriangle} title={pushNotice.text}
+                            action={<button type="button" onClick={() => setPushNotice(null)} className="p-1 rounded hover:bg-black/5 shrink-0" aria-label={t.pushClose}><X size={14} /></button>}>
+                            {pushNotice.ok ? null : t.pushNoticeHint}
+                        </Notice>
+                    )}
+                    {pushDialog && (() => {
+                        const project = (manifest.projects || []).find(p => p.id === pushDialog.projectId);
+                        if (!project) return null;
+                        return <PushTrialDialog t={t} project={project} state={pushDialog.state} result={pushDialog.result}
+                            onRetry={() => pushTrial(project)} onForce={() => pushTrial(project, { force: true })}
+                            onRemoveNote={async () => { await dropImportNote(project.id); setPushDialog(null); }}
+                            onClose={() => setPushDialog(null)} />;
+                    })()}
                     {conflictNote && (
                         <Notice tone="amber" icon={AlertTriangle} title={t.conflictTitle}
                             action={<button type="button" onClick={() => setConflictNote(null)}
@@ -3232,24 +3796,45 @@
                             onPurgeCard={purgeCard} onPurgeProduct={purgeProduct} />
                     ) : view === 'archive' ? (
                         <ArchiveHub t={t} archived={archivedProjects} halted={haltedProjects}
+                            archivedRows={archivedRows} haltedRows={haltedRows}
+                            tab={archiveTab} onTab={setArchiveTab}
+                            query={archiveFilters.q} onQuery={(q) => setArchiveFilters(f => ({ ...f, q }))}
                             onOpen={openArchived} onUnarchive={unarchiveProject}
                             onResume={resumeProject} onSwitchKind={switchHaltKind}
                             onDelete={deleteProject} />
                     ) : view === 'products' ? (
                         <div className="max-w-[1600px] mx-auto px-4 md:px-6 pt-6 pb-8">
+                            {productIndex.length > 0 && (
+                                <div className="flex flex-wrap items-center gap-3 mb-5">
+                                    <label className="relative">
+                                        <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+                                        <input type="search" value={productQuery} onChange={(e) => setProductQuery(e.target.value)}
+                                            placeholder={t.productSearch} aria-label={t.productSearch}
+                                            className="w-72 pl-8 pr-3 py-2 border border-slate-200 rounded-lg text-sm bg-white outline-none focus:border-[#008837]" />
+                                    </label>
+                                    {productQuery.trim() && (
+                                        <span className="text-xs font-bold text-slate-400">
+                                            {t.productSearchCount.replace('{n}', shownProducts.length).replace('{total}', productIndex.length)}
+                                        </span>
+                                    )}
+                                </div>
+                            )}
                             {productIndex.length === 0 ? (
                                 <p className="text-sm text-slate-400">{t.noProducts}</p>
+                            ) : shownProducts.length === 0 ? (
+                                <p className="text-sm text-slate-400">{t.productNoMatch.replace('{q}', productQuery.trim())}</p>
                             ) : (
                                 <div className="grid gap-4 sm:gap-5" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
                                     {/* projectCount is ACTIVE work: a project on hold or
                                         cancelled is excluded, the same way it is excluded
                                         from the board columns. It stays findable under the
                                         Stopped tab. */}
-                                    {productIndex.map(prod => (
+                                    {shownProducts.map(prod => (
                                         <ProductCard key={prod.id} t={t} product={prod}
                                             projectCount={manifest.projects.filter(p => p.productId === prod.id && !p.archivedAt && !p.haltedAt).length}
                                             archivedCount={manifest.projects.filter(p => p.productId === prod.id && p.archivedAt).length}
-                                            onOpen={openProductInDashboard} />
+                                            trialCount={Board.isProductTrial ? manifest.projects.filter(p => Board.isProductTrial(p, prod.id)).length : 0}
+                                            onOpen={openProductInDashboard} onOpenTrials={openTrials} />
                                     ))}
                                 </div>
                             )}
@@ -3276,7 +3861,7 @@
                             hide work that still has to happen. */}
                         <div className="w-max mx-auto flex gap-3 sm:gap-4 items-stretch">
                             {Board.PHASES.map(phase => (
-                                <Column key={phase.key} t={t} phase={phase} locks={locks}
+                                <Column key={phase.key} t={t} phase={phase} locks={locks} titles={headTitles} onPushTrial={(p) => pushTrial(p)}
                                     projects={filtered.filter(p => p.phase === phase.key)}
                                     onDragStart={onDragStart} onDrop={onDrop} onHeaderClick={startNewInPhase}
                                     onOpen={openInTool} onEdit={editProject} onDelete={deleteProject}
@@ -3292,17 +3877,18 @@
                     {/* Keyed on the project: switching to another card must give a
                         fresh form, but a re-render of the SAME card must not — the
                         modal holds the user's unsaved edits. */}
-                    {editing && <ProjectModal key={editing.id || 'new'} t={t} initial={editing} onSave={saveProject} onClose={() => setEditing(null)} people={people} productIndex={productIndex} onAddPerson={addPerson} onUpdatePerson={updatePerson} onRenamePerson={renamePerson} onDeletePerson={deletePerson} />}
+                    {editing && <ProjectModal key={editing.id || 'new'} t={t} initial={editing} onSave={saveProject} onClose={() => setEditing(null)} people={people} productIndex={sortedProducts} onAddPerson={addPerson} onUpdatePerson={updatePerson} onRenamePerson={renamePerson} onDeletePerson={deletePerson} />}
                     {haltTarget && (
                         <HaltModal t={t} project={haltTarget}
                             onSave={(kind, note) => haltProject(haltTarget, kind, note)}
                             onClose={() => setHaltTarget(null)} />
                     )}
+                    {trialsFor && <TrialsModal t={t} product={trialsFor.product} rows={trialsFor.rows} hiddenCount={trialsFor.hidden} onOpenTrial={openTrial} onClose={() => setTrialsFor(null)} />}
                     {showAgenda && <AgendaModal t={t} lang={lang} projects={activeProjects} people={people} todayISO={todayISO} onActionOpen={openAction} onActionToggle={toggleActionDone} onClose={() => setShowAgenda(false)} />}
                     {/* Asked once on the shared store: an unattributed change history
                         is useless to a team. Also reachable from the header chip. */}
                     {(showName || (dbFormat === 'cards' && !userLabel)) && (
-                        <NameModal t={t} initial={userLabel} onSave={saveUserLabel} onClose={() => setShowName(false)} />
+                        <NameModal t={t} initial={userLabel} names={[...(people.commercials || []), ...(people.productManagers || [])].map(p => p.name).concat((manifest.projects || []).flatMap(p => [p.commercial, p.productManager]).filter(Boolean))} onSave={saveUserLabel} onClose={() => setShowName(false)} />
                     )}
                     {showBackups && (
                         <BackupsModal t={t} state={backupState} list={backupList} busy={backupBusy}
