@@ -34,7 +34,7 @@
          floating bar that board-db.js injects would be a second, redundant way
          back. Pages WITHOUT a header button (the Product Dashboard) still get it. -->
     <script>window.PERFOTEC_NO_BACK_BUTTON = true;</script>
-    <script src="board-db.js?v=00b92723"></script>
+    <script src="board-db.js?v=a318a158"></script>
     <script src="product-tools.js?v=5916a60f"></script>
 </head>
 <body class="bg-slate-50 text-slate-700 antialiased selection:bg-blue-200 selection:text-blue-900">
@@ -1323,7 +1323,7 @@
               thDay: 'Day', thMeasure: 'Measure Gas/Wt.', thMeasureWeight: 'Measure Wt.', thOpen: 'Open Pack', thEvaluate: 'Evaluate Quality',
               timelineNote: "Once a sample is marked as 'Open' on a previous day, it can no longer be selected for gas/weight measurements (the button will be greyed out).",
               predictedGraph: 'Predicted Gas Graph', predictedGraphDesc: 'Upload a screenshot of the prediction for this specific variant',
-              uploadImage: 'Upload Image',
+              uploadImage: 'Upload Image', hubSimPaste: 'Paste Hub simulation', hubSimEmpty: 'Paste the simulation copied from the PerfoTec Hub here:', hubSimBad: 'This is not a PerfoTec Hub simulation. Copy it again in the Hub and try once more.', hubSimReplace: 'This variant already has a prediction graph. Replace it with the Hub simulation?', hubSimFrom: 'Hub simulation',
               // Proposal texts tab
               proposalEvalText: 'Proposal & Evaluation Text',
               introLabel: 'Introduction / Current Challenge', goalsLabel: 'Goals / Expected Outcomes', requirementsLabel: 'Requirements & Agreements',
@@ -1429,7 +1429,7 @@
               thDay: 'Dag', thMeasure: 'Meet Gas/Gew.', thMeasureWeight: 'Meet Gew.', thOpen: 'Open Verpakking', thEvaluate: 'Beoordeel Kwaliteit',
               timelineNote: 'Zodra een monster op een eerdere dag als \'Open\' is gemarkeerd, kan het niet meer worden geselecteerd voor gas-/gewichtsmetingen (de knop wordt grijs).',
               predictedGraph: 'Voorspelde Gas Grafiek', predictedGraphDesc: 'Upload een screenshot van de voorspelling voor deze specifieke variant',
-              uploadImage: 'Afbeelding Uploaden',
+              uploadImage: 'Afbeelding Uploaden', hubSimPaste: 'Hub-simulatie plakken', hubSimEmpty: 'Plak hier de simulatie die je in de PerfoTec Hub hebt gekopieerd:', hubSimBad: 'Dit is geen simulatie uit de PerfoTec Hub. Kopieer hem opnieuw in de Hub en probeer het nog eens.', hubSimReplace: 'Deze variant heeft al een voorspellingsgrafiek. Vervangen door de Hub-simulatie?', hubSimFrom: 'Hub-simulatie',
               proposalEvalText: 'Voorstel & Evaluatie Tekst',
               introLabel: 'Introductie / Huidige Uitdaging', goalsLabel: 'Doelen / Verwachte Resultaten', requirementsLabel: 'Vereisten & Afspraken',
               introPlaceholder: 'Beschrijf de uitdaging en waarom we deze test uitvoeren...',
@@ -1533,7 +1533,7 @@
               thDay: 'Día', thMeasure: 'Medir Gas/Peso', thMeasureWeight: 'Medir Peso', thOpen: 'Abrir Paquete', thEvaluate: 'Evaluar Calidad',
               timelineNote: 'Una vez que una muestra se marca como \'Abierta\' en un día anterior, ya no se puede seleccionar para mediciones de gas/peso (el botón se desactivará).',
               predictedGraph: 'Gráfico de Gas Predicho', predictedGraphDesc: 'Suba una captura de la predicción para esta variante específica',
-              uploadImage: 'Subir Imagen',
+              uploadImage: 'Subir Imagen', hubSimPaste: 'Pegar simulación del Hub', hubSimEmpty: 'Pegue aquí la simulación copiada del PerfoTec Hub:', hubSimBad: 'Esto no es una simulación del PerfoTec Hub. Cópiela de nuevo en el Hub e inténtelo otra vez.', hubSimReplace: 'Esta variante ya tiene un gráfico de predicción. ¿Reemplazarlo por la simulación del Hub?', hubSimFrom: 'Simulación del Hub',
               proposalEvalText: 'Texto de Propuesta y Evaluación',
               introLabel: 'Introducción / Desafío Actual', goalsLabel: 'Objetivos / Resultados Esperados', requirementsLabel: 'Requisitos y Acuerdos',
               introPlaceholder: 'Describa el desafío y por qué estamos realizando esta prueba...',
@@ -1769,7 +1769,7 @@
             if (group && group.predictedImage) {
               setPendingImageReplace({ groupId: groupId, result: dataUrl });
             } else {
-              setGroups(prev => prev.map(g => g.id === groupId ? { ...g, predictedImage: dataUrl } : g));
+              setGroups(prev => prev.map(g => g.id === groupId ? { ...g, predictedImage: dataUrl, prediction: null } : g));
             }
           };
 
@@ -1778,8 +1778,91 @@
             setPendingImageReplace(null);
           };
 
+          // ── PerfoTec Hub simulation ──────────────────────────────────────────
+          // The Hub's EMAP calculation (respiration-control) answers two calls
+          // with JSON: the transmission the pack needs and the O2 / CO2 curve
+          // over the days. Copied from the Hub as one object
+          //   { format: 'perfotec-hub-simulation/1', inputs, transmission, series }
+          // it becomes this variant's predicted gas graph — drawn here, so the
+          // print view and the report tool keep reading predictedImage — and the
+          // numbers stay with the variant (group.prediction) for the report to
+          // compare the trial against. The TV is internal: it fills the variant's
+          // own field when that is empty and is never drawn in the graph.
+          const parseHubSimulation = (text) => {
+            let j; try { j = JSON.parse(String(text || '').trim()); } catch (e) { return null; }
+            const series = Array.isArray(j) ? j : j && Array.isArray(j.series) ? j.series : null;
+            if (!series) return null;
+            const pick = (re) => { const x = series.find(q => q && re.test(String(q.key || '')) && Array.isArray(q.values)); return x ? x.values.filter(p => p && isFinite(p.x) && isFinite(p.y)).map(p => ({ x: Number(p.x), y: Number(p.y) })) : null; };
+            const o2 = pick(/^O2$/i), co2 = pick(/^CO2$/i);
+            if (!o2 || !co2 || o2.length < 2) return null;
+            const level = (re) => { const v = pick(re); return v && v.length ? v[0].y : null; };
+            const inputs = (!Array.isArray(j) && j.inputs) || {}, transmission = (!Array.isArray(j) && j.transmission) || {};
+            const num = (v) => { const n = parseFloat(v); return isFinite(n) ? n : null; };
+            return { o2, co2, targetO2: level(/^Target O2/i) ?? num(inputs.targetO2), criticalCO2: level(/^Critical CO2/i) ?? num(inputs.criticalCO2), inputs, transmission };
+          };
+          const drawHubSimulation = (sim) => {
+            const W = 1400, H = 620, m = { l: 90, r: 40, t: 40, b: 110 };
+            const c = document.createElement('canvas'); c.width = W; c.height = H;
+            const g = c.getContext('2d');
+            const days = Math.max(1, Math.ceil(sim.o2[sim.o2.length - 1].x - 1e-6));
+            const top = Math.max(21, ...sim.o2.map(p => p.y), ...sim.co2.map(p => p.y), sim.criticalCO2 || 0);
+            const yMax = Math.ceil(top / 5) * 5;
+            const X = (d) => m.l + (d / days) * (W - m.l - m.r), Y = (v) => H - m.b - (v / yMax) * (H - m.t - m.b);
+            g.fillStyle = '#FFFFFF'; g.fillRect(0, 0, W, H);
+            g.font = '22px Montserrat, Arial, sans-serif'; g.textBaseline = 'middle';
+            for (let v = 0; v <= yMax; v += 5) { g.strokeStyle = '#E4EBF3'; g.lineWidth = 1; g.beginPath(); g.moveTo(m.l, Y(v)); g.lineTo(W - m.r, Y(v)); g.stroke(); g.fillStyle = '#5F6B7D'; g.textAlign = 'right'; g.fillText(String(v), m.l - 14, Y(v)); }
+            const stepX = days > 20 ? 5 : days > 10 ? 2 : 1;
+            g.textAlign = 'center';
+            for (let d = 0; d <= days; d += stepX) { g.fillStyle = '#5F6B7D'; g.fillText(String(d), X(d), H - m.b + 24); }
+            const words = { EN: ['Days', 'Gas in the pack (%)', 'Target O₂', 'Max CO₂'], NL: ['Dagen', 'Gas in de verpakking (%)', 'Doel O₂', 'Max CO₂'], ES: ['Días', 'Gas en el envase (%)', 'O₂ objetivo', 'CO₂ máx.'] }[String(lang || '').toUpperCase()] || ['Days', 'Gas in the pack (%)', 'Target O₂', 'Max CO₂'];
+            g.fillStyle = '#333333'; g.font = '600 22px Montserrat, Arial, sans-serif';
+            g.fillText(words[0], (m.l + W - m.r) / 2, H - m.b + 58);
+            g.save(); g.translate(28, (m.t + H - m.b) / 2); g.rotate(-Math.PI / 2); g.fillText(words[1], 0, 0); g.restore();
+            const dashed = (v, color) => { if (v == null) return; g.save(); g.setLineDash([12, 9]); g.strokeStyle = color; g.lineWidth = 2.5; g.beginPath(); g.moveTo(m.l, Y(v)); g.lineTo(W - m.r, Y(v)); g.stroke(); g.restore(); };
+            const line = (pts, color) => { g.strokeStyle = color; g.lineWidth = 5; g.lineJoin = 'round'; g.beginPath(); pts.forEach((p, i) => { const x = X(Math.min(p.x, days)), y = Y(p.y); if (i) g.lineTo(x, y); else g.moveTo(x, y); }); g.stroke(); };
+            const BLUE = '#084BCD', GREEN = '#008837';
+            dashed(sim.targetO2, BLUE); dashed(sim.criticalCO2, GREEN);
+            line(sim.o2, BLUE); line(sim.co2, GREEN);
+            // Legend
+            const items = [['O₂', BLUE, false], ['CO₂', GREEN, false], sim.targetO2 != null ? [`${words[2]} ${sim.targetO2} %`, BLUE, true] : null, sim.criticalCO2 != null ? [`${words[3]} ${sim.criticalCO2} %`, GREEN, true] : null].filter(Boolean);
+            g.font = '22px Montserrat, Arial, sans-serif'; g.textAlign = 'left';
+            const widths = items.map(it => 62 + g.measureText(it[0]).width + 40);
+            let x = (W - widths.reduce((a, b) => a + b, 0)) / 2; const y = H - 26;
+            items.forEach((it, i) => { g.save(); if (it[2]) g.setLineDash([10, 7]); g.strokeStyle = it[1]; g.lineWidth = it[2] ? 2.5 : 5; g.beginPath(); g.moveTo(x, y); g.lineTo(x + 48, y); g.stroke(); g.restore(); g.fillStyle = '#333333'; g.fillText(it[0], x + 60, y); x += widths[i]; });
+            return c.toDataURL('image/png');
+          };
+          const importHubSimulation = async (groupId) => {
+            let text = '';
+            try { text = await navigator.clipboard.readText(); } catch (e) { text = ''; }
+            let sim = parseHubSimulation(text);
+            if (!sim) { text = window.prompt(pt.hubSimEmpty, '') || ''; if (!text.trim()) return; sim = parseHubSimulation(text); }
+            if (!sim) { window.alert(pt.hubSimBad); return; }
+            const group = groups.find(g => g.id === groupId);
+            if (group && group.predictedImage && !window.confirm(pt.hubSimReplace)) return;
+            const last = (pts) => Math.round(pts[pts.length - 1].y * 10) / 10;
+            const tv = parseFloat(sim.transmission.o2_factor ?? sim.transmission.o2);
+            const prediction = {
+              source: 'hub', importedAt: new Date().toISOString(), days: Math.round(sim.o2[sim.o2.length - 1].x),
+              endO2: last(sim.o2), endCO2: last(sim.co2), targetO2: sim.targetO2, criticalCO2: sim.criticalCO2,
+              transmission: sim.transmission, inputs: sim.inputs,
+            };
+            const image = drawHubSimulation(sim);
+            setGroups(prev => prev.map(g => g.id !== groupId ? g : {
+              ...g, predictedImage: image, prediction,
+              specs: { ...g.specs, holes: String(g.specs.holes ?? '').trim() === '' && isFinite(tv) && tv > 0 ? String(Math.round(tv)) : g.specs.holes },
+            }));
+            // The respiration the Hub calculated with, where the proposal has none yet.
+            const inp = sim.inputs || {};
+            setProject(prev => ({
+              ...prev,
+              rrO2: String(prev.rrO2 ?? '').trim() === '' && inp.rrO2 != null ? String(inp.rrO2) : prev.rrO2,
+              rrCO2: String(prev.rrCO2 ?? '').trim() === '' && inp.rrCO2 != null ? String(inp.rrCO2) : prev.rrCO2,
+              rrTemp: String(prev.rrTemp ?? '').trim() === '' && inp.rrTemperature != null ? String(inp.rrTemperature) : prev.rrTemp,
+            }));
+          };
+
           const removePredictedImage = (groupId) => {
-            setGroups(prev => prev.map(g => g.id === groupId ? { ...g, predictedImage: null } : g));
+            setGroups(prev => prev.map(g => g.id === groupId ? { ...g, predictedImage: null, prediction: null } : g));
           };
 
           // Whether the title was typed in this session: only then does clearing it
@@ -3783,6 +3866,8 @@
                                             <div className="text-sm font-medium text-blue-700">{pt.predictedGraphDesc}</div>
                                           </div>
                                        </div>
+                                       <div className="flex flex-wrap gap-3 shrink-0">
+                                       <button type="button" onClick={() => importHubSimulation(activeGroupId)} className="bg-[#084BCD] text-white px-6 py-3 rounded-xl font-bold text-sm hover:opacity-90 transition-all whitespace-nowrap shadow-sm">{pt.hubSimPaste}</button>
                                        <label className="cursor-pointer bg-white border border-blue-200 text-blue-700 px-6 py-3 rounded-xl font-bold text-sm hover:bg-blue-100 hover:border-blue-300 transition-all shrink-0 whitespace-nowrap shadow-sm">
                                           {pt.uploadImage}
                                           <input 
@@ -3799,11 +3884,13 @@
                                             onChange={(e) => handlePredictedImageUpload(e, activeGroupId)} 
                                           />
                                        </label>
+                                       </div>
                                     </div>
                                     
                                     {groups.find(g => g.id === activeGroupId).predictedImage && (
                                        <div className="mt-6 border border-slate-200 rounded-2xl p-4 bg-white max-w-full relative group shadow-sm inline-block">
                                          <img src={groups.find(g => g.id === activeGroupId).predictedImage} className="max-h-[300px] w-auto object-contain rounded-xl" />
+                                         {(() => { const p = groups.find(g => g.id === activeGroupId).prediction; return p && p.source === 'hub' ? <p className="mt-2 text-xs text-slate-500">{pt.hubSimFrom} · {p.days} d · O₂ {p.endO2} % · CO₂ {p.endCO2} % · {new Date(p.importedAt).toLocaleDateString()}</p> : null; })()}
                                          <button onClick={() => removePredictedImage(activeGroupId)} className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full opacity-0 group-hover:opacity-100 transition-all shadow-lg hover:bg-red-600 hover:scale-110">
                                             <Trash2 size={16}/>
                                          </button>
