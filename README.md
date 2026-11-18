@@ -1,8 +1,9 @@
-[README.md](https://github.com/user-attachments/files/31021269/README.md)
+[README.md](https://github.com/user-attachments/files/35017229/README.md)
 # PerfoTec Trial Workflow — board and tools
 
-Kanban board plus the intake, proposal and report tools for PerfoTec packaging
-trials. Static pages: no build step, no server, no backend.
+Kanban board plus the intake, proposal, report and Product Dashboard tools for
+PerfoTec packaging trials — the whole flow, Intake through Dashboard. Static
+pages: no build step, no server, no backend.
 
 ## This repository holds no data
 
