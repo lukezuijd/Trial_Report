@@ -63,7 +63,7 @@
     <!-- This page renders its own Board button in the header, so the shared
          floating bar that board-db.js injects would be a second, redundant way back. -->
     <script>window.PERFOTEC_NO_BACK_BUTTON = true;</script>
-    <script src="board-db.js?v=927872ae"></script>
+    <script src="board-db.js?v=a318a158"></script>
 
     <!-- Import Maps for modern modules -->
     <script type="importmap">
@@ -125,6 +125,11 @@
 
         /* Active-step lift, on the same shadow scale as the rest of the suite. */
         .confident-overlap { box-shadow: 0 6px 16px rgba(16, 24, 40, 0.10); z-index: 20; border-radius: var(--pf-radius-card); }
+        /* Small print (9 and 10 px labels) is unreadable at arm's length: on a narrow
+           screen and on any touch device it is at least 11 px. Screen only. */
+        @media screen and (max-width: 899px), screen and (pointer: coarse) {
+            .pf-web .text-\[9px\], .pf-web .text-\[10px\] { font-size: 11px; line-height: 1.35; }
+        }
         /* Workflow sections scrolled to by a link land under the sticky masthead and tabs. */
         .pf-wf-anchor { scroll-margin-top: calc(var(--pf-masthead-h, 64px) + 84px); }
 
@@ -325,7 +330,7 @@
            and the three actions on one line: they ran into each other. Below
            md it breaks in two — logo and actions, then Board and the picker
            across the full width — and the four tabs sit two by two. */
-        @media (max-width: 767px) {
+        @media (max-width: 899px) { /* tablets too: at 768 px the product name got 45 px on one line */
             .pf-web-masthead-row { flex-wrap: wrap; row-gap: 0; }
             .pf-web-masthead-row > .pf-web-masthead-left { display: contents; }
             .pf-web-masthead-row > .pf-web-masthead-right { order: 1; margin-left: auto; }
@@ -467,8 +472,17 @@
         };
 
         // --- Regression Math Helper ---
-        const getRegressionCurve = (taskData, type = 'O2') => {
-            if (!taskData) return null;
+        // `hub`: the product's Hub respiration record (formData['hub-respiration']).
+        // Its measurements drive the curve once they cover enough temperatures
+        // (board-db hubRespirationCurve: three, the median per temperature); until
+        // then the dashboard's own points do, as before. `source` says which:
+        // 'hub' | 'measured' | 'target'.
+        const getRegressionCurve = (taskData, type = 'O2', hub = null) => {
+            if (!taskData && !hub) return null;
+            taskData = taskData || {};
+            const B = window.PerfoTecBoard;
+            const hubCurve = hub && B && B.hubRespirationCurve ? B.hubRespirationCurve(hub) : null;
+            const hubPoints = hubCurve && hubCurve.drives ? hubCurve.points.map(p => ({ t: p.t, rate: type === 'O2' ? p.rrO2 : p.rrCO2 })).filter(p => p.rate > 0).map(p => ({ ...p, lnR: Math.log(p.rate) })) : [];
             const actualPoints = []; const targetPoints = [];
             const temps = new Set();
             Object.keys(taskData).forEach(k => { const match = k.match(/^(?:target_)?temp(-?[\d.]+)_/); if (match) temps.add(parseFloat(match[1])); });
@@ -481,27 +495,33 @@
                 if (!isNaN(tgtVal) && tgtVal > 0) targetPoints.push({ t, lnR: Math.log(tgtVal), rate: tgtVal });
             });
 
-            const isActual = actualPoints.length >= 3; const usePoints = isActual ? actualPoints : targetPoints;
+            const fromHub = hubPoints.length >= 3;
+            const isActual = fromHub || actualPoints.length >= 3; const usePoints = fromHub ? hubPoints : isActual ? actualPoints : targetPoints;
             if (usePoints.length >= 3) {
                 const n = usePoints.length; let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
                 usePoints.forEach(p => { sumX += p.t; sumY += p.lnR; sumXY += p.t * p.lnR; sumXX += p.t * p.t; });
                 const denominator = (n * sumXX - sumX * sumX);
-                if (denominator !== 0) { const slope = (n * sumXY - sumX * sumY) / denominator; const intercept = (sumY - slope * sumX) / n; return { slope, intercept, points: usePoints, isActual }; }
+                if (denominator !== 0) { const slope = (n * sumXY - sumX * sumY) / denominator; const intercept = (sumY - slope * sumX) / n; return { slope, intercept, points: usePoints, isActual, source: fromHub ? 'hub' : isActual ? 'measured' : 'target' }; }
             }
             return null;
         };
 
-        const calculateQ10 = (taskData) => { const reg = getRegressionCurve(taskData, 'O2') || getRegressionCurve(taskData, 'CO2'); if (reg) return Math.exp(10 * reg.slope).toFixed(2); return ""; };
+        const calculateQ10 = (taskData, hub = null) => { const reg = getRegressionCurve(taskData, 'O2', hub) || getRegressionCurve(taskData, 'CO2', hub); if (reg) return Math.exp(10 * reg.slope).toFixed(2); return ""; };
 
         // --- Dual Predictive Chart Component ---
-        const PredictiveChart = ({ taskData }) => {
+        // hubPoints: [{ temp, rrO2, rrCO2 }] — respiration measured in the PerfoTec
+        // Hub (FRM), drawn as open markers next to the dashboard's own points.
+        // hub: the product's Hub respiration record; it draws the curve when it may.
+        const PredictiveChart = ({ taskData, hubPoints, hub }) => {
             const chartRef = useRef(null); const chartInstance = useRef(null);
+            const hubKey = (hubPoints || []).map(p => `${p.temp}:${p.rrO2}:${p.rrCO2}`).join('|') + (hub ? `#${(hub.measurements || []).length}|${hub.catalogueOf || ''}|${hub.syncedAt || ''}` : '');
 
             useEffect(() => {
-                if (!taskData || !chartRef.current || !window.Chart) return;
+                if ((!taskData && !hub) || !chartRef.current || !window.Chart) return;
                 
-                const regO2 = getRegressionCurve(taskData, 'O2');
-                const regCO2 = getRegressionCurve(taskData, 'CO2');
+                const regO2 = getRegressionCurve(taskData, 'O2', hub);
+                const regCO2 = getRegressionCurve(taskData, 'CO2', hub);
+                const pointLabel = (reg, gas) => reg.source === 'hub' ? `Hub median ${gas}` : reg.isActual ? `Actual ${gas}` : `Target ${gas}`;
 
                 const datasets = [];
 
@@ -509,15 +529,20 @@
                     const predO2 = []; for (let t = 0; t <= 25; t += 1) predO2.push({ x: t, y: Math.exp(regO2.slope * t + regO2.intercept).toFixed(2) });
                     const scatO2 = regO2.points.map(p => ({ x: p.t, y: p.rate }));
                     datasets.push({ type: 'line', label: 'Pred. O2 Curve', data: predO2, borderColor: '#084BCD', backgroundColor: 'rgba(8, 75, 205, 0.1)', borderWidth: 2, tension: 0.4, fill: false, pointRadius: 0 });
-                    datasets.push({ type: 'scatter', label: regO2.isActual ? 'Actual O2' : 'Target O2', data: scatO2, backgroundColor: '#084BCD', borderColor: '#084BCD', pointRadius: 6 });
+                    datasets.push({ type: 'scatter', label: pointLabel(regO2, 'O2'), data: scatO2, backgroundColor: '#084BCD', borderColor: '#084BCD', pointRadius: 6 });
                 }
 
                 if (regCO2) {
                     const predCO2 = []; for (let t = 0; t <= 25; t += 1) predCO2.push({ x: t, y: Math.exp(regCO2.slope * t + regCO2.intercept).toFixed(2) });
                     const scatCO2 = regCO2.points.map(p => ({ x: p.t, y: p.rate }));
                     datasets.push({ type: 'line', label: 'Pred. CO2 Curve', data: predCO2, borderColor: '#008837', backgroundColor: 'rgba(0, 136, 55, 0.1)', borderWidth: 2, tension: 0.4, fill: false, pointRadius: 0 });
-                    datasets.push({ type: 'scatter', label: regCO2.isActual ? 'Actual CO2' : 'Target CO2', data: scatCO2, backgroundColor: '#008837', borderColor: '#008837', pointRadius: 6, pointStyle: 'triangle' });
+                    datasets.push({ type: 'scatter', label: pointLabel(regCO2, 'CO2'), data: scatCO2, backgroundColor: '#008837', borderColor: '#008837', pointRadius: 6, pointStyle: 'triangle' });
                 }
+
+                const drawn = hubPoints || [];
+                const hubO2 = drawn.filter(p => p.rrO2 != null).map(p => ({ x: p.temp, y: p.rrO2 })), hubCO2 = drawn.filter(p => p.rrCO2 != null).map(p => ({ x: p.temp, y: p.rrCO2 }));
+                if (hubO2.length) datasets.push({ type: 'scatter', label: 'Hub O2 (measured)', data: hubO2, backgroundColor: 'rgba(8, 75, 205, 0.12)', borderColor: '#084BCD', borderWidth: 1.5, pointRadius: 4 });
+                if (hubCO2.length) datasets.push({ type: 'scatter', label: 'Hub CO2 (measured)', data: hubCO2, backgroundColor: 'rgba(0, 136, 55, 0.12)', borderColor: '#008837', borderWidth: 1.5, pointRadius: 4, pointStyle: 'triangle' });
 
                 if (chartInstance.current) chartInstance.current.destroy();
                 const ctx = chartRef.current.getContext('2d');
@@ -527,7 +552,7 @@
                     options: { responsive: true, maintainAspectRatio: false, scales: { x: { type: 'linear', title: { display: true, text: 'Temperature (°C)' }, min: 0, max: 25, ticks: { stepSize: 5 } }, y: { title: { display: true, text: 'Respiration Rate (mL/kg/24h)' }, beginAtZero: true } }, plugins: { legend: { position: 'top' }, tooltip: { mode: 'index', intersect: false } } }
                 });
                 return () => { if (chartInstance.current) chartInstance.current.destroy(); };
-            }, [taskData]);
+            }, [taskData, hubKey]);
 
             return (
                 <div className="mt-8 pt-6 border-t border-slate-200">
@@ -747,6 +772,58 @@
             return { applied, label, inferred: false, start, o2control: applied === true && flush === 'o2control' };
         };
 
+        // ══ A LINK THAT OPENS THE SAME VIEW ══════════════════════════════════
+        // The address carries where you are — the page, the product and its tab,
+        // the overview's list, packaging and filters — so a link sent to a
+        // colleague opens what you were looking at. Read once on loading.
+        const urlParam = (k) => { try { return new URLSearchParams(window.location.search).get(k); } catch (e) { return null; } };
+        const LAST_SEEN_KEY = 'perfotec-dashboard-last-seen';
+
+        // ══ NARROW SCREENS ═══════════════════════════════════════════════════
+        // Below 768 px (a phone, or a window pulled narrow) wide tables are
+        // replaced by cards, and the lower blocks of the Dashboard tab fold to a
+        // heading: nine screens of scrolling is not "at a glance".
+        const NARROW_QUERY = '(max-width: 767px)';
+        const useIsNarrow = () => {
+            const [narrow, setNarrow] = useState(() => !!(window.matchMedia && window.matchMedia(NARROW_QUERY).matches));
+            useEffect(() => {
+                if (!window.matchMedia) return;
+                const mq = window.matchMedia(NARROW_QUERY);
+                const on = () => setNarrow(mq.matches);
+                mq.addEventListener ? mq.addEventListener('change', on) : mq.addListener(on);
+                return () => { mq.removeEventListener ? mq.removeEventListener('change', on) : mq.removeListener(on); };
+            }, []);
+            return narrow;
+        };
+        // Always open on a wide screen; on a narrow one a heading that opens it.
+        const NarrowFold = ({ title, children }) => {
+            const [open, setOpen] = useState(false);
+            return (
+                <div>
+                    <button type="button" onClick={() => setOpen(o => !o)} aria-expanded={open} className="md:hidden w-full flex items-center gap-3 bg-white border border-slate-200 rounded-xl shadow-sm px-4 py-3.5 text-left">
+                        <ChevronRight size={18} className={`shrink-0 text-slate-400 transition-transform ${open ? 'rotate-90' : ''}`}/>
+                        <span className="font-spartan font-bold text-slate-900">{title}</span>
+                    </button>
+                    <div className={open ? 'mt-3 md:mt-0' : 'hidden md:block'}>{children}</div>
+                </div>
+            );
+        };
+
+        // A card whose header folds it; open unless this browser folded it before.
+        const FoldCard = ({ storeKey, header, children }) => {
+            const [open, setOpen] = useState(() => { try { return localStorage.getItem(storeKey) !== '0'; } catch (e) { return true; } });
+            const toggle = () => setOpen(o => { try { localStorage.setItem(storeKey, o ? '0' : '1'); } catch (e) {} return !o; });
+            return (
+                <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden">
+                    <button type="button" onClick={toggle} aria-expanded={open} className={`w-full px-4 py-2.5 bg-slate-50 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-left ${open ? 'border-b border-slate-200' : ''}`}>
+                        <ChevronRight size={16} className={`shrink-0 text-slate-400 transition-transform ${open ? 'rotate-90' : ''}`}/>
+                        {header}
+                    </button>
+                    {open && children}
+                </div>
+            );
+        };
+
         // "2026-08-28" → "28-08-2026"; anything else as it is.
         const fmtIsoDate = (iso) => { const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}-${m[2]}-${m[1]}` : String(iso || ''); };
 
@@ -946,7 +1023,8 @@
                         <div className="p-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
                             <div className="sm:col-span-2">
                                 <label className={label}>Name *</label>
-                                <input autoFocus value={f.name} onChange={e => set('name', e.target.value)} placeholder="e.g. PerfoTec BOPE 30" className={`${input} ${taken ? 'border-red-300' : ''}`}/>
+                                <input autoFocus={!f.hubId} disabled={!!f.hubId} value={f.name} onChange={e => set('name', e.target.value)} placeholder="e.g. PerfoTec BOPE 30" className={`${input} ${taken ? 'border-red-300' : ''} ${f.hubId ? 'bg-slate-100 text-slate-500' : ''}`}/>
+                                {f.hubId && <p className="text-[11px] text-[#084BCD] mt-1">Managed in the PerfoTec Hub: name, thickness, OTR and CO₂TR follow the Hub. WVTR and the other fields are kept here.</p>}
                                 {taken && <p className="text-[11px] text-red-600 mt-1">A film with this name already exists.</p>}
                             </div>
                             <label className="flex items-center gap-2 text-sm font-bold text-slate-800 sm:mt-5 cursor-pointer">
@@ -960,7 +1038,7 @@
                             </div>
                             <div>
                                 <label className={label}>Thickness (µm)</label>
-                                <input type="number" min="0" step="any" value={f.thicknessUm} onChange={e => set('thicknessUm', e.target.value)} className={input}/>
+                                <input type="number" min="0" step="any" disabled={!!f.hubId} value={f.thicknessUm} onChange={e => set('thicknessUm', e.target.value)} className={`${input} ${f.hubId ? 'bg-slate-100 text-slate-500' : ''}`}/>
                             </div>
                             <div>
                                 <label className={label}>Format</label>
@@ -980,11 +1058,11 @@
                             </div>
                             <div>
                                 <label className={label} title="Oxygen transmission rate of the unperforated film, cc/m²·24h at 23 °C (from the TDS)">OTR (cc/m²·day)</label>
-                                <input type="number" min="0" step="any" value={f.otr} onChange={e => set('otr', e.target.value)} className={input}/>
+                                <input type="number" min="0" step="any" disabled={!!f.hubId} value={f.otr} onChange={e => set('otr', e.target.value)} className={`${input} ${f.hubId ? 'bg-slate-100 text-slate-500' : ''}`}/>
                             </div>
                             <div>
                                 <label className={label} title="CO₂ transmission rate of the unperforated film, cc/m²·24h at 23 °C (from the TDS)">CO₂TR (cc/m²·day)</label>
-                                <input type="number" min="0" step="any" value={f.co2tr} onChange={e => set('co2tr', e.target.value)} className={input}/>
+                                <input type="number" min="0" step="any" disabled={!!f.hubId} value={f.co2tr} onChange={e => set('co2tr', e.target.value)} className={`${input} ${f.hubId ? 'bg-slate-100 text-slate-500' : ''}`}/>
                             </div>
                             <div>
                                 <label className={label} title="Water vapour transmission rate, g/m²·24h (from the TDS)">WVTR (g/m²·day)</label>
@@ -1650,8 +1728,8 @@ ${docSections}
             const [products, setProducts] = useState([]);
             const [activeProductId, setActiveProductId] = useState(null);
             const [loading, setLoading] = useState(true);
-            const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard' | 'pipeline' | 'commercial' (the database is a page of its own: globalPage)
-            const [dbActiveTab, setDbActiveTab] = useState('properties'); // 'properties' | 'respiration' | 'trials' | 'films'
+            const [activeTab, setActiveTab] = useState(() => ['dashboard', 'pipeline', 'commercial'].includes(urlParam('tab')) ? urlParam('tab') : 'dashboard'); // 'dashboard' | 'pipeline' | 'commercial' (the database is a page of its own: globalPage)
+            const [dbActiveTab, setDbActiveTab] = useState(() => ['properties', 'respiration', 'trials', 'films', 'hub'].includes(urlParam('db')) ? urlParam('db') : 'properties'); // 'properties' | 'respiration' | 'trials' | 'films'
             
             // Database Filter State
             const [trialFilter, setTrialFilter] = useState(''); // Specific to Trial Packaging Type
@@ -1677,6 +1755,13 @@ ${docSections}
             // its editor: { film, row } — row: a trial row to link a new film to.
             const [filmReg, setFilmReg] = useState(null);
             const [filmEdit, setFilmEdit] = useState(null);
+            // The PerfoTec Hub's catalogue (a snapshot in hub.json) and its links to
+            // the products and films here: board-db readHub / writeHub.
+            const [hubReg, setHubReg] = useState(null);
+            const [hubMsg, setHubMsg] = useState('');
+            // Which of the Hub's respiration measurements a product shows: one origin,
+            // one quarter of the year, and whether the doubtful ones count.
+            const [hubRespFilter, setHubRespFilter] = useState({ origin: '', quarter: '', okOnly: true });
             const [filmMsg, setFilmMsg] = useState('');
             const [showArchivedFilms, setShowArchivedFilms] = useState(false);
             // Commercial tab: the packaging the package and its overview are for.
@@ -1715,7 +1800,7 @@ ${docSections}
             const isCommercial = audience === 'commercial';
             // The commercial environment opens on the Product Overview, unless a
             // link asked for one product.
-            const [globalPage, setGlobalPage] = useState(() => readAudience() === 'commercial' && !new URLSearchParams(window.location.search).get('product') ? 'overview' : null);
+            const [globalPage, setGlobalPage] = useState(() => urlParam('page') === 'overview' || (urlParam('page') === 'database' && readAudience() !== 'commercial') ? urlParam('page') : readAudience() === 'commercial' && !urlParam('product') ? 'overview' : null);
             const chooseAudience = (a) => {
                 try { localStorage.setItem(AUDIENCE_KEY, a); } catch (e) { /* private window: asked again next time */ }
                 setAudience(a); setShowAudience(false);
@@ -1725,9 +1810,9 @@ ${docSections}
             };
             const showOverview = globalPage === 'overview';
             const shownTab = isCommercial && activeTab === 'pipeline' ? 'dashboard' : activeTab;
-            const [bpType, setBpType] = useState('Flowpack');
+            const [bpType, setBpType] = useState(() => ['Punnet', 'Flowpack', 'Crate/Box', 'Pallet'].includes(urlParam('pack')) ? urlParam('pack') : 'Flowpack');
             const [bpSort, setBpSort] = useState({ col: 'product', dir: 'asc' });
-            const [bpFilter, setBpFilter] = useState({ product: '', temp: '', status: 'all', days: 0 });
+            const [bpFilter, setBpFilter] = useState(() => ({ product: urlParam('fp') || '', temp: urlParam('ft') != null && urlParam('ft') !== '' && isFinite(Number(urlParam('ft'))) ? Number(urlParam('ft')) : '', status: ['ready', 'verify'].includes(urlParam('fs')) ? urlParam('fs') : 'all', days: Number(urlParam('fd')) || 0 }));
             // Picking a product (here or in the header picker) goes to that product.
             // (Not the first product the dashboard selects by itself on loading.)
             const pickedProductRef = useRef(null);
@@ -1838,6 +1923,9 @@ ${docSections}
             // into, which open so the row stays in view.
             const [trialOpenGroups, setTrialOpenGroups] = useState(null);
             const [trialEditRow, setTrialEditRow] = useState(null);
+            const isNarrow = useIsNarrow();
+            const [trialCardOpen, setTrialCardOpen] = useState(null); // the trial whose fields are unfolded on a narrow screen
+            const [trialReportsAll, setTrialReportsAll] = useState(false); // narrow screen: every report, not the newest eight
             const trialGroupMemoRef = useRef({ productId: null, count: 0, keys: {} });
             const trialMovedOpenRef = useRef(new Set());
             const [newLinkData, setNewLinkData] = useState({ title: '', url: '', type: 'link' });
@@ -1961,6 +2049,7 @@ ${docSections}
                 setFolderName(name);
                 setProducts(records);
                 if (B.readFilms) B.readFilms().then(setFilmReg).catch(() => setFilmReg(null));
+                if (B.readHub) B.readHub().then(setHubReg).catch(() => setHubReg(null));
                 lastWrittenRef.current = new Map(records.map(r => [r.id, JSON.stringify(r)]));
                 productRevsRef.current = new Map(records.map(r => [r.id, Number(r.rev || 0)]));
                 diskStampsRef.current = stamps;
@@ -2422,6 +2511,93 @@ ${docSections}
                 return () => { stopped = true; };
             }, [workflowTrialKey, folderState]);
 
+            // ── The team's work lists (the overview page) ─────────────────────────
+            // The board's cards say which trials are running; the products say which
+            // results rest on one round and which trial data is incomplete
+            // (board-db runningTrials / verificationProposal / trialDataGaps).
+            const [overviewView, setOverviewView] = useState(() => ['results', 'running', 'verify', 'data', 'changes'].includes(urlParam('view')) ? urlParam('view') : 'results'); // 'results' | 'running' | 'verify' | 'data' | 'changes'
+            const [ownerFilter, setOwnerFilter] = useState(() => urlParam('owner') || ''); // '' = every product, '__none' = without an owner
+            const [linkCopied, setLinkCopied] = useState(false);
+            // What this browser saw last on the Changes list; newer entries are "new".
+            const [lastSeen, setLastSeen] = useState(() => { try { return localStorage.getItem(LAST_SEEN_KEY) || ''; } catch (e) { return ''; } });
+            const [boardCards, setBoardCards] = useState(null);           // null until read
+            const [verifyType, setVerifyType] = useState('');             // '' = every packaging
+            const [dataOpen, setDataOpen] = useState(null);               // the product whose reports are unfolded
+            const [bulkDraft, setBulkDraft] = useState({});               // "<product>|<report>" -> { film, perf, flush, scope }
+            const [workMsg, setWorkMsg] = useState(null);                 // { text, href }
+            const loadBoardCards = () => {
+                const B = window.PerfoTecBoard;
+                if (!B || !B.readManifest || folderState !== 'ready') return;
+                B.readManifest().then(m => setBoardCards((m && m.projects) || [])).catch(() => setBoardCards([]));
+            };
+            useEffect(() => { loadBoardCards(); }, [folderState, showOverview]);
+            // Keep the address in step with the view. Only its own keys are touched:
+            // the board's parameters (boardProject, autoImport) stay as they came.
+            useEffect(() => {
+                try {
+                    const q = new URLSearchParams(window.location.search);
+                    const put = (k, v) => { if (v == null || v === '' || v === false) q.delete(k); else q.set(k, String(v)); };
+                    put('page', globalPage);
+                    put('product', !globalPage && activeProductId && !String(activeProductId).startsWith('avg-') ? activeProductId : (globalPage ? '' : q.get('product')));
+                    put('tab', !globalPage && activeTab !== 'dashboard' ? activeTab : '');
+                    put('db', globalPage === 'database' && dbActiveTab !== 'properties' ? dbActiveTab : '');
+                    const ov = globalPage === 'overview';
+                    put('view', ov && overviewView !== 'results' ? overviewView : '');
+                    put('pack', ov ? bpType : '');
+                    put('fp', ov ? bpFilter.product : ''); put('ft', ov && bpFilter.temp !== '' ? bpFilter.temp : ''); put('fs', ov && bpFilter.status !== 'all' ? bpFilter.status : ''); put('fd', ov && bpFilter.days ? bpFilter.days : '');
+                    put('owner', ov ? ownerFilter : '');
+                    const next = window.location.pathname + (q.toString() ? '?' + q.toString() : '') + window.location.hash;
+                    if (next !== window.location.pathname + window.location.search + window.location.hash) window.history.replaceState(window.history.state, '', next);
+                } catch (e) { /* an address that cannot be rewritten changes nothing else */ }
+            }, [globalPage, activeProductId, activeTab, dbActiveTab, overviewView, bpType, bpFilter, ownerFilter]);
+            const copyViewLink = async () => {
+                try { await navigator.clipboard.writeText(window.location.href); setLinkCopied(true); setTimeout(() => setLinkCopied(false), 2500); }
+                catch (e) { window.prompt('Copy this link:', window.location.href); }
+            };
+            // ── Change log ────────────────────────────────────────────────────────
+            // What happened to a product, newest first, kept with the product
+            // (formData.history.entries, the last 40): who, when, what.
+            const withHistory = (fd, what) => {
+                const B = window.PerfoTecBoard;
+                const old = fd && fd.history && Array.isArray(fd.history.entries) ? fd.history.entries : [];
+                return { ...(fd || {}), history: { entries: [{ at: new Date().toISOString(), by: (B && B.getUserLabel && B.getUserLabel()) || '', what: String(what) }, ...old].slice(0, 40) } };
+            };
+            const recentChanges = useMemo(() => {
+                if (!showOverview) return [];
+                const out = [];
+                products.filter(p => p && !p.isAverage).forEach(p => (((p.formData || {}).history || {}).entries || []).forEach(e => { if (e && e.at) out.push({ ...e, product: p }); }));
+                return out.sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 80);
+            }, [products, showOverview]);
+            const ownerNames = useMemo(() => [...new Set(products.filter(p => p && !p.isAverage).map(p => String(p.owner || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [products]);
+            const runningNow = useMemo(() => {
+                const B = window.PerfoTecBoard;
+                return B && B.runningTrials ? B.runningTrials(boardCards || [], products.filter(p => p && !p.isAverage).map(p => p.id)) : { byProduct: {}, unlinked: [], all: [] };
+            }, [boardCards, products]);
+            const workLists = useMemo(() => {
+                const B = window.PerfoTecBoard;
+                if (!showOverview || !B || !B.trialDataGaps) return null;
+                const films = filmReg ? filmReg.films : [];
+                const verify = [], data = [];
+                products.filter(p => p && !p.isAverage).forEach(p => {
+                    const fd = p.formData || {}, pm = fd['p2-pack-master'] || {};
+                    const released = /^MARKET/.test(String(fd['p4-confirm-1']?.gate4Decision || '')) || /^RELEASED/.test(String(fd['p5-blueprint-1']?.gate5Decision || ''));
+                    // A result to verify: the best per temperature group and pack size
+                    // that one round reached, of a product nobody released yet.
+                    if (!released) ['Punnet', 'Flowpack', 'Crate/Box', 'Pallet'].forEach(type => {
+                        const bp = B.trialBestPractice(pm, { type });
+                        bestPerTempAndSize(bp.groups).filter(g => !g.proven).forEach(g => verify.push({ key: `${p.id}|${type}|${g.key}`, product: p, type, group: g, rows: bp.rows, reference: g.winner.role === 'reference' }));
+                    });
+                    const gaps = B.trialDataGaps(pm, [p.name, ...(p.aliases || [])].filter(Boolean), films);
+                    const acceptable = gaps.checks.filter(c => String(c.proposed ?? '').trim() !== '' && c.field !== 'trans').length;
+                    if (gaps.rows && (gaps.core || gaps.checks.length || gaps.missing.packing)) data.push({ product: p, gaps, acceptable });
+                });
+                // A PerfoTec result first; where the current packaging did best there is
+                // nothing of ours to verify yet.
+                verify.sort((a, b) => (a.reference - b.reference) || b.group.winner.shelfLife.days - a.group.winner.shelfLife.days || a.product.name.localeCompare(b.product.name));
+                data.sort((a, b) => (b.gaps.core + b.gaps.checks.length) - (a.gaps.core + a.gaps.checks.length) || a.product.name.localeCompare(b.product.name));
+                return { verify, data };
+            }, [products, filmReg, showOverview]);
+
             // Latest-value refs for the folder-staleness check, which runs from
             // window listeners and must never reason about a product the user
             // moved away from three renders ago.
@@ -2531,7 +2707,7 @@ ${docSections}
             // they never "finish" and are excluded from all progress calculations.
             function calculateOverallProgress() {
                 if (!activeProduct) return 0;
-                const v = verificationChecks(localFormData);
+                const v = verificationChecks(localFormData, hubRespSummary());
                 return Math.round((v.done / v.checks.length) * 100);
             }
 
@@ -4832,7 +5008,7 @@ ${docSections}
                 setLocalFormData(prev => {
                     const newState = { ...prev, [taskId]: { ...(prev[taskId] || {}), [fieldId]: value } };
                     if (taskId === 'p1-core-2') {
-                        const calculatedQ10 = calculateQ10(newState['p1-core-2']);
+                        const calculatedQ10 = calculateQ10(newState['p1-core-2'], newState['hub-respiration']);
                         // A Q10 from the product sheet or typed by hand stays; only a
                         // calculated one follows the respiration data. Every edit to the
                         // respiration table used to replace the sheet's value.
@@ -5381,7 +5557,7 @@ ${docSections}
                 // page as FastInput does — keeps the group it had (same product,
                 // same number of rows); a row that has moved opens its new group.
                 const ae = document.activeElement;
-                const aeRow = ae && ae.closest ? ae.closest('tr[data-trial-row]') : null;
+                const aeRow = ae && ae.closest ? ae.closest('[data-trial-row]') : null;
                 const editRow = aeRow ? Number(aeRow.getAttribute('data-trial-row')) : null;
                 const memo = trialGroupMemoRef.current;
                 const same = memo.productId === activeProduct.id && memo.count === count;
@@ -5451,7 +5627,7 @@ ${docSections}
                         if (r.imported || r.updated) { fd = r.formData; updated += (r.updated || 0) + (r.imported || 0); changed = true; }
                     } catch (e) { failed++; }
                 }
-                if (changed && activeProductIdRef.current === productId) { setLocalFormData(fd); scheduleAutosave(productId); }
+                if (changed && activeProductIdRef.current === productId) { setLocalFormData(withHistory(fd, `Refreshed from reports: ${updated} row${updated !== 1 ? 's' : ''} brought up to date`)); scheduleAutosave(productId); }
                 const parts = [ids.size ? `✓ ${updated} row${updated !== 1 ? 's' : ''} brought up to date from ${ids.size - failed} report${ids.size - failed !== 1 ? 's' : ''}` : 'No rows here are linked to a report in the trial workflow',
                     failed ? `${failed} report${failed !== 1 ? 's' : ''} could not be read` : '',
                     fromFiles ? `${fromFiles} row${fromFiles !== 1 ? 's' : ''} came from files: import those JSON files again to update them` : ''].filter(Boolean);
@@ -5473,7 +5649,7 @@ ${docSections}
             // where the market-ready check always was, p4-confirm-1.gate4Decision).
             const RELEASE_VALUE = 'MARKET-READY — validated, ready for the market';
             const PARK_VALUE = 'PARK — stop this product (document reason)';
-            const verificationChecks = (fd) => {
+            const verificationChecks = (fd, hubResp) => {
                 const B = window.PerfoTecBoard;
                 const has = (v) => String(v ?? '').trim() !== '';
                 const bp = B && B.trialBestPractice ? B.trialBestPractice(fd['p2-pack-master'] || {}) : { groups: [], best: null, rows: [] };
@@ -5488,7 +5664,7 @@ ${docSections}
                 const checks = [
                     { id: 'sheet', ok: !!(sheet && sheet.html), label: 'Product sheet attached', detail: sheet && sheet.html ? sheet.fileName : 'Attach the sheet: it fills most of the product properties', go: 'sheet' },
                     { id: 'properties', ok: missing.length === 0, label: 'Product properties known', detail: missing.length ? `Missing: ${missing.join(', ')}` : 'Breathing limits, target atmosphere and storage temperature', go: 'properties' },
-                    { id: 'respiration', ok: measured.length >= 2 || has(core1.q10), label: 'Respiration known', detail: measured.length ? `Measured at ${measured.join(', ')} °C${has(core1.q10) ? ` · Q10 ${core1.q10}` : ''}` : has(core1.q10) ? `Q10 ${core1.q10} known; no measurements at temperature yet` : 'No respiration measured yet; it fills from the trial reports', go: 'respiration' },
+                    { id: 'respiration', ok: measured.length >= 2 || has(core1.q10) || (hubResp && hubResp.temps.length >= 2), label: 'Respiration known', detail: hubResp && hubResp.n && !measured.length ? `${hubResp.n} measurement${hubResp.n !== 1 ? 's' : ''} in the Hub at ${hubResp.temps.join(', ')} °C${has(core1.q10) ? ` · Q10 ${core1.q10}` : ''}` : measured.length ? `Measured at ${measured.join(', ')} °C${has(core1.q10) ? ` · Q10 ${core1.q10}` : ''}${hubResp && hubResp.n ? ` · ${hubResp.n} in the Hub` : ''}` : has(core1.q10) ? `Q10 ${core1.q10} known; no measurements at temperature yet` : 'No respiration measured yet; it fills from the trial reports', go: 'respiration' },
                     { id: 'trials', ok: bp.rows.length > 0, label: 'Trials logged', detail: bp.rows.length ? `${bp.rows.length} trial${bp.rows.length !== 1 ? 's' : ''} in ${rounds} round${rounds !== 1 ? 's' : ''}` : 'Import a trial report', go: 'trials' },
                     { id: 'result', ok: !!best, label: 'Result within specification', detail: best ? `Best: ${days(best.winner.shelfLife)} — ${best.winner.material || 'unnamed variant'}` : 'No trial kept its quality at 7 or more yet', go: 'trials' },
                     { id: 'proven', ok: !!(best && best.proven), label: 'Proven in two rounds', detail: best ? (best.proven ? `${best.rounds} rounds reached this shelf life` : 'One round so far: run a second round to prove it') : '—', go: 'trials' },
@@ -5502,7 +5678,7 @@ ${docSections}
                 setTimeout(() => { const el = document.getElementById(`wf-${id}`); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 60);
             };
             const renderVerification = (vm) => {
-                const decide = (v) => handleFieldChange('p4-confirm-1', 'gate4Decision', v);
+                const decide = (v) => { handleFieldChange('p4-confirm-1', 'gate4Decision', v); setLocalFormData(prev => withHistory(prev, v === RELEASE_VALUE ? 'Released for commercial use' : v === PARK_VALUE ? 'Parked' : 'Release / park decision undone')); };
                 const gate4 = String(localFormData['p4-confirm-1']?.gate4Decision || '');
                 const decided = /^(MARKET|PARK)/.test(gate4);
                 const next = vm.checks.find(c => !c.ok);
@@ -5531,6 +5707,11 @@ ${docSections}
                         </div>
                         {!activeProduct.isAverage && (
                             <div className="mx-5 mb-5 rounded-lg bg-slate-50 border border-slate-200 px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+                                <label className="flex items-center gap-2 text-[10px] font-spartan font-bold uppercase tracking-widest text-slate-500">Owner
+                                    <input list="pf-owner-names" value={activeProduct.owner || ''} onChange={e => handleProductMetaChange(activeProduct.id, 'owner', e.target.value)} placeholder={(runningNow.byProduct[activeProduct.id] || []).map(c => c.productManager).find(Boolean) || 'who is responsible'} title="Who is responsible for getting this product commercially ready"
+                                        className="w-44 p-2 text-xs font-medium normal-case tracking-normal bg-white border border-slate-200 rounded-lg outline-none focus:border-[#084BCD] text-slate-900"/>
+                                    <datalist id="pf-owner-names">{[...new Set([...ownerNames, ...(boardCards || []).map(c => String(c.productManager || '').trim()).filter(Boolean)])].map(n => <option key={n} value={n}/>)}</datalist>
+                                </label>
                                 <span className="text-[10px] font-spartan font-bold uppercase tracking-widest text-slate-500">Product management</span>
                                 <span className="text-sm text-slate-800 flex-1 min-w-[220px]">
                                     {vm.released ? 'Released for commercial use.' : vm.parked ? 'Parked.' : vm.best && vm.best.proven ? 'Proven in two rounds: commercially ready. Releasing it adds your sign-off.' : 'Not released. A release makes the product commercially ready, proven or not.'}
@@ -5708,7 +5889,7 @@ ${docSections}
                 const rowInert = activeProduct.isAverage ? 'opacity-70 pointer-events-none' : '';
                 // Focus moving into another row (or out of the table) ends the edit
                 // of this one; within the row, from a cell to its notes, it does not.
-                const rowOf = (el) => { const tr = el && el.closest ? el.closest('tr[data-trial-row]') : null; return tr ? Number(tr.getAttribute('data-trial-row')) : null; };
+                const rowOf = (el) => { const tr = el && el.closest ? el.closest('[data-trial-row]') : null; return tr ? Number(tr.getAttribute('data-trial-row')) : null; };
                 const editProps = (idx) => ({
                     'data-trial-row': idx,
                     onFocus: () => { if (trialEditRow !== idx) setTrialEditRow(idx); },
@@ -5795,6 +5976,77 @@ ${docSections}
                                     </div>
                                 </div>
                             )}
+                            {isNarrow ? (
+                            <div className="space-y-3">
+                                {/* A narrow screen: one card per trial with what identifies it and
+                                    what it achieved; tapping it unfolds every field of the row. */}
+                                {(trialReportsAll ? tm.groups : tm.groups.slice(0, 8)).map(g => {
+                                    const open = tm.isOpen(g.key);
+                                    return (
+                                        <div key={g.key || '__unlinked'} className="border border-slate-200 rounded-xl overflow-hidden">
+                                            <button type="button" onClick={() => toggleTrialGroup(tm, g.key)} aria-expanded={open} className={`w-full text-left px-3 py-3 flex items-start gap-2 ${open ? 'bg-[#F1F6FF]' : 'bg-slate-50'}`}>
+                                                <ChevronRight size={16} className={`mt-0.5 shrink-0 text-slate-400 transition-transform ${open ? 'rotate-90' : ''}`}/>
+                                                <span className="min-w-0 flex-1">
+                                                    <span className="block text-sm font-bold text-slate-900 break-words">{g.key ? `${g.date ? fmtIsoDate(g.date) : 'No date'} · ${g.pdf ? (/^https?:\/\//i.test(g.pdf) ? 'Report (link)' : g.pdf) : 'Report'}` : 'Not linked to a report yet'}</span>
+                                                    <span className="block text-xs text-slate-500 mt-0.5">{g.idxs.length} row{g.idxs.length !== 1 ? 's' : ''}{g.best ? <> · <b className="text-[#008837]">best {g.best.shelfLife.open ? '≥ ' : ''}{g.best.shelfLife.days} d</b></> : ''}{g.checks > 0 ? ` · ${g.checks} data check${g.checks !== 1 ? 's' : ''}` : ''}</span>
+                                                </span>
+                                            </button>
+                                            {open && g.idxs.map(idx => {
+                                                const v = (k) => taskData[`pack_opt_${idx}_${k}`] || '';
+                                                const set = (k) => (val) => handleFieldChange('p2-pack-master', `pack_opt_${idx}_${k}`, val);
+                                                const cardOpen = trialCardOpen === idx;
+                                                const cond = v('condition') || 'MAP', pType = v('type');
+                                                const field = "w-full p-2.5 bg-white border border-slate-300 rounded-lg text-base text-slate-900 outline-none focus:border-[#084BCD]";
+                                                const lab = "block text-[11px] font-bold uppercase tracking-wide text-slate-500 mb-1";
+                                                const num = (k, label, extra) => <label key={k} className="block"><span className={lab}>{label}</span><FastInput type="number" inputMode="decimal" step="any" className={field} value={v(k)} onValue={set(k)} {...(extra || {})}/></label>;
+                                                const txt = (k, label, type) => <label key={k} className="block"><span className={lab}>{label}</span><FastInput type={type || 'text'} className={field} value={v(k)} onValue={set(k)}/></label>;
+                                                const sel = (k, label, opts, value) => <label key={k} className="block"><span className={lab}>{label}</span><select className={field} value={value != null ? value : v(k)} onChange={e => set(k)(e.target.value)}>{opts.map(([val, l]) => <option key={val} value={val}>{l}</option>)}</select></label>;
+                                                return (
+                                                    <div key={idx} {...editProps(idx)} className={`border-t border-slate-200 ${rowInert}`}>
+                                                        <button type="button" onClick={() => setTrialCardOpen(cardOpen ? null : idx)} aria-expanded={cardOpen} className="w-full text-left px-3 py-3 flex items-start gap-2 bg-white">
+                                                            <ChevronRight size={15} className={`mt-1 shrink-0 text-slate-300 transition-transform ${cardOpen ? 'rotate-90' : ''}`}/>
+                                                            <span className="min-w-0 flex-1">
+                                                                <span className="block font-bold text-slate-900 break-words">{v('material') || <span className="font-normal text-slate-400">New trial — tap to fill in</span>}</span>
+                                                                <span className="block text-xs text-slate-500 mt-0.5">{[cond, pType, v('variety'), v('temp') ? `${v('temp')} °C` : '', v('weight') ? `${v('weight')} ${pType === 'Pallet' ? 'kg' : 'g'}` : '', v('trans') ? `TV ${v('trans')}` : ''].filter(Boolean).join(' · ')}</span>
+                                                            </span>
+                                                            <span className="shrink-0 text-right text-xs"><span className={`block font-bold ${parseFloat(v('rating')) >= 7 ? 'text-[#008837]' : 'text-slate-700'}`}>{v('rating') ? `${v('rating')} / 10` : '—'}</span><span className="block text-slate-500">{v('days') ? `day ${v('days')}` : ''}</span></span>
+                                                        </button>
+                                                        {cardOpen && (
+                                                            <div className="px-3 pb-4 pt-1 bg-slate-50 grid grid-cols-2 gap-3">
+                                                                <div className="col-span-2">{txt('material', 'Variant')}</div>
+                                                                {sel('condition', 'Condition', [['MAP', 'MAP'], ['MHP', 'MHP'], ['OPEN', 'OPEN']], cond)}
+                                                                {sel('type', 'Packaging', [['', 'Select…'], ['Punnet', 'Punnet'], ['Flowpack', 'Flowpack'], ['Crate/Box', 'Crate / Box'], ['Pallet', 'Pallet']])}
+                                                                {txt('variety', 'Variety')}
+                                                                <label className="block"><span className={lab}>Role</span><TrialRoleSelect value={v('role')} material={v('material')} onChange={set('role')} className={field}/></label>
+                                                                <label className="block col-span-2"><span className={lab}>Film</span><FilmSelect value={v('film')} films={filmReg ? filmReg.films : null} type={pType} onChange={set('film')} className={field}/></label>
+                                                                {num('temp', 'Temp (°C)')}
+                                                                {num('weight', `Weight (${pType === 'Pallet' ? 'kg' : 'g'})`)}
+                                                                {num('trans', 'TV')}
+                                                                {num('days', 'Days')}
+                                                                {cond === 'MHP' ? null : num('o2', 'O₂ (%)')}
+                                                                {cond === 'MHP' ? null : num('co2', 'CO₂ (%)')}
+                                                                {num('rating', 'Rating (1-10)', { min: 0, max: 10 })}
+                                                                {txt('date', 'Trial date', 'date')}
+                                                                {num('startO2', 'O₂ at packing (%)')}
+                                                                {num('startCO2', 'CO₂ at packing (%)')}
+                                                                {sel('perf', 'Perforation', [['', '— not recorded —'], ['perfotec', 'PerfoTec laser'], ['other', 'Other'], ['none', 'None']])}
+                                                                {sel('flush', 'Flush system', [['', '— not recorded —'], ['o2control', 'PerfoTec O2 Control'], ['other', 'Other system'], ['none', 'None (no flush)']])}
+                                                                {txt('company', 'Trial company')}
+                                                                {txt('country', 'Country')}
+                                                                <div className="col-span-2">{txt('pdf', 'Trial report (link or file name)')}</div>
+                                                                <label className="block col-span-2"><span className={lab}>Notes</span><FastInput as="textarea" rows="3" className={field} value={v('notes')} onValue={set('notes')}/></label>
+                                                                <button type="button" onClick={() => { setTrialEditRow(null); setTrialCardOpen(null); handleDeleteTrialRow(activeProduct.id, idx); }} className="col-span-2 flex items-center justify-center gap-2 py-3 rounded-lg border border-red-200 text-red-700 text-xs font-bold uppercase tracking-widest"><Trash2 size={14}/> Delete this trial</button>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    );
+                                })}
+                                {tm.groups.length > 8 && <button type="button" onClick={() => setTrialReportsAll(a => !a)} className="w-full py-3 rounded-xl border border-slate-200 text-xs font-bold uppercase tracking-widest text-[#084BCD] bg-white">{trialReportsAll ? 'Show the newest 8 reports' : `Show all ${tm.groups.length} reports`}</button>}
+                            </div>
+                            ) : (
                             <div className="overflow-x-auto custom-scrollbar pb-2">
                                 <table className="w-full text-sm text-left border-collapse table-fixed min-w-[1540px]">
                                     <thead className="bg-slate-50 text-[10px] font-spartan uppercase text-slate-500">
@@ -5927,6 +6179,33 @@ ${docSections}
                                                                     <FastInput type="number" step="0.1" min="0" max="100" className="w-32 p-2 bg-white border border-blue-200 rounded-lg text-xs font-medium text-slate-900 outline-none focus:border-[#084BCD]" value={taskData[`pack_opt_${idx}_${k}`] || ''} onValue={v => handleFieldChange('p2-pack-master', `pack_opt_${idx}_${k}`, v)}/>
                                                                 </label>
                                                             ))}
+                                                            {hubReg && hubReg.catalogue && (() => {
+                                                                // From the Hub catalogue: the package this variant was packed in and,
+                                                                // optionally, the laser program that perforated it (the programs of
+                                                                // this product first).
+                                                                const cat = hubReg.catalogue, B = window.PerfoTecBoard;
+                                                                const hubProduct = B.hubProductOf(activeProduct, hubReg).hub;
+                                                                const key = (s) => B.hubNameKey(s);
+                                                                const mine = hubProduct ? cat.laserPrograms.filter(p => key(p.product) === key(hubProduct.name)) : [];
+                                                                const others = cat.laserPrograms.filter(p => !mine.includes(p));
+                                                                const lp = (p) => <option key={p.id} value={p.id}>{p.name}{p.variety ? ` · ${p.variety}` : ''}{p.holes != null ? ` · ${p.holes} × ${p.size ?? '?'} µm` : ''}</option>;
+                                                                const cls = "p-2 max-w-[260px] bg-white border border-blue-200 rounded-lg text-xs font-medium normal-case tracking-normal text-slate-900 outline-none focus:border-[#084BCD]";
+                                                                return (<>
+                                                                    <label className="flex flex-col gap-1 font-bold text-slate-500 uppercase tracking-wide text-[10px]">Hub package
+                                                                        <select className={cls} value={taskData[`pack_opt_${idx}_hubPackage`] || ''} onChange={e => handleFieldChange('p2-pack-master', `pack_opt_${idx}_hubPackage`, e.target.value)}>
+                                                                            <option value="">— none —</option>
+                                                                            {cat.packages.slice().sort((a, b) => a.name.localeCompare(b.name)).map(p => <option key={p.id} value={p.id}>{p.name}{p.mass != null ? ` · ${p.mass} g` : ''}</option>)}
+                                                                        </select>
+                                                                    </label>
+                                                                    <label className="flex flex-col gap-1 font-bold text-slate-500 uppercase tracking-wide text-[10px]">Laser program (optional)
+                                                                        <select className={cls} value={taskData[`pack_opt_${idx}_laserProgram`] || ''} onChange={e => handleFieldChange('p2-pack-master', `pack_opt_${idx}_laserProgram`, e.target.value)}>
+                                                                            <option value="">— none —</option>
+                                                                            {mine.length > 0 && <optgroup label={`${hubProduct.name} programs`}>{mine.map(lp)}</optgroup>}
+                                                                            <optgroup label={mine.length ? 'Other programs' : 'All programs'}>{others.slice().sort((a, b) => a.name.localeCompare(b.name)).map(lp)}</optgroup>
+                                                                        </select>
+                                                                    </label>
+                                                                </>);
+                                                            })()}
                                                             {(() => { const fl = flushInfo(taskData[`pack_opt_${idx}_flush`], taskData[`pack_opt_${idx}_startO2`], taskData[`pack_opt_${idx}_startCO2`]); return (
                                                                 <span title={`From the gas at packing: O₂ below ${FLUSH_O2_BELOW} % and/or CO₂ above ${FLUSH_CO2_ABOVE} % means a gas flush was applied. Without start values, the Gas flush field decides.`} className={`self-end px-3 py-2 rounded-lg text-xs font-bold ${fl.applied === true ? 'bg-[#084BCD]/10 text-[#084BCD]' : fl.applied === false ? 'bg-slate-200 text-slate-700' : 'bg-white border border-dashed border-slate-300 text-slate-400'}`}>{fl.label || 'Gas flush: unknown — no start values'}</span>
                                                             ); })()}
@@ -5945,6 +6224,7 @@ ${docSections}
                                     })}
                                 </table>
                             </div>
+                            )}
                             <div className="mt-4">
                                 <PackPredictiveChart taskData={taskData} {...tvCurveInputs()} />
                             </div>
@@ -5983,7 +6263,63 @@ ${docSections}
                     <div>
                         {/* The curve is what one looks at; the numbers behind it fill from the
                             trial reports and the sheet, and are opened to correct or add one. */}
-                        <div className="p-4"><PredictiveChart taskData={taskData} /></div>
+                        {(() => {
+                            // What was measured in the Hub for this product, next to the
+                            // curve: filtered on origin and time of year, summed up per
+                            // temperature. Read-only: the measurements live in the Hub.
+                            const all = hubRespirations();
+                            const B = window.PerfoTecBoard;
+                            const stored = localFormData['hub-respiration'] || null;
+                            const hubProduct = stored ? { name: stored.hubProduct } : null;
+                            const hv = hubReg && hubReg.catalogue && B && B.hubVarietiesOf ? B.hubVarietiesOf(activeProduct, hubReg) : null;
+                            const curve = stored && B && B.hubRespirationCurve ? B.hubRespirationCurve(stored) : null;
+                            const f = hubRespFilter;
+                            const quarterOf = (iso) => { const m = parseInt(String(iso || '').slice(5, 7), 10); return m >= 1 && m <= 12 ? String(Math.ceil(m / 3)) : ''; };
+                            const origins = [...new Set(all.map(r => r.origin).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+                            const rows = all.filter(r => (!f.okOnly || r.status === 'OK') && (!f.origin || r.origin === f.origin) && (!f.quarter || quarterOf(r.startTime) === f.quarter));
+                            const median = (v) => { const x = v.filter(n => n != null).sort((a, b) => a - b); if (!x.length) return null; const m = Math.floor(x.length / 2); return Math.round(x.length % 2 ? x[m] : (x[m - 1] + x[m]) / 2); };
+                            const span = (v) => { const x = v.filter(n => n != null); return x.length > 1 && Math.min(...x) !== Math.max(...x) ? ` (${Math.round(Math.min(...x))}–${Math.round(Math.max(...x))})` : ''; };
+                            const byTemp = [...new Set(rows.map(r => r.temperature))].sort((a, b) => a - b).map(t => { const g = rows.filter(r => r.temperature === t); return { t, n: g.length, o2: g.map(r => r.rrO2), co2: g.map(r => r.rrCO2), origins: [...new Set(g.map(r => r.origin).filter(Boolean))] }; });
+                            const sel = "p-1.5 text-xs border border-slate-200 rounded-lg bg-white";
+                            return (<>
+                                <div className="p-4"><PredictiveChart taskData={taskData} hub={stored} hubPoints={rows.map(r => ({ temp: r.temperature, rrO2: r.rrO2, rrCO2: r.rrCO2 }))} /></div>
+                                {(stored || (hubReg && hubReg.catalogue)) && (
+                                    <div className="mx-4 mb-4 border border-slate-200 rounded-xl overflow-hidden">
+                                        <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex flex-wrap items-center gap-3">
+                                            <span className="font-spartan font-bold text-sm text-slate-900">Measured in the Hub (FRM)</span>
+                                            <span className="text-xs text-slate-500 flex-1 min-w-[200px]">{hubProduct ? `${rows.length} of ${all.length} measurement${all.length !== 1 ? 's' : ''} of ${hubProduct.name}` : hv && hv.hub ? (hv.missing ? `Linked to ${hv.hub.name}, but ${hv.missing} (Database → Hub).` : `Linked to ${hv.hub.name}; the Hub has no respiration measurements for it yet.`) : 'This product is not linked to a Hub product yet (Database → Hub).'}</span>
+                                            {curve && <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded ${curve.drives ? 'bg-[#084BCD]/10 text-[#084BCD]' : 'bg-slate-200 text-slate-600'}`} title={`The Hub's measurements drive the respiration curve once they cover ${B.HUB_RR_MIN_TEMPS} different temperatures (doubtful ones do not count). Now: ${curve.points.length}.`}>{curve.drives ? 'Drives the curve' : `Curve needs ${B.HUB_RR_MIN_TEMPS} temperatures — ${curve.points.length} now`}</span>}
+                                            {all.length > 0 && (<>
+                                                <select className={sel} value={f.origin} onChange={e => setHubRespFilter(p => ({ ...p, origin: e.target.value }))} aria-label="Origin"><option value="">All origins</option>{origins.map(o => <option key={o} value={o}>{o}</option>)}</select>
+                                                <select className={sel} value={f.quarter} onChange={e => setHubRespFilter(p => ({ ...p, quarter: e.target.value }))} aria-label="Time of year"><option value="">Whole year</option><option value="1">Jan–Mar</option><option value="2">Apr–Jun</option><option value="3">Jul–Sep</option><option value="4">Oct–Dec</option></select>
+                                                <label className="flex items-center gap-1.5 text-xs text-slate-600"><input type="checkbox" checked={f.okOnly} onChange={e => setHubRespFilter(p => ({ ...p, okOnly: e.target.checked }))}/> without doubtful</label>
+                                            </>)}
+                                        </div>
+                                        {rows.length > 0 && (
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full text-sm text-left border-collapse">
+                                                    <thead className="text-[10px] font-spartan uppercase text-slate-500"><tr><th className="p-3">Temperature</th><th className="p-3">Measurements</th><th className="p-3" title="Median, with the lowest and highest in brackets">RR O₂ (mL/kg/24h)</th><th className="p-3" title="Median, with the lowest and highest in brackets">RR CO₂ (mL/kg/24h)</th><th className="p-3">Origins</th></tr></thead>
+                                                    <tbody>{byTemp.map(g => (
+                                                        <tr key={g.t} className="border-t border-slate-100"><td className="p-3 font-bold text-slate-900">{g.t} °C</td><td className="p-3 text-slate-700">{g.n}</td><td className="p-3 text-slate-700"><b className="text-[#084BCD]">{median(g.o2) ?? '—'}</b>{span(g.o2)}</td><td className="p-3 text-slate-700"><b className="text-[#008837]">{median(g.co2) ?? '—'}</b>{span(g.co2)}</td><td className="p-3 text-xs text-slate-500">{g.origins.join(', ') || '—'}</td></tr>
+                                                    ))}</tbody>
+                                                </table>
+                                                <details className="border-t border-slate-200">
+                                                    <summary className="px-4 py-2.5 text-xs font-bold uppercase tracking-widest text-[#084BCD] cursor-pointer select-none hover:bg-[#F1F6FF]">All {rows.length} measurements</summary>
+                                                    <div className="max-h-[320px] overflow-y-auto custom-scrollbar">
+                                                        <table className="w-full text-xs text-left border-collapse">
+                                                            <thead className="text-[10px] font-spartan uppercase text-slate-500 bg-slate-50 sticky top-0"><tr><th className="p-2">Date</th><th className="p-2">Variety</th><th className="p-2">Origin</th><th className="p-2">Remark</th><th className="p-2">Temp</th><th className="p-2">RR O₂</th><th className="p-2">RR CO₂</th><th className="p-2">Status</th></tr></thead>
+                                                            <tbody>{rows.slice().sort((a, b) => String(b.startTime).localeCompare(String(a.startTime))).map(r => (
+                                                                <tr key={r.id} className="border-t border-slate-100"><td className="p-2 whitespace-nowrap">{fmtIsoDate(r.startTime)}</td><td className="p-2">{r.variety}</td><td className="p-2">{r.origin || '—'}</td><td className="p-2 text-slate-500">{r.remark || ''}</td><td className="p-2">{r.temperature} °C</td><td className="p-2">{r.rrO2 ?? '—'}</td><td className="p-2">{r.rrCO2 ?? '—'}</td><td className="p-2">{r.status === 'NOK' ? <span className="text-amber-700 font-bold">doubtful</span> : 'OK'}</td></tr>
+                                                            ))}</tbody>
+                                                        </table>
+                                                    </div>
+                                                </details>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </>);
+                        })()}
                         <details className="border-t border-slate-200">
                         <summary className="px-5 py-3 text-xs font-bold uppercase tracking-widest text-[#084BCD] cursor-pointer select-none hover:bg-[#F1F6FF]">Measurements behind the curve — view or edit</summary>
                         <div className="p-4 pt-0 overflow-x-auto">
@@ -6032,7 +6368,7 @@ ${docSections}
             const renderWorkflowTab = () => {
                 if (!activeProduct) return null;
                 const tm = trialRegisterModel();
-                const vm = verificationChecks(localFormData);
+                const vm = verificationChecks(localFormData, hubRespSummary());
                 const inert = activeProduct.isAverage ? 'opacity-70 pointer-events-none' : '';
                 const plural = (n, word) => `${n} ${word}${n !== 1 ? 's' : ''}`;
                 // Respiration: the temperatures measured, and the breathing limits.
@@ -6258,6 +6594,20 @@ ${docSections}
                             </div>
                         )}
 
+                        {(() => {
+                            // Trials under way for this product (or, on "All varieties", for any of them).
+                            const ids = activeProduct.isAverage ? (activeProduct.varietyIds || []) : [activeProduct.id];
+                            const running = ids.flatMap(id => runningNow.byProduct[id] || []);
+                            if (!running.length) return null;
+                            const B = window.PerfoTecBoard;
+                            return (
+                                <div className="bg-[#F1F6FF] border border-[#084BCD]/20 rounded-xl px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-1">
+                                    <span className="flex items-center gap-2 font-bold text-sm text-[#084BCD]"><RefreshCw size={15}/> {running.length} trial{running.length !== 1 ? 's' : ''} running</span>
+                                    <span className="text-sm text-slate-700 flex-1 min-w-[220px]">{running.map(c => [c.title || 'Untitled trial', B && B.phaseByKey && B.phaseByKey[c.phase] ? B.phaseByKey[c.phase].label : c.phase, c.startDate ? `since ${fmtIsoDate(c.startDate)}` : ''].filter(Boolean).join(' · ')).join('  |  ')}</span>
+                                </div>
+                            );
+                        })()}
+
                         {/* ── KPI strip: all numbers come from the ONE best-practice result:
                              its shelf life within specification, where it was reached and how
                              well it is proven. The tiles used to pick their own maxima (the
@@ -6296,6 +6646,74 @@ ${docSections}
                             );
                         })()}
 
+
+                        {(() => {
+                            // What has been tested, per packaging: temperature group against
+                            // pack size. An empty cell was never tested — the question to ask
+                            // before a new trial, and what sales can and cannot offer yet.
+                            const released = getProductWorkflowStatus(activeProduct).phase === 3;
+                            const per = [['Punnet', 'Punnet'], ['Flowpack', 'Flowpack'], ['Crate/Box', 'Crate / Box'], ['Pallet', 'Pallet']].map(([id, label]) => {
+                                const bp = bestPracticeOf({ type: id, match: matchesVariety });
+                                return { id, label, groups: bp.groups, n: bp.rows.length };
+                            }).filter(t => t.n > 0);
+                            if (!per.length) return null;
+                            const ids = activeProduct.isAverage ? (activeProduct.varietyIds || []) : [activeProduct.id];
+                            const running = ids.flatMap(id => runningNow.byProduct[id] || []).length;
+                            const TONE = { ready: 'bg-green-100 text-green-900 border-green-200', verify: 'bg-amber-100 text-amber-900 border-amber-200', failed: 'bg-slate-200 text-slate-700 border-slate-300' };
+                            const legend = [['ready', released ? 'Commercially ready' : 'Proven (2+ rounds)'], ['verify', 'To be verified (1 round)'], ['failed', 'Tested, not within spec']];
+                            // Below the critical temperature the product is damaged: nothing
+                            // to test there, so no open cells are offered (Luke 2026-11-16).
+                            // The lowest row is the temperature group the critical temperature
+                            // falls in. A trial that did run colder keeps its row, marked.
+                            const crit = parseFloat(String(p1Core1.minTemp == null ? '' : p1Core1.minTemp).replace(',', '.'));
+                            const tgOf = window.PerfoTecBoard && window.PerfoTecBoard.tempGroupOf;
+                            const floor = Number.isFinite(crit) && tgOf ? tgOf(crit) : null;
+                            return (
+                                <FoldCard storeKey="perfotec-dashboard-coverage-open" header={<React.Fragment>
+                                        <h3 className="font-spartan font-bold text-base text-slate-900 flex items-center gap-2"><LayoutGrid size={16} className={themeColorClass}/> Coverage</h3>
+                                        {legend.map(([k, l]) => <span key={k} className="flex items-center gap-1.5 text-xs text-slate-600"><span className={`w-3 h-3 rounded border ${TONE[k]}`}></span>{l}</span>)}
+                                        <span className="flex items-center gap-1.5 text-xs text-slate-600"><span className="w-3 h-3 rounded border border-dashed border-slate-300 bg-white"></span>Never tested</span>
+                                        {floor != null && <span className="text-xs text-slate-500">from the critical temperature ({p1Core1.minTemp} °C) up</span>}
+                                        {running > 0 && <span className="text-xs font-bold text-[#084BCD]">{running} trial{running !== 1 ? 's' : ''} running</span>}
+                                    </React.Fragment>}>
+                                    <div className="px-4 py-3 flex flex-wrap gap-x-8 gap-y-4">
+                                        {per.map(t => {
+                                            // Like a trial without a temperature, one without a pack weight cannot be placed: no column for it.
+                                            const sizes = [...new Map(t.groups.filter(g => g.size).map(g => [g.size.index, g.size])).entries()].sort((a, b) => a[0] - b[0]);
+                                            if (!sizes.length) return null;
+                                            const temps = [...new Set([...[0, 5, 10, 15, 20].filter(x => floor == null || x >= floor), ...t.groups.map(g => g.tempBand).filter(x => x != null)])].sort((a, b) => a - b);
+                                            // A trial without a temperature misses what the matrix is about: no row for it (Luke 2026-11-16).
+                                            const cell = (temp, sizeIndex) => {
+                                                const gs = t.groups.filter(g => g.tempBand === temp && (g.size ? g.size.index : -1) === sizeIndex);
+                                                if (!gs.length) return null;
+                                                const best = gs.find(g => g.winner);   // groups come proven first, then by their winner
+                                                if (!best) return { tone: 'failed', text: 'no result', title: `${gs.reduce((n, g) => n + g.trials.length, 0)} trial(s), none kept its quality at 7 or more` };
+                                                const w = best.winner;
+                                                return { tone: best.proven || released ? 'ready' : 'verify', text: `${w.shelfLife.open ? '≥ ' : ''}${w.shelfLife.days} d`, title: `${w.material || 'unnamed variant'} · ${best.proven ? `proven, ${best.rounds} rounds` : 'one round'}${w.date ? ` · ${w.date}` : ''}` };
+                                            };
+                                            return (
+                                                <div key={t.id} className="min-w-0">
+                                                    <h4 className="font-spartan font-bold text-sm text-slate-900 mb-1">{t.label} <span className="font-normal text-slate-500">· {t.n} trial{t.n !== 1 ? 's' : ''}</span></h4>
+                                                    <div className="overflow-x-auto">
+                                                        <table className="text-xs border-separate" style={{ borderSpacing: 2 }}>
+                                                            <thead><tr><th></th>{sizes.map(([i, size]) => <th key={i} className="px-2 pb-1 font-bold text-slate-500 whitespace-nowrap text-center">{packSizeText(size)}</th>)}</tr></thead>
+                                                            <tbody>
+                                                                {temps.map(temp => (
+                                                                    <tr key={temp == null ? 'none' : temp}>
+                                                                        <th title={temp != null && floor != null && temp < floor ? 'Tested below the critical temperature' : undefined} className={`pr-2 font-bold whitespace-nowrap text-right ${temp != null && floor != null && temp < floor ? 'text-amber-700' : 'text-slate-500'}`}>{temp == null ? 'no temp' : `${temp} °C`}{temp != null && floor != null && temp < floor ? ' ⚠' : ''}</th>
+                                                                        {sizes.map(([i]) => { const c = cell(temp, i); return <td key={i} title={c ? c.title : 'Never tested'} className={`min-w-[60px] h-7 px-2 text-center font-bold rounded border ${c ? TONE[c.tone] : 'border-dashed border-slate-200 text-slate-300'}`}>{c ? c.text : ''}</td>; })}
+                                                                    </tr>
+                                                                ))}
+                                                            </tbody>
+                                                        </table>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </FoldCard>
+                            );
+                        })()}
 
                         <div>
                             <span className="pf-web-pill mb-3">Commercial overview</span>
@@ -6388,7 +6806,7 @@ ${docSections}
                                                             {perSize.length > 0 && (
                                                                 <div className="mt-3">
                                                                     <span className="block text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1.5">Best per temperature & pack size</span>
-                                                                    <div className="space-y-1.5">
+                                                                    <div className="space-y-1">
                                                                         {perSize.slice(0, 6).map(g => {
                                                                             const gw = g.winner;
                                                                             const B = window.PerfoTecBoard;
@@ -6396,26 +6814,23 @@ ${docSections}
                                                                             const film = filmById(gw.film);
                                                                             return (
                                                                                 <div key={g.key} className={`rounded-lg border px-2.5 py-1.5 text-[11px] ${g === top ? 'border-green-300 bg-green-50/60' : 'border-slate-200 bg-white'}`} title={`${gw.material}${gw.variety ? ` · ${gw.variety}` : ''} · ${gw.condition} · trial of ${gw.date || '?'}${g.proven ? ` · proven (${g.rounds} rounds)` : ' · indicative'}`}>
-                                                                                    <div className="flex items-baseline justify-between gap-2">
-                                                                                        <span className="font-bold text-slate-900">{gw.temp != null ? `${gw.temp} °C` : '? °C'} · {gw.weightKg ? packWeightText(gw.weightKg) : 'weight ?'}{g.condition !== 'MAP' ? ` · ${g.condition}` : ''}
-                                                                                            <span className="block font-normal text-[10px] text-slate-500">group {g.tempBand != null ? `${g.tempBand} °C` : '?'} · {packSizeText(g.size)}</span>
-                                                                                        </span>
-                                                                                        <span className="font-bold text-[#008837] whitespace-nowrap text-right">{slText(gw.shelfLife)}
-                                                                                            {gw.shelfLife.belowDay != null && <span className="block font-normal text-[10px] text-slate-500" title="The first measurement below 7 during the trial">below on day {gw.shelfLife.belowDay}</span>}
-                                                                                        </span>
-                                                                                    </div>
-                                                                                    <div className="text-slate-600 truncate">{film ? film.name : gw.material}{film && gw.material ? <span className="text-slate-400"> · {gw.material}</span> : null}{tv ? <strong className="text-slate-900"> · TV {tv}</strong> : null}{gw.role === 'reference' ? ' · current packaging' : ''}</div>
                                                                                     {(() => {
-                                                                                        // How it was packed, its status, and the report it comes from.
+                                                                                        // Two lines: what it is, its status and how long it lasted;
+                                                                                        // then how it was packed and the report it comes from.
                                                                                         const fl = flushInfo(gw.flush, gw.startO2, gw.startCO2);
-                                                                                        const packed = [film && film.own ? 'PerfoTec film' : '', perfText(gw.perf), fl.label ? fl.label + (fl.inferred ? ' *' : '') : '', fl.applied && fl.start ? `at packing ${fl.start}` : ''].filter(Boolean).join(' · ');
                                                                                         const released = getProductWorkflowStatus(activeProduct).phase === 3;
-                                                                                        const href = gw.project ? `report.html?boardProject=${encodeURIComponent(gw.project)}` : /^https?:///i.test(gw.pdf) ? gw.pdf : '';
+                                                                                        const href = gw.project ? `report.html?boardProject=${encodeURIComponent(gw.project)}` : /^https?:\/\//i.test(gw.pdf) ? gw.pdf : '';
+                                                                                        const packed = [film && film.own ? 'PerfoTec film' : '', perfText(gw.perf), fl.label ? fl.label + (fl.inferred ? ' *' : '') : '', fl.applied && fl.start ? `at packing ${fl.start}` : ''].filter(Boolean).join(' · ');
                                                                                         return (<>
-                                                                                            {packed && <div className="text-slate-500 truncate" title={packed + (fl.inferred ? ' (* read from the gas at packing)' : '')}>{packed}</div>}
-                                                                                            <div className="mt-1 flex flex-wrap items-center justify-between gap-1">
+                                                                                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                                                                                <span className="font-bold text-slate-900 whitespace-nowrap">{gw.temp != null ? `${gw.temp} °C` : '? °C'} · {gw.weightKg ? packWeightText(gw.weightKg) : 'weight ?'}{g.condition !== 'MAP' ? ` · ${g.condition}` : ''}</span>
+                                                                                                <span className="text-[10px] text-slate-500 whitespace-nowrap" title="The temperature group and weight class this result is the best of">{g.tempBand != null ? `${g.tempBand} °C group` : 'no temp group'} · {packSizeText(g.size)}</span>
                                                                                                 <StatusChips status={resultStatus(g.proven, released)} proven={g.proven} rounds={g.rounds} released={released}/>
-                                                                                                {href && <a href={href} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="font-bold text-[#084BCD] hover:underline whitespace-nowrap">Report</a>}
+                                                                                                <span className="ml-auto font-bold text-[#008837] whitespace-nowrap">{slText(gw.shelfLife)}{gw.shelfLife.belowDay != null && <span className="font-normal text-[10px] text-slate-500" title="The first measurement below 7 during the trial"> · below on day {gw.shelfLife.belowDay}</span>}</span>
+                                                                                            </div>
+                                                                                            <div className="mt-0.5 flex items-baseline justify-between gap-3">
+                                                                                                <span className="text-slate-600 min-w-0" title={fl.inferred ? '* read from the gas at packing' : undefined}>{film ? film.name : gw.material}{film && gw.material ? <span className="text-slate-400"> · {gw.material}</span> : null}{tv ? <strong className="text-slate-900"> · TV {tv}</strong> : null}{gw.role === 'reference' ? ' · current packaging' : ''}{packed ? <span className="text-slate-500"> · {packed}</span> : null}</span>
+                                                                                                {href && <a href={href} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="font-bold text-[#084BCD] hover:underline whitespace-nowrap shrink-0">Report</a>}
                                                                                             </div>
                                                                                         </>);
                                                                                     })()}
@@ -6622,6 +7037,7 @@ ${docSections}
                                 );
                             })()}
                         </div>
+                        <NarrowFold title="Product properties & respiration">
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                             <div className="bg-white border border-slate-200 shadow-sm rounded-xl">
                                 <div className={`p-4 border-b border-slate-200 ${themeBgClass} text-white`}><h3 className="font-spartan font-bold text-lg flex items-center gap-2"><Leaf size={18} /> Relevant Product Properties (MAP)</h3></div>
@@ -6700,10 +7116,12 @@ ${docSections}
                             </div>
                             <div className="bg-white border border-slate-200 shadow-sm rounded-xl flex flex-col">
                                 <div className={`p-4 border-b border-slate-200 bg-slate-50`}><h3 className={`font-spartan font-bold text-lg flex items-center gap-2 text-slate-900`}><LineChart size={18} className={themeColorClass} /> Respiration Rate & Predictive Curve</h3></div>
-                                <div className="p-6 flex-1 -mt-8">{(() => { const regressionO2 = getRegressionCurve(p1Core2, 'O2'); const regressionCO2 = getRegressionCurve(p1Core2, 'CO2'); if (regressionO2 || regressionCO2) { const q = Math.exp(10 * (regressionO2 || regressionCO2).slope); return (<><PredictiveChart taskData={p1Core2} /><p className="mt-1 text-[11px] text-slate-500">{q > 1 ? `The TV advisor follows this curve: Q₁₀ ${Math.min(5, Math.max(1.3, q)).toFixed(2)} — a warmer chain always gets a higher TV.` : "This curve falls with temperature, so the TV advisor uses the product sheet's Q₁₀ (or a typical one) instead."}</p></>); } return <div className="h-full flex items-center justify-center text-slate-500 bg-slate-50 border border-dashed border-slate-200 mt-8 min-h-[250px]">Input R&D respiration data to calculate the curve.</div>; })()}</div>
+                                <div className="p-6 flex-1 -mt-8">{(() => { const hubRec = localFormData['hub-respiration'] || null; const regressionO2 = getRegressionCurve(p1Core2, 'O2', hubRec); const regressionCO2 = getRegressionCurve(p1Core2, 'CO2', hubRec); if (regressionO2 || regressionCO2) { const q = Math.exp(10 * (regressionO2 || regressionCO2).slope); return (<><PredictiveChart taskData={p1Core2} hub={hubRec} />{(regressionO2 || regressionCO2).source === 'hub' && <p className="mt-1 text-[11px] font-bold text-[#084BCD]">Curve from the respiration measured in the Hub ({(hubRec.measurements || []).length} measurements).</p>}<p className="mt-1 text-[11px] text-slate-500">{q > 1 ? `The TV advisor follows this curve: Q₁₀ ${Math.min(5, Math.max(1.3, q)).toFixed(2)} — a warmer chain always gets a higher TV.` : "This curve falls with temperature, so the TV advisor uses the product sheet's Q₁₀ (or a typical one) instead."}</p></>); } return <div className="h-full flex items-center justify-center text-slate-500 bg-slate-50 border border-dashed border-slate-200 mt-8 min-h-[250px]">Input R&D respiration data to calculate the curve.</div>; })()}</div>
                             </div>
                         </div>
+                        </NarrowFold>
 
+                        <NarrowFold title="TV advisor">
                         {(() => {
                             const p2PackMaster = localFormData['p2-pack-master'] || {};
                             const calcTemp = parseFloat(p2PackMaster.calcTemp);
@@ -6808,9 +7226,9 @@ ${docSections}
                                 </div>
                             );
                         })()}
+                        </NarrowFold>
 
-
-
+                        <NarrowFold title="Defects & prevention">
                         <div className="bg-white border border-slate-200 shadow-sm rounded-xl">
                             <div className={`p-4 border-b border-slate-200 bg-slate-50`}><h3 className={`font-spartan font-bold text-lg flex items-center gap-2 text-slate-900`}><FileText size={18} className={themeColorClass} /> Defects & Prevention Matrix</h3></div>
                             <div className="p-0 overflow-x-auto">
@@ -6840,10 +7258,11 @@ ${docSections}
                                 </table>
                             </div>
                         </div>
+                        </NarrowFold>
 
                         {/* The reports behind this product, last: the panels above are
                             the product overview at a glance. */}
-                        {renderWorkflowTrials()}
+                        <NarrowFold title="Trials in the workflow">{renderWorkflowTrials()}</NarrowFold>
 
                     </div>
                 );
@@ -6964,7 +7383,8 @@ ${docSections}
             // one, else CO₂ against O₂ respiration where both were logged, else 1).
             const tvCurveInputs = () => {
                 const p1c1 = localFormData['p1-core-1'] || {}, p1c2 = localFormData['p1-core-2'] || {}, p1c3 = localFormData['p1-core-3'] || {};
-                const reg = getRegressionCurve(p1c2, 'O2') || getRegressionCurve(p1c2, 'CO2');
+                const hubRec = localFormData['hub-respiration'] || null;
+                const reg = getRegressionCurve(p1c2, 'O2', hubRec) || getRegressionCurve(p1c2, 'CO2', hubRec);
                 const q = parseFloat(p1c1.q10);
                 const num = (v) => { const n = parseFloat(v); return isFinite(n) ? n : null; };
                 let rq = num(p1c1.rq);
@@ -6989,6 +7409,91 @@ ${docSections}
             };
 
             // ── The film register ──
+            // ── PerfoTec Hub catalogue ────────────────────────────────────────────
+            // Imported as a file the Hub exports (format perfotec-hub-catalogue/1);
+            // the same object an API of the Hub would return later. Read-only here:
+            // the dashboard never writes to the Hub.
+            // The Hub's respiration measurements the product on screen has stored
+            // (formData['hub-respiration'], written by syncHubData).
+            const hubRespirations = () => { const rec = localFormData['hub-respiration']; return rec && Array.isArray(rec.measurements) ? rec.measurements : []; };
+            const hubRespSummary = () => {
+                const ok = hubRespirations().filter(r => r.status !== 'NOK');
+                return { n: ok.length, temps: [...new Set(ok.map(r => r.temperature))].sort((a, b) => a - b) };
+            };
+            // Bring what the Hub leads into the dashboard's own data (Luke 2026-11-13):
+            //   * films — the register follows the Hub's name, thickness, OTR and
+            //     CO2TR and gets the films it lacks; WVTR and the rest stay ours;
+            //   * respiration — each product record gets the measurements of its
+            //     Hub varieties (linked on name, variety and whole/processed) as
+            //     data: RR O2, RR CO2, temperature, origin, date. Stored there,
+            //     they drive the product's respiration curve when they cover
+            //     enough temperatures, and its calculated Q10 with it.
+            // Runs after an import and after a link changes. Never writes to the Hub.
+            const syncHubData = async (hubState) => {
+                const B = window.PerfoTecBoard;
+                const hub = hubState || hubReg;
+                if (!B || !hub || !hub.catalogue || !B.hubRespirationRecord) return '';
+                const notes = [];
+                try {
+                    const reg = await B.readFilms();
+                    const r = B.hubSyncFilms(reg.films, hub);
+                    setFilmReg(r.added || r.updated ? await B.writeFilms({ ...reg, films: r.films }, reg.rev) : reg);
+                    notes.push(r.added || r.updated ? `films: ${r.added} added, ${r.updated} brought up to date` : 'films up to date');
+                } catch (e) { notes.push('films not synced (' + (e && e.message ? e.message : 'error') + ')'); }
+                const sig = (rec) => rec ? JSON.stringify([rec.hubProductId, rec.varietyIds, rec.measurements]) : '';
+                const now = new Date().toISOString();
+                const next = new Map();
+                let withData = 0, measurements = 0;
+                products.filter(p => p && !p.isAverage).forEach(p => {
+                    const fd = latestFormData(p.id) || {};
+                    const rec = B.hubRespirationRecord(p, hub);
+                    if (rec) { withData++; measurements += rec.measurements.length; }
+                    if (sig(rec) === sig(fd['hub-respiration'])) return;
+                    const out = { ...fd };
+                    if (rec) out['hub-respiration'] = { ...rec, syncedAt: now }; else delete out['hub-respiration'];
+                    Object.assign(out, withHistory(out, rec ? `Hub respiration synced: ${rec.measurements.length} measurement${rec.measurements.length !== 1 ? 's' : ''} of ${rec.hubProduct}` : 'Hub respiration removed (no longer linked)'));
+                    // A calculated Q10 follows the curve; one from the sheet or typed stays.
+                    const src = (out['p1-core-1'] || {}).q10Source || '';
+                    const q10 = calculateQ10(out['p1-core-2'], out['hub-respiration']);
+                    if (q10 && src !== 'sheet' && src !== 'manual') out['p1-core-1'] = { ...(out['p1-core-1'] || {}), q10, q10Source: 'calculated' };
+                    next.set(p.id, out);
+                });
+                if (next.size) {
+                    if (db) { for (const [id, fd] of next) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', id), { formData: fd }); }
+                    else setProducts(prev => prev.map(p => next.has(p.id) ? { ...p, formData: next.get(p.id) } : p));
+                    if (next.has(activeProductId)) setLocalFormData(next.get(activeProductId));
+                }
+                notes.push(`respiration: ${measurements} measurement${measurements !== 1 ? 's' : ''} in ${withData} product${withData !== 1 ? 's' : ''}${next.size ? `, ${next.size} product${next.size !== 1 ? 's' : ''} updated` : ', nothing changed'}`);
+                return notes.join(' · ');
+            };
+            const importHubCatalogue = async () => {
+                const B = window.PerfoTecBoard;
+                if (!B || !B.writeHub) return;
+                try {
+                    const [handle] = await window.showOpenFilePicker({ multiple: false, types: [{ description: 'PerfoTec Hub catalogue', accept: { 'application/json': ['.json'] } }] });
+                    const parsed = JSON.parse(await (await handle.getFile()).text());
+                    if (!parsed || parsed.format !== B.HUB_FORMAT) { setHubMsg('This file is not a PerfoTec Hub catalogue export.'); return; }
+                    const out = await B.writeHub({ catalogue: parsed });
+                    setHubReg(out);
+                    const c = out.catalogue;
+                    const synced = await syncHubData(out);
+                    setHubMsg(`✓ Hub catalogue imported: ${c.products.length} products, ${c.varieties.length} varieties, ${c.films.length} films, ${c.packages.length} packages, ${c.laserPrograms.length} laser programs, ${c.respirations.length} respiration measurements · ${synced}`);
+                } catch (e) { if (!e || e.name !== 'AbortError') setHubMsg('The catalogue could not be imported: ' + (e && e.message ? e.message : 'unknown error')); }
+            };
+            // hubId: a Hub id, '' (deliberately not linked) or null (match on name again).
+            const linkHub = async (kind, id, hubId) => {
+                const B = window.PerfoTecBoard;
+                if (!B || !B.writeHub) return;
+                try {
+                    const out = await B.writeHub({ links: { [kind]: { [id]: hubId } } });
+                    setHubReg(out);
+                    // A link decides which measurements and which film a record follows.
+                    const synced = await syncHubData(out);
+                    if (synced) setHubMsg('✓ Link saved · ' + synced);
+                }
+                catch (e) { setHubMsg('The link could not be saved: ' + (e && e.message ? e.message : 'unknown error')); }
+            };
+
             const filmById = (id) => (filmReg && id ? filmReg.films.find(f => f.id === id) : null) || null;
             const filmNameTaken = (name, id) => !!(filmReg && filmReg.films.some(f => f.id !== id && f.name.trim().toLowerCase() === String(name).trim().toLowerCase()));
             // Saves one film (new or edited) and, from a trial row's "+ New film…",
@@ -7055,6 +7560,218 @@ ${docSections}
             // 2.5 to 7.5, …) and pack size — what to pack, at which TV, how long it
             // held, and the report it comes from. Opened from the masthead.
             const OVERVIEW_DAYS = [0, 7, 14, 21, 28];
+            const productLabelOf = (p) => [p.name, p.variety].filter(Boolean).join(' · ') + (p.state === 'processed' ? ' (processed)' : '');
+            const goToProduct = (id, tab) => { setGlobalPage(null); setActiveProductId(id); setActiveTab(tab || 'dashboard'); window.scrollTo({ top: 0, behavior: 'instant' }); };
+            // Fields of one product's trial table, through the same path as an edit
+            // in the Database (buffer first for the product on screen).
+            // `what`: the line this leaves in the product's change log.
+            const patchProductMaster = async (productId, patch, what) => {
+                const target = products.find(p => p.id === productId);
+                if (!target || target.isAverage || !patch || (!Object.keys(patch).length && !what)) return false;
+                let fd = JSON.parse(JSON.stringify(latestFormData(productId) || {}));
+                fd['p2-pack-master'] = { ...(fd['p2-pack-master'] || {}), ...patch };
+                if (what) fd = withHistory(fd, what);
+                if (db) await updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'products', productId), { formData: fd });
+                else setProducts(prev => prev.map(p => p.id === productId ? { ...p, formData: fd } : p));
+                if (productId === activeProductId) setLocalFormData(fd);
+                return true;
+            };
+            // A proposal for a verification round: a card in Proposal on the board
+            // with the winning settings filled in. Written only after a yes.
+            const planVerification = async (item) => {
+                const B = window.PerfoTecBoard;
+                if (!B || !B.verificationProposal || !B.writePhaseFile || !B.writeManifest) return;
+                const w = item.group.winner, label = [item.product.name, w.variety || item.product.variety].filter(Boolean).join(' ');
+                if (!window.confirm(`Create a proposal for a verification round of ${label}?\n\n${item.type}${w.temp != null ? `, ${w.temp} °C` : ''}, ${w.shelfLife.open ? '≥ ' : ''}${w.shelfLife.days} days to reach. It is added to the board in Proposal, with the winning settings filled in.`)) return;
+                const plan = B.verificationProposal(item.product, item.group, { films: filmReg ? filmReg.films : [], rows: item.rows, user: B.getUserLabel ? B.getUserLabel() : '' });
+                if (!plan) return;
+                try {
+                    await B.writePhaseFile(plan.card.id, 'proposal', plan.doc);
+                    const manifest = await B.readManifest();
+                    manifest.projects = [...(manifest.projects || []), plan.card];
+                    await B.writeManifest(manifest);
+                    loadBoardCards();
+                    await patchProductMaster(item.product.id, {}, `Verification round planned: ${item.type}${w.temp != null ? `, ${w.temp} °C` : ''}, ${w.shelfLife.open ? '≥ ' : ''}${w.shelfLife.days} days to reach`);
+                    setWorkMsg({ text: `✓ Proposal created for the verification round of ${label}.`, href: 'proposal.html?boardProject=' + encodeURIComponent(plan.card.id) });
+                } catch (e) { setWorkMsg({ text: 'The proposal could not be created: ' + (e && e.message ? e.message : 'unknown error') }); }
+            };
+            const acceptChecksFor = async (p) => {
+                const B = window.PerfoTecBoard;
+                const master = (latestFormData(p.id) || {})['p2-pack-master'] || {};
+                const r = B.acceptDataChecks(master, [p.name, ...(p.aliases || [])].filter(Boolean), filmReg ? filmReg.films : []);
+                if (!r.accepted) return;
+                if (!window.confirm(`Apply ${r.accepted} suggestion${r.accepted !== 1 ? 's' : ''} to ${productLabelOf(p)}?\n\nVarieties read from report titles, packaging types read from variant names and films read from the register are written into the trial rows. You can review them one by one in the product instead.`)) return;
+                if (await patchProductMaster(p.id, r.patch, `Accepted ${r.accepted} data-check suggestion${r.accepted !== 1 ? 's' : ''}`)) setWorkMsg({ text: `✓ ${r.accepted} suggestion${r.accepted !== 1 ? 's' : ''} applied to ${productLabelOf(p)}${r.open ? ` · ${r.open} still need a value typed` : ''}.` });
+            };
+            const applyBulk = async (p, report) => {
+                const B = window.PerfoTecBoard;
+                const d = bulkDraft[`${p.id}|${report.key}`] || {};
+                const master = (latestFormData(p.id) || {})['p2-pack-master'] || {};
+                const r = B.fillTrialFields(master, report.idxs, { film: d.film, perf: d.perf, flush: d.flush }, { perfotecOnly: d.scope !== 'all' });
+                if (!r.filled) { setWorkMsg({ text: 'Nothing to fill: choose a value, or these rows already have one.' }); return; }
+                if (await patchProductMaster(p.id, r.patch, `Filled ${r.filled} field${r.filled !== 1 ? 's' : ''} for the report ${report.pdf || report.date || 'without a name'}`)) {
+                    setBulkDraft(prev => { const n = { ...prev }; delete n[`${p.id}|${report.key}`]; return n; });
+                    setWorkMsg({ text: `✓ ${r.filled} field${r.filled !== 1 ? 's' : ''} filled in ${productLabelOf(p)}.` });
+                }
+            };
+
+            // Trials under way on the board: so nobody starts the same test twice,
+            // and sales can see what is coming.
+            const renderRunningList = () => {
+                const B = window.PerfoTecBoard;
+                const phaseLabel = (c) => (B && B.phaseByKey && B.phaseByKey[c.phase] ? B.phaseByKey[c.phase].label : c.phase);
+                const toolOf = (c) => (B && B.phaseByKey && B.phaseByKey[c.phase] ? B.phaseByKey[c.phase].tool : 'board.html') + '?boardProject=' + encodeURIComponent(c.id);
+                const nProducts = Object.keys(runningNow.byProduct).length;
+                const row = (c, product) => (
+                    <div key={c.id} className="px-4 py-3 border-t border-slate-100 flex flex-wrap items-center gap-x-4 gap-y-2">
+                        <div className="flex-1 min-w-[220px]">
+                            {product
+                                ? <button type="button" onClick={() => goToProduct(product.id)} className="font-bold text-slate-900 hover:text-[#084BCD] text-left">{productLabelOf(product)}</button>
+                                : <span className="font-bold text-amber-800">Not linked to a product{c.product ? <span className="font-normal text-slate-600"> — "{c.product}"</span> : ''}</span>}
+                            <span className="block text-xs text-slate-500 break-words">{[c.title, c.client].filter(Boolean).join(' · ') || 'Untitled trial'}</span>
+                        </div>
+                        <span className="text-[10px] font-bold uppercase px-2 py-1 rounded bg-[#084BCD]/10 text-[#084BCD] whitespace-nowrap">{phaseLabel(c)}</span>
+                        <span className="text-xs text-slate-600 whitespace-nowrap">{c.startDate ? `since ${fmtIsoDate(c.startDate)}` : 'no start date'}</span>
+                        <span className="text-xs text-slate-600 whitespace-nowrap min-w-[110px]">{c.productManager || 'no product manager'}</span>
+                        {!isCommercial && <a href={toolOf(c)} className="text-xs font-bold text-[#084BCD] hover:underline whitespace-nowrap">Open</a>}
+                    </div>
+                );
+                return (
+                    <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden">
+                        <div className="p-4 bg-slate-50 flex flex-wrap items-center gap-3">
+                            <h3 className="font-spartan font-bold text-slate-900">Trials running now</h3>
+                            <span className="text-xs text-slate-500">{boardCards === null ? 'Reading the board…' : (() => { const linked = runningNow.all.length - runningNow.unlinked.length, n = isCommercial ? linked : runningNow.all.length; return `${n} trial${n !== 1 ? 's' : ''}${isCommercial ? '' : ` — ${linked}`} for ${nProducts} product${nProducts !== 1 ? 's' : ''}${!isCommercial && runningNow.unlinked.length ? `, ${runningNow.unlinked.length} not linked to a product` : ''}`; })()}</span>
+                            <p className="basis-full text-xs text-slate-500">On the board and not finished yet: intake, proposal, accepted or report. Their results reach the product when the trial moves to Dashboard.</p>
+                        </div>
+                        {boardCards !== null && runningNow.all.length - (isCommercial ? runningNow.unlinked.length : 0) === 0 && <p className="p-8 text-center text-sm text-slate-500">No trial is running at the moment.</p>}
+                        {runningNow.unlinked.length > 0 && !isCommercial && (
+                            <div className="border-t border-amber-200 bg-amber-50/60">
+                                <p className="px-4 pt-3 text-xs font-bold text-amber-900">Link these to a product on the board, or their results will not reach a product. <a href="board.html" className="underline">Open the board</a></p>
+                                {runningNow.unlinked.map(c => row(c, null))}
+                            </div>
+                        )}
+                        {products.filter(p => p && !p.isAverage && runningNow.byProduct[p.id]).sort((a, b) => a.name.localeCompare(b.name)).flatMap(p => runningNow.byProduct[p.id].map(c => row(c, p)))}
+                    </div>
+                );
+            };
+
+            // Results that rest on one round, the longest shelf life first, each
+            // with a button that turns it into a proposal for the second round.
+            const renderVerifyList = () => {
+                const inType = (workLists ? workLists.verify : []).filter(it => !verifyType || it.type === verifyType);
+                const items = inType.filter(it => !it.reference), beaten = inType.filter(it => it.reference);
+                const all = (workLists ? workLists.verify : []).filter(it => !it.reference);
+                return (
+                    <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden">
+                        <div className="p-4 bg-slate-50 flex flex-wrap items-center gap-3">
+                            <h3 className="font-spartan font-bold text-slate-900">Results to verify</h3>
+                            <span className="text-xs text-slate-500">{items.length} result{items.length !== 1 ? 's' : ''} in {new Set(items.map(it => it.product.id)).size} product{new Set(items.map(it => it.product.id)).size !== 1 ? 's' : ''}</span>
+                            <div className="ml-auto flex flex-wrap rounded-lg border border-slate-200 bg-white p-1 gap-1">
+                                {[['', 'All'], ['Punnet', 'Punnet'], ['Flowpack', 'Flowpack'], ['Crate/Box', 'Crate / Box'], ['Pallet', 'Pallet']].map(([id, label]) => (
+                                    <button key={id} type="button" onClick={() => setVerifyType(id)} className={`px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-widest ${verifyType === id ? 'bg-[#084BCD] text-white' : 'text-slate-600 hover:bg-slate-100'}`}>{label}{id ? ` ${all.filter(it => it.type === id).length}` : ''}</button>
+                                ))}
+                            </div>
+                            <p className="basis-full text-xs text-slate-500">One round reached these. A second round at the same settings that reaches the same shelf life makes a result proven, and the product commercially ready. "Plan verification round" adds a proposal to the board with the product, packaging, weight, temperature, film, transmission and gas at packing of the winning variant filled in.</p>
+                        </div>
+                        {items.length === 0 && beaten.length === 0 && <p className="p-8 text-center text-sm text-slate-500">Nothing to verify{verifyType ? ' in this packaging' : ''}.</p>}
+                        {[...items, ...beaten].map((it, n) => {
+                            const w = it.group.winner, B = window.PerfoTecBoard;
+                            const film = (filmReg ? filmReg.films : []).find(f => f.id === w.film);
+                            const tv = B.plausibleTv ? B.plausibleTv(w.trans) : null;
+                            const running = runningNow.byProduct[it.product.id] || [];
+                            return (
+                                <React.Fragment key={it.key}>
+                                {it.reference && n === items.length && (
+                                    <p className="px-4 py-3 border-t border-slate-200 bg-slate-50 text-xs text-slate-600"><b className="text-slate-900">The current packaging did best here ({beaten.length}).</b> No PerfoTec variant has beaten it at this temperature and pack size yet: that asks for a new setting, not for a verification round.</p>
+                                )}
+                                <div className="px-4 py-3 border-t border-slate-100 flex flex-wrap items-center gap-x-4 gap-y-2">
+                                    <div className="flex-1 min-w-[220px]">
+                                        <button type="button" onClick={() => goToProduct(it.product.id)} className="font-bold text-slate-900 hover:text-[#084BCD] text-left">{[it.product.name, w.variety || it.product.variety].filter(Boolean).join(' · ')}</button>
+                                        <span className="block text-xs text-slate-500">{it.type === 'Crate/Box' ? 'Crate / Box' : it.type} · {w.temp != null ? `${w.temp} °C` : 'temperature ?'} · {w.weightKg ? packWeightText(w.weightKg) : 'weight ?'}{w.condition !== 'MAP' ? ` · ${w.condition}` : ''}{w.date ? ` · trial of ${fmtIsoDate(w.date)}` : ''}</span>
+                                    </div>
+                                    <span className="text-right min-w-[90px]"><span className="block font-bold text-[#008837] whitespace-nowrap">{w.shelfLife.open ? '≥ ' : ''}{w.shelfLife.days} day{w.shelfLife.days === 1 ? '' : 's'}</span><span className="block text-[11px] text-slate-500">within spec</span></span>
+                                    <span className="text-xs text-slate-600 min-w-[180px] flex-1">{film ? film.name : w.material || '—'}{film && w.material ? <span className="block text-slate-400">{w.material}</span> : null}{tv != null ? <span className="block">TV {tv}</span> : null}{w.role === 'reference' ? <span className="block text-slate-400">current packaging</span> : null}</span>
+                                    {running.length > 0 && <span className="text-[10px] font-bold uppercase px-2 py-1 rounded bg-[#084BCD]/10 text-[#084BCD] whitespace-nowrap" title={running.map(c => c.title || 'Untitled trial').join('\n')}>{running.length} trial{running.length !== 1 ? 's' : ''} running</span>}
+                                    {!it.reference && <button type="button" onClick={() => planVerification(it)} disabled={folderState !== 'ready'} className="flex items-center gap-2 text-xs font-bold font-spartan uppercase tracking-widest bg-[#084BCD] text-white px-3.5 py-2 rounded-lg hover:opacity-90 disabled:opacity-40 whitespace-nowrap"><Plus size={14}/> Plan verification round</button>}
+                                </div>
+                                </React.Fragment>
+                            );
+                        })}
+                    </div>
+                );
+            };
+
+            // What the trial tables lack, the product with the most first: the
+            // data check's proposals in one click, and a film, perforation or
+            // flush system for a whole report at once.
+            const renderDataList = () => {
+                const list = workLists ? workLists.data : [];
+                const sum = (k) => list.reduce((n, d) => n + d.gaps.missing[k], 0);
+                const totalChecks = list.reduce((n, d) => n + d.gaps.checks.length, 0);
+                const chips = (m, checks) => [[checks, 'data check'], [m.film, 'without film'], [m.tv, 'without TV'], [m.tvNotATv, 'TV is a perforation count'], [m.temperature, 'without temperature'], [m.date, 'without date'], [m.curve, 'without quality curve'], [m.packing, 'without packing details']]
+                    .filter(([n]) => n > 0).map(([n, t], i) => <span key={t} className={`text-[11px] px-2 py-1 rounded whitespace-nowrap ${i === 0 && checks ? 'bg-amber-50 border border-amber-200 text-amber-800 font-bold' : 'bg-slate-100 text-slate-700'}`}>{n} {t}{t === 'data check' && n !== 1 ? 's' : ''}</span>);
+                const sel = "p-2 text-xs border border-slate-200 rounded-lg bg-white";
+                return (
+                    <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden">
+                        <div className="p-4 bg-slate-50 flex flex-wrap items-center gap-3">
+                            <h3 className="font-spartan font-bold text-slate-900">Data to complete</h3>
+                            <span className="text-xs text-slate-500">{list.length} product{list.length !== 1 ? 's' : ''} · {totalChecks} data check{totalChecks !== 1 ? 's' : ''} · {sum('film')} rows without film · {sum('tv') + sum('tvNotATv')} without a usable TV</span>
+                            <p className="basis-full text-xs text-slate-500">Results are compared per packaging, temperature and pack size, and the overview shows the film, perforation and gas flush of a result: a row without them cannot be compared or shown in full. Filling a report at once only writes where a row has no value yet.</p>
+                        </div>
+                        {list.length === 0 && <p className="p-8 text-center text-sm text-slate-500">Every trial table is complete.</p>}
+                        {list.map(({ product: p, gaps, acceptable }) => {
+                            const open = dataOpen === p.id;
+                            return (
+                                <div key={p.id} className="border-t border-slate-100">
+                                    <div className="px-4 py-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+                                        <button type="button" onClick={() => setDataOpen(open ? null : p.id)} aria-expanded={open} className="flex items-center gap-2 min-w-[200px] text-left">
+                                            <ChevronRight size={16} className={`shrink-0 text-slate-400 transition-transform ${open ? 'rotate-90' : ''}`}/>
+                                            <span><span className="block font-bold text-slate-900">{productLabelOf(p)}</span><span className="block text-xs text-slate-500">{gaps.rows} trial{gaps.rows !== 1 ? 's' : ''} in {gaps.reports.length} report{gaps.reports.length !== 1 ? 's' : ''}</span></span>
+                                        </button>
+                                        <div className="flex-1 min-w-[220px] flex flex-wrap gap-1.5">{chips(gaps.missing, gaps.checks.length)}</div>
+                                        {acceptable > 0 && <button type="button" onClick={() => acceptChecksFor(p)} className="text-xs font-bold font-spartan uppercase tracking-widest bg-[#084BCD] text-white px-3 py-2 rounded-lg hover:opacity-90 whitespace-nowrap">Accept {acceptable} suggestion{acceptable !== 1 ? 's' : ''}</button>}
+                                        <button type="button" onClick={() => { setFoldOpen('trials', true); goToProduct(p.id, 'pipeline'); }} className="text-xs font-bold text-[#084BCD] hover:underline whitespace-nowrap">Open product</button>
+                                    </div>
+                                    {open && (
+                                        <div className="bg-slate-50 border-t border-slate-100 px-4 py-3 space-y-3">
+                                            {gaps.reports.map(r => {
+                                                const key = `${p.id}|${r.key}`, d = bulkDraft[key] || {};
+                                                const set = (k, v) => setBulkDraft(prev => ({ ...prev, [key]: { ...(prev[key] || {}), [k]: v } }));
+                                                const type = String(((latestFormData(p.id) || {})['p2-pack-master'] || {})[`pack_opt_${r.idxs[0]}_type`] || '');
+                                                return (
+                                                    <div key={r.key || '__unlinked'} className="bg-white border border-slate-200 rounded-lg p-3">
+                                                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                                                            <span className="font-bold text-sm text-slate-900 break-words">{r.key ? `${r.date ? fmtIsoDate(r.date) : 'No date'} · ${r.pdf || 'Report'}` : 'Rows not linked to a report'}</span>
+                                                            <span className="text-xs text-slate-500">{r.idxs.length} row{r.idxs.length !== 1 ? 's' : ''}, {r.perfotec.length} PerfoTec variant{r.perfotec.length !== 1 ? 's' : ''}</span>
+                                                        </div>
+                                                        <div className="flex flex-wrap gap-1.5 mb-3">{chips(r.missing, 0)}</div>
+                                                        <div className="flex flex-wrap items-end gap-2">
+                                                            <label className="flex flex-col gap-1 text-[11px] font-bold uppercase tracking-wide text-slate-500">Film
+                                                                <FilmSelect value={d.film || ''} films={filmReg ? filmReg.films : null} type={type} onChange={v => set('film', v)} className={sel + ' max-w-[220px]'}/>
+                                                            </label>
+                                                            <label className="flex flex-col gap-1 text-[11px] font-bold uppercase tracking-wide text-slate-500">Perforation
+                                                                <select className={sel} value={d.perf || ''} onChange={e => set('perf', e.target.value)}><option value="">—</option><option value="perfotec">PerfoTec laser</option><option value="other">Other</option><option value="none">None</option></select>
+                                                            </label>
+                                                            <label className="flex flex-col gap-1 text-[11px] font-bold uppercase tracking-wide text-slate-500">Flush system
+                                                                <select className={sel} value={d.flush || ''} onChange={e => set('flush', e.target.value)}><option value="">—</option><option value="o2control">PerfoTec O2 Control</option><option value="other">Other system</option><option value="none">None (no flush)</option></select>
+                                                            </label>
+                                                            <label className="flex flex-col gap-1 text-[11px] font-bold uppercase tracking-wide text-slate-500">For
+                                                                <select className={sel} value={d.scope || 'perfotec'} onChange={e => set('scope', e.target.value)}><option value="perfotec">PerfoTec variants ({r.perfotec.length})</option><option value="all">All rows ({r.idxs.length})</option></select>
+                                                            </label>
+                                                            <button type="button" onClick={() => applyBulk(p, r)} disabled={!d.film && !d.perf && !d.flush} className="text-xs font-bold font-spartan uppercase tracking-widest border border-[#084BCD] text-[#084BCD] px-3 py-2 rounded-lg hover:bg-[#F1F6FF] disabled:opacity-40">Fill empty fields</button>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                );
+            };
+
             const renderOverviewPage = () => {
                 const data = bestPracticeRows || { rows: [], without: [] };
                 const f = bpFilter;
@@ -7078,13 +7795,29 @@ ${docSections}
                     const c = typeof x === 'string' ? x.localeCompare(y) : x - y;
                     return bpSort.dir === 'asc' ? c : -c;
                 };
+                const ownerOf = (id) => String((products.find(p => p.id === id) || {}).owner || '').trim();
                 const rows = data.rows
+                    .filter(r => !ownerFilter || (ownerFilter === '__none' ? !ownerOf(r.productId) : ownerOf(r.productId) === ownerFilter))
                     .filter(r => !f.product || r.productId === f.product)
                     .filter(r => f.temp === '' || r.tempGroup === f.temp)
                     .filter(r => f.status === 'all' || resultStatus(r.proven, r.released) === f.status)
                     .filter(r => !f.days || r.days >= f.days)
                     .sort((a, b) => cmp(a, b) || a.product.localeCompare(b.product) || (a.tempGroup == null ? 999 : a.tempGroup) - (b.tempGroup == null ? 999 : b.tempGroup) || (a.sizeKg == null ? 1e9 : a.sizeKg) - (b.sizeKg == null ? 1e9 : b.sizeKg));
                 const productsShown = new Set(rows.map(r => r.productId)).size;
+                // The results as listed, as a spreadsheet for internal use.
+                const exportOverview = async () => {
+                    try {
+                        await ensureLib('XLSX');
+                        const head = ['Product', 'State', 'Variety', 'Packaging', 'Temperature (°C)', 'Temperature group (°C)', 'Pack weight (kg)', 'Weight class', 'Film', 'PerfoTec film', 'Variant', 'Perforation', 'TV', 'Gas flush', 'O2 at packing (%)', 'CO2 at packing (%)', 'O2 reached (%)', 'CO2 reached (%)', 'Days within spec', 'Still within spec at the end', 'Status', 'Rounds', 'Released by PM', 'Owner', 'Trial date', 'Report'];
+                        const body = rows.map(r => { const fl = flushInfo(r.flush, r.startO2, r.startCO2); return [r.product, r.state === 'processed' ? 'Processed' : 'Whole', r.variety, bpType, r.temp, r.tempGroup, r.weightKg, packSizeText(r.size), r.film, r.filmOwn ? 'yes' : '', r.material, perfText(r.perf), r.tv, fl.applied === true ? 'yes' : fl.applied === false ? 'no' : '', r.startO2, r.startCO2, r.o2, r.co2, r.days, r.open ? 'yes' : 'no', COMMERCIAL_STATUS[resultStatus(r.proven, r.released)][0], r.rounds, r.released ? 'yes' : '', ownerOf(r.productId), r.date, r.pdf]; });
+                        const ws = window.XLSX.utils.aoa_to_sheet([['PerfoTec Product Overview — INTERNAL: holds transmission values, not for clients'], [`${bpType} · exported ${new Date().toLocaleDateString()} · ${rows.length} result${rows.length !== 1 ? 's' : ''}`], [], head, ...body]);
+                        const wb = window.XLSX.utils.book_new();
+                        window.XLSX.utils.book_append_sheet(wb, ws, 'Overview');
+                        window.XLSX.writeFile(wb, `perfotec-product-overview-${bpType.replace(/[^a-z]/gi, '').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.xlsx`);
+                    } catch (e) { setWorkMsg({ text: 'The export could not be made: ' + (e && e.message ? e.message : 'unknown error') }); }
+                };
+                const newChanges = recentChanges.filter(e => !lastSeen || String(e.at) > lastSeen).length;
+                const openChanges = () => { setOverviewView('changes'); setWorkMsg(null); const now = new Date().toISOString(); setTimeout(() => { try { localStorage.setItem(LAST_SEEN_KEY, now); } catch (e) { /* not remembered */ } }, 0); };
                 const th = (col, label, title) => (
                     <th onClick={() => setBpSort(s => ({ col, dir: s.col === col && s.dir === 'asc' ? 'desc' : 'asc' }))} title={title || `Sort by ${label.toLowerCase()}`}
                         className={`p-3 border-b border-slate-200 cursor-pointer select-none whitespace-nowrap hover:text-slate-900 ${bpSort.col === col ? 'text-[#084BCD]' : ''}`}>
@@ -7109,6 +7842,10 @@ ${docSections}
                     return r.pdf ? { href: null, label: r.pdf, title: 'Report file — no link stored with this trial' } : null;
                 };
                 const typeName = bpType === 'Crate/Box' ? 'crate / box' : bpType.toLowerCase();
+                // Sales sees the results and what is running; the work lists are product management's.
+                const view = isCommercial && (overviewView === 'verify' || overviewView === 'data') ? 'results' : overviewView;
+                // (the list is marked as seen when it is opened, and shows what was new at that moment)
+                const runningChip = (productId) => { const r = runningNow.byProduct[productId]; return r && r.length ? <span className="inline-block mt-1 text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-[#084BCD]/10 text-[#084BCD] whitespace-nowrap" title={r.map(c => c.title || 'Untitled trial').join('\n')}>{r.length} trial{r.length !== 1 ? 's' : ''} running</span> : null; };
                 return (
                     <>
                         <div className="pf-hero text-white relative overflow-hidden py-8">
@@ -7121,6 +7858,50 @@ ${docSections}
                             </div>
                         </div>
                         <main className="max-w-[1600px] w-full mx-auto px-6 py-10 relative z-20">
+                            {(() => {
+                                // Results for everyone; what is running for everyone too; the
+                                // two work lists for product management.
+                                const views = [['results', 'Results', null], ['running', 'Trials running', runningNow.all.length - (isCommercial ? runningNow.unlinked.length : 0)],
+                                    ...(isCommercial ? [] : [['verify', 'To verify', workLists ? workLists.verify.filter(it => !it.reference).length : null], ['data', 'Data to complete', workLists ? workLists.data.length : null]]),
+                                    ['changes', 'Changes', newChanges || null]];
+                                return (
+                                    <div className="pf-web-tabs mb-4 flex-wrap">
+                                        {views.map(([id, label, n]) => (
+                                            <button key={id} type="button" onClick={() => { if (id === 'changes') openChanges(); else { setOverviewView(id); setWorkMsg(null); } }} className={`pf-web-tab ${view === id ? 'is-active' : ''}`}>{label}{n != null ? <span className={`ml-1 px-1.5 py-0.5 rounded-full text-[11px] ${view === id ? 'bg-white/20' : 'bg-slate-200 text-slate-700'}`}>{n}</span> : null}</button>
+                                        ))}
+                                    </div>
+                                );
+                            })()}
+                            {workMsg && (
+                                <div className="mb-4 px-4 py-3 rounded-lg border border-[#084BCD]/20 bg-[#F1F6FF] text-sm text-slate-800 flex flex-wrap items-center gap-3">
+                                    <span className="flex-1 min-w-[200px]">{workMsg.text}</span>
+                                    {workMsg.href && <a href={workMsg.href} target="_blank" rel="noopener noreferrer" className="font-bold text-[#084BCD] underline whitespace-nowrap">Open the proposal</a>}
+                                    <button type="button" onClick={() => setWorkMsg(null)} className="text-slate-400 hover:text-slate-700" title="Close"><X size={16}/></button>
+                                </div>
+                            )}
+                            {view === 'running' && renderRunningList()}
+                            {view === 'verify' && renderVerifyList()}
+                            {view === 'data' && renderDataList()}
+                            {view === 'changes' && (
+                                <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden">
+                                    <div className="p-4 bg-slate-50 flex flex-wrap items-center gap-3">
+                                        <h3 className="font-spartan font-bold text-slate-900">What changed</h3>
+                                        <span className="text-xs text-slate-500">{recentChanges.length ? `The last ${recentChanges.length} changes${newChanges ? `, ${newChanges} since you last looked` : ''}` : ''}</span>
+                                        <p className="basis-full text-xs text-slate-500">Releases, parked products, planned verification rounds, data filled in from the work lists, and reports and Hub measurements brought in. Kept from 16 November 2026 on; a trial the board moves to Dashboard is not listed here yet.</p>
+                                    </div>
+                                    {recentChanges.length === 0 && <p className="p-8 text-center text-sm text-slate-500">Nothing has been logged yet.</p>}
+                                    {recentChanges.map((e, i) => (
+                                        <div key={e.at + '|' + e.product.id + '|' + i} className="px-4 py-3 border-t border-slate-100 flex flex-wrap items-baseline gap-x-4 gap-y-1">
+                                            <span className="text-xs text-slate-500 whitespace-nowrap w-32">{new Date(e.at).toLocaleDateString()} {new Date(e.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                            <button type="button" onClick={() => goToProduct(e.product.id)} className="font-bold text-sm text-slate-900 hover:text-[#084BCD] text-left min-w-[160px]">{productLabelOf(e.product)}</button>
+                                            <span className="text-sm text-slate-700 flex-1 min-w-[220px]">{e.what}</span>
+                                            <span className="text-xs text-slate-500 whitespace-nowrap">{e.by || 'unknown'}</span>
+                                            {(!lastSeen || String(e.at) > lastSeen) && <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-[#084BCD]/10 text-[#084BCD]">new</span>}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            {view === 'results' && (
                             <div className="bg-white border border-slate-200 shadow-sm rounded-xl">
                                 <div className="p-4 border-b border-slate-200 bg-slate-50 space-y-3">
                                     <div className="flex flex-wrap items-center gap-3">
@@ -7130,12 +7911,60 @@ ${docSections}
                                             ))}
                                         </div>
                                         <span className="ml-auto text-xs text-slate-500">{rows.length} result{rows.length !== 1 ? 's' : ''} · {productsShown} product{productsShown !== 1 ? 's' : ''}</span>
+                                        {(ownerNames.length > 0 || ownerFilter) && (
+                                            <select value={ownerFilter} onChange={e => setOwnerFilter(e.target.value)} aria-label="Owner" className={`text-xs font-semibold rounded-lg px-2 py-2 bg-white border ${ownerFilter ? 'border-[#084BCD] text-[#084BCD]' : 'border-slate-200 text-slate-700'}`}>
+                                                <option value="">Every owner</option>{ownerNames.map(n => <option key={n} value={n}>{n}</option>)}{/* an owner from a shared link who owns nothing (any more): shown, so the empty list explains itself */}{ownerFilter && ownerFilter !== '__none' && !ownerNames.includes(ownerFilter) && <option value={ownerFilter}>{ownerFilter} (no products)</option>}<option value="__none">Without an owner</option>
+                                            </select>
+                                        )}
+                                        <button type="button" onClick={exportOverview} disabled={!rows.length} title="The results as listed, as an Excel file. Internal: it holds transmission values." className="flex items-center gap-1.5 text-xs font-bold text-[#084BCD] border border-[#084BCD]/40 rounded-lg px-3 py-2 hover:bg-[#F1F6FF] disabled:opacity-40"><Download size={13}/> Excel</button>
                                         {filtersOn && <button onClick={() => setBpFilter({ product: '', temp: '', status: 'all', days: 0 })} className="text-xs font-bold text-[#084BCD] hover:underline">Reset filters</button>}
                                     </div>
                                 </div>
                                 {data.rows.length === 0 ? (
                                     <p className="p-8 text-center text-sm text-slate-500">No product has a result within specification in {typeName} packaging yet.</p>
                                 ) : (
+                                    isNarrow ? (
+                                    <div>
+                                        {/* The filters of the table head, two by two. */}
+                                        <div className="p-3 grid grid-cols-2 gap-2 border-b border-slate-200 bg-slate-50">
+                                            {filterSelect(f.product, v => setF({ product: v }), [['', `All products (${productOptions.length})`], ...productOptions], 'product')}
+                                            {filterSelect(f.temp === '' ? '' : String(f.temp), v => setF({ temp: v === '' ? '' : Number(v) }), [['', 'All temperatures'], ...tempGroups.map(t => [String(t), `${t} °C group`])], 'temperature')}
+                                            {filterSelect(String(f.days), v => setF({ days: Number(v) }), OVERVIEW_DAYS.map(d => [String(d), d ? `≥ ${d} days` : 'Any shelf life']), 'days within spec')}
+                                            {filterSelect(f.status, v => setF({ status: v }), [['all', 'Any status'], ['ready', 'Commercially ready'], ['verify', 'To be verified']], 'status')}
+                                        </div>
+                                        {rows.length === 0 && <p className="p-8 text-center text-sm text-slate-500">Nothing matches these filters.</p>}
+                                        {rows.map(r => {
+                                            const rep = reportOf(r), fl = flushInfo(r.flush, r.startO2, r.startCO2);
+                                            const line = (label, value) => value ? <div className="flex justify-between gap-3 py-1 border-t border-slate-100"><dt className="text-slate-500">{label}</dt><dd className="text-right font-medium text-slate-800">{value}</dd></div> : null;
+                                            return (
+                                                <div key={r.key} className="p-4 border-b border-slate-200">
+                                                    <button type="button" onClick={() => openProduct(r.productId)} className="w-full text-left">
+                                                        <div className="flex items-start justify-between gap-3">
+                                                            <span className="min-w-0"><span className="block font-bold text-slate-900">{r.product}</span><span className="block text-xs text-slate-500">{[r.state === 'processed' ? 'Processed' : 'Whole', r.variety].filter(Boolean).join(' · ')}</span>{runningChip(r.productId)}</span>
+                                                            <span className="text-right shrink-0"><span className="block font-bold text-lg leading-tight text-[#008837]">{r.open ? '≥ ' : ''}{r.days} day{r.days === 1 ? '' : 's'}</span><span className="block text-[11px] text-slate-500">within spec</span></span>
+                                                        </div>
+                                                        <p className="mt-2 text-sm text-slate-700">{r.temp != null ? `${r.temp} °C` : 'temperature ?'} · {r.weightKg ? packWeightText(r.weightKg) : 'weight ?'}{r.condition !== 'MAP' ? ` · ${r.condition}` : ''}</p>
+                                                    </button>
+                                                    <div className="mt-2"><StatusChips status={resultStatus(r.proven, r.released)} proven={r.proven} rounds={r.rounds} released={r.released}/></div>
+                                                    <details className="mt-2">
+                                                        <summary className="text-xs font-bold uppercase tracking-wider text-[#084BCD] cursor-pointer select-none py-2">Settings behind this result</summary>
+                                                        <dl className="text-sm">
+                                                            {line('Film', [r.film, r.filmOwn ? '(PerfoTec film)' : ''].filter(Boolean).join(' ') || r.material)}
+                                                            {line('Variant', r.film ? r.material : '')}
+                                                            {line('Perforation', perfText(r.perf) || 'not recorded')}
+                                                            {line('TV', r.tv != null ? String(r.tv) : '')}
+                                                            {line('Gas flush', fl.label ? fl.label.replace('Gas flush: ', '') + (fl.applied && fl.start ? ` — at packing ${fl.start}` : '') : 'not recorded')}
+                                                            {line('Atmosphere reached', [r.o2 != null ? `O₂ ${r.o2} %` : '', r.co2 != null ? `CO₂ ${r.co2} %` : ''].filter(Boolean).join(' · '))}
+                                                            {line('Below spec', r.belowDay != null ? `day ${r.belowDay}${r.belowScore != null ? ` (score ${r.belowScore})` : ''}` : '')}
+                                                            {line('Group', `${r.tempGroup != null ? `${r.tempGroup} °C` : '?'} · ${packSizeText(r.size)}`)}
+                                                            {line('Report', rep ? (rep.href ? <a href={rep.href} target="_blank" rel="noopener noreferrer" className="font-bold text-[#084BCD] underline">{rep.label}</a> : rep.label) : '')}
+                                                        </dl>
+                                                    </details>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    ) : (
                                     <div className="overflow-x-auto">
                                         <table className="w-full text-sm text-left border-collapse min-w-[1280px]">
                                             <thead className="text-[10px] font-spartan uppercase text-slate-500 bg-slate-50">
@@ -7171,6 +8000,7 @@ ${docSections}
                                                             <td className="p-3">
                                                                 <span className="font-bold text-slate-900">{r.product}</span>
                                                                 <span className="block text-[10px] text-slate-400">{[r.state === 'processed' ? 'Processed' : 'Whole', r.variety].filter(Boolean).join(' · ')}</span>
+                                                                {runningChip(r.productId)}
                                                             </td>
                                                             {/* The value the best test ran at leads; the group it is filed under is the small print. */}
                                                             <td className="p-3 whitespace-nowrap" title="The temperature the best test ran at; below it the temperature group">
@@ -7214,13 +8044,15 @@ ${docSections}
                                             </tbody>
                                         </table>
                                     </div>
+                                    )
                                 )}
                                 {data.without.length > 0 && (
                                     <p className="px-4 py-3 text-xs text-slate-500 border-t border-slate-100" title={data.without.map(p => p.name + (p.variety ? ` (${p.variety})` : '')).join(', ')}>
-                                        {(() => { const dev = data.without.filter(p => p.trialsOfType > 0), none = data.without.length - dev.length; return <>{dev.length > 0 && <><b className="text-blue-700">{dev.length} in development</b> ({typeName} trials, nothing within specification yet): {dev.map(p => p.name + (p.variety ? ` (${p.variety})` : '')).join(', ')}. </>}{none > 0 && <>{none} product{none !== 1 ? 's' : ''} not tested in {typeName} packaging.</>}</>; })()}
+                                        {(() => { const dev = data.without.filter(p => p.trialsOfType > 0), none = data.without.length - dev.length; return <>{dev.length > 0 && <><b className="text-blue-700">{dev.length} in development</b> ({typeName} trials, nothing within specification yet): {dev.map(p => p.name + (p.variety ? ` (${p.variety})` : '')).join(', ')}. </>}{none > 0 && <>{none} product{none !== 1 ? 's' : ''} not tested in {typeName} packaging.</>}{(() => { const inTest = data.without.filter(p => runningNow.byProduct[p.id]); return inTest.length ? <> <b className="text-[#084BCD]">A trial is running for {inTest.length} of them</b>: {inTest.map(p => p.name + (p.variety ? ` (${p.variety})` : '')).join(', ')}.</> : null; })()}</>; })()}
                                     </p>
                                 )}
                             </div>
+                            )}
                         </main>
                     </>
                 );
@@ -7662,8 +8494,137 @@ ${docSections}
                                 <button onClick={() => { setDbActiveTab('respiration'); setDbSortCol(''); }} className={`py-4 text-sm font-bold uppercase tracking-widest transition-colors border-b-2 -mb-px ${dbActiveTab === 'respiration' ? 'text-blue-600 border-blue-600' : 'text-slate-500 hover:text-slate-900 border-transparent'}`}>Respiration Data</button>
                                 <button onClick={() => { setDbActiveTab('trials'); setDbSortCol(''); }} className={`py-4 text-sm font-bold uppercase tracking-widest transition-colors border-b-2 -mb-px ${dbActiveTab === 'trials' ? 'text-blue-600 border-blue-600' : 'text-slate-500 hover:text-slate-900 border-transparent'}`}>Trial Results (Trials)</button>
                                 <button onClick={() => { setDbActiveTab('films'); setDbSortCol(''); }} className={`py-4 text-sm font-bold uppercase tracking-widest transition-colors border-b-2 -mb-px ${dbActiveTab === 'films' ? 'text-blue-600 border-blue-600' : 'text-slate-500 hover:text-slate-900 border-transparent'}`}>Films</button>
+                                <button onClick={() => { setDbActiveTab('hub'); setDbSortCol(''); }} className={`py-4 text-sm font-bold uppercase tracking-widest transition-colors border-b-2 -mb-px ${dbActiveTab === 'hub' ? 'text-blue-600 border-blue-600' : 'text-slate-500 hover:text-slate-900 border-transparent'}`}>Hub</button>
                             </div>
                         </div>
+
+                        {dbActiveTab === 'hub' && (() => {
+                            // The Hub's catalogue next to ours: which Hub product group and
+                            // film each of ours is, and where the two disagree. Matched on
+                            // name until a link is chosen; nothing here writes to the Hub.
+                            const B = window.PerfoTecBoard;
+                            const cat = hubReg && hubReg.catalogue;
+                            const num = (v) => { const n = parseFloat(String(v ?? '').replace(',', '.')); return isFinite(n) ? n : null; };
+                            const range = (vals, unit) => { const v = vals.filter(x => x != null); if (!v.length) return '—'; const lo = Math.min(...v), hi = Math.max(...v); return (lo === hi ? `${lo}` : `${lo}–${hi}`) + unit; };
+                            const HOW = { linked: ['Linked', 'bg-[#084BCD]/10 text-[#084BCD]'], name: ['Same name', 'bg-green-100 text-green-800'], part: ['Name contains it — check', 'bg-amber-100 text-amber-800'], unlinked: ['Not in the Hub', 'bg-slate-200 text-slate-600'], none: ['No match', 'bg-red-50 text-red-700'] };
+                            const linkSelect = (kind, id, m, options) => (
+                                <select className="w-full p-1.5 text-xs border border-slate-200 rounded-lg bg-white" value={m.how === 'linked' ? m.hub.id : m.how === 'unlinked' ? '__none' : ''}
+                                    onChange={e => linkHub(kind, id, e.target.value === '' ? null : e.target.value === '__none' ? '' : e.target.value)}>
+                                    <option value="">Match on name{(m.how === 'name' || m.how === 'part') && m.hub ? ` → ${m.hub.name}` : ''}</option>
+                                    <option value="__none">Not in the Hub</option>
+                                    {options.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+                                </select>
+                            );
+                            const badge = (how) => <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded whitespace-nowrap ${HOW[how][1]}`}>{HOW[how][0]}</span>;
+                            const differs = (a, b) => a != null && b != null && Math.abs(a - b) > Math.max(0.05 * Math.abs(b), 0.01);
+                            return (
+                                <div className="space-y-6">
+                                    <div className="bg-white border border-slate-200 shadow-sm rounded-xl p-5 flex flex-wrap items-center gap-4">
+                                        <div className="flex-1 min-w-[260px]">
+                                            <h3 className="font-spartan font-bold text-lg text-slate-900">PerfoTec Hub catalogue</h3>
+                                            {cat
+                                                ? <p className="text-sm text-slate-500 mt-1">Snapshot of {cat.exportedAt ? new Date(cat.exportedAt).toLocaleDateString() : 'unknown date'}{cat.source ? ` from ${cat.source.replace(/^https?:\/\//, '')}` : ''}: {cat.products.length} products, {cat.varieties.length} varieties, {cat.films.length} films, {cat.packages.length} packages, {cat.laserPrograms.length} laser programs.{hubReg.importedBy ? ` Imported by ${hubReg.importedBy}.` : ''}</p>
+                                                : <p className="text-sm text-slate-500 mt-1">No Hub catalogue here yet. Export it in the Hub and import the file: products, films, packages and laser programs then link to the products, films and trials in this dashboard.</p>}
+                                            {hubMsg && <p className="text-xs font-bold text-slate-700 mt-2">{hubMsg}</p>}
+                                        </div>
+                                        <button type="button" onClick={importHubCatalogue} disabled={!B || !B.writeHub || !folderName} title={folderName ? 'Pick the perfotec-hub-catalogue.json the Hub exported' : 'Link the shared folder first'}
+                                            className="flex items-center gap-2 text-xs font-bold font-spartan uppercase tracking-widest bg-[#084BCD] text-white px-4 py-2.5 rounded-lg hover:opacity-90 disabled:opacity-40"><Upload size={14}/> Import Hub catalogue</button>
+                                        {cat && <button type="button" onClick={async () => { const r = await syncHubData(); if (r) setHubMsg('✓ Synced · ' + r); }} title="Bring the films and the respiration measurements of this catalogue into the dashboard's own data again" className="flex items-center gap-2 text-xs font-bold font-spartan uppercase tracking-widest border border-slate-300 text-slate-700 px-4 py-2.5 rounded-lg hover:bg-slate-100"><RefreshCw size={14}/> Sync</button>}
+                                    </div>
+                                    {cat && (() => {
+                                        const rows = dbProductList.map(p => {
+                                            const hv = B.hubVarietiesOf(p, hubReg);
+                                            const m = { hub: hv.hub, how: hv.how };
+                                            const vars = hv.varieties, allVars = hv.hub ? cat.varieties.filter(v => v.productId === hv.hub.id) : [];
+                                            const rec = (p.formData || {})['hub-respiration'] || null;
+                                            const c3 = (p.formData && p.formData['p1-core-3']) || {}, c1 = (p.formData && p.formData['p1-core-1']) || {};
+                                            return { p, m, hv, vars, allVars, rec, o2Min: num(c3.targetO2Min), o2Max: num(c3.targetO2Max), crit: num(c1.critCO2) };
+                                        });
+                                        const counts = rows.reduce((a, r) => { a[r.m.how] = (a[r.m.how] || 0) + 1; return a; }, {});
+                                        return (
+                                            <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden">
+                                                <div className="p-4 border-b border-slate-200 bg-slate-50 flex flex-wrap items-center gap-3">
+                                                    <h4 className="font-spartan font-bold text-slate-900">Products</h4>
+                                                    <span className="text-xs text-slate-500">{rows.length} here · {(counts.linked || 0) + (counts.name || 0)} matched · {counts.part || 0} to check · {counts.none || 0} without a match · {counts.unlinked || 0} not in the Hub</span>
+                                                    <p className="basis-full text-xs text-slate-500">Products are linked on their name; within a product on the variety and on whole or processed, which are never mixed. The dashboard holds the product's real properties, the Hub the settings that work in practice: a difference is shown in blue and is information, not an error. The respiration measured in the Hub is stored with each product and drives its curve from {B.HUB_RR_MIN_TEMPS} temperatures on.</p>
+                                                </div>
+                                                <div className="overflow-x-auto">
+                                                    <table className="w-full text-sm text-left border-collapse min-w-[1180px]">
+                                                        <thead className="text-[10px] font-spartan uppercase text-slate-500 bg-slate-50">
+                                                            <tr><th className="p-3">Dashboard product</th><th className="p-3 w-[240px]">Hub product</th><th className="p-3">Match</th><th className="p-3 w-[230px]" title="The Hub varieties this record is: found on the variety's name and on whole or processed, or chosen here">Hub varieties</th><th className="p-3" title="Respiration measurements of those varieties stored with this product, and whether they drive its curve">Respiration</th><th className="p-3" title="The product's target window (dashboard) against the target O₂ the Hub works with per variety">Target O₂: product / practical (Hub)</th><th className="p-3" title="The product's maximum safe CO₂ (dashboard) against the critical CO₂ the Hub works with per variety">Max CO₂: product / practical (Hub)</th></tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {rows.map(({ p, m, hv, vars, allVars, rec, o2Min, o2Max, crit }) => {
+                                                                const hubO2 = vars.map(v => v.targetO2).filter(x => x != null), hubCrit = vars.map(v => v.criticalCO2).filter(x => x != null);
+                                                                const o2Off = hubO2.length && (o2Min != null || o2Max != null) && hubO2.some(x => (o2Min != null && x < o2Min - 0.01) || (o2Max != null && x > o2Max + 0.01));
+                                                                const critOff = hubCrit.length && crit != null && hubCrit.some(x => differs(x, crit));
+                                                                const choice = (hubReg.links.varieties || {})[p.id] || '';
+                                                                const curve = rec ? B.hubRespirationCurve(rec) : null;
+                                                                const stateOf = (v) => B.hubVarietyState(v, hv.hub).state;
+                                                                return (
+                                                                    <tr key={p.id} className="border-t border-slate-100">
+                                                                        <td className="p-3"><span className="font-bold text-slate-900">{p.name}</span><span className="block text-[10px] text-slate-400">{[p.state === 'processed' ? 'Processed' : 'Whole', p.variety].filter(Boolean).join(' · ')}</span></td>
+                                                                        <td className="p-3">{linkSelect('products', p.id, m, cat.products.slice().sort((a, b) => a.name.localeCompare(b.name)))}</td>
+                                                                        <td className="p-3">{badge(m.how)}</td>
+                                                                        <td className="p-3 text-slate-700">{m.hub ? (<>
+                                                                            <select className="w-full p-1.5 text-xs border border-slate-200 rounded-lg bg-white" value={choice} onChange={e => linkHub('varieties', p.id, e.target.value === '' ? null : e.target.value)}>
+                                                                                <option value="">Automatic: {p.variety ? `${p.variety}, ` : ''}{p.state === 'processed' ? 'processed' : 'whole'}</option>
+                                                                                <option value="*">All {allVars.length} varieties</option>
+                                                                                {allVars.slice().sort((a, b) => a.name.localeCompare(b.name)).map(v => <option key={v.id} value={v.id}>{v.name} ({stateOf(v)})</option>)}
+                                                                            </select>
+                                                                            <span className={`block mt-1 text-[10px] ${vars.length ? 'text-slate-500' : 'text-red-700 font-bold'}`} title={vars.map(v => `${v.name} (${stateOf(v)})`).join(', ')}>{vars.length ? `${vars.length} of ${allVars.length}: ${vars.slice(0, 3).map(v => v.name).join(', ')}${vars.length > 3 ? '…' : ''}` : hv.missing || 'no variety'}</span>
+                                                                        </>) : '—'}</td>
+                                                                        <td className="p-3 whitespace-nowrap text-slate-700">{rec ? <>{rec.measurements.length} measurement{rec.measurements.length === 1 ? '' : 's'}<span className={`block text-[10px] font-bold ${curve.drives ? 'text-[#084BCD]' : 'text-slate-400'}`}>{curve.points.length} temperature{curve.points.length === 1 ? '' : 's'} · {curve.drives ? 'drives the curve' : 'not enough for the curve'}</span></> : '—'}</td>
+                                                                        <td className={`p-3 whitespace-nowrap ${o2Off ? 'text-[#084BCD] font-bold' : 'text-slate-700'}`} title={o2Off ? 'In practice the Hub aims outside the product\'s window for at least one variety' : ''}>{o2Min != null || o2Max != null ? `${o2Min ?? '?'}–${o2Max ?? '?'} %` : '—'} / {m.hub ? range(hubO2, ' %') : '—'}</td>
+                                                                        <td className={`p-3 whitespace-nowrap ${critOff ? 'text-[#084BCD] font-bold' : 'text-slate-700'}`} title={critOff ? 'The practical limit in the Hub differs from the product\'s property' : ''}>{crit != null ? `${crit} %` : '—'} / {m.hub ? range(hubCrit, ' %') : '—'}</td>
+                                                                    </tr>
+                                                                );
+                                                            })}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+                                    {cat && (() => {
+                                        const films = (filmReg ? filmReg.films : []).filter(f => !f.archived);
+                                        return (
+                                            <div className="bg-white border border-slate-200 shadow-sm rounded-xl overflow-hidden">
+                                                <div className="p-4 border-b border-slate-200 bg-slate-50 flex flex-wrap items-center gap-3">
+                                                    <h4 className="font-spartan font-bold text-slate-900">Packaging: films</h4>
+                                                    <span className="text-xs text-slate-500">The Hub manages the films: the register here follows its name, thickness, OTR and CO₂TR at every sync, and keeps what only the dashboard records (WVTR, PerfoTec film, polymer, data sheet). A difference in amber is a film that has not been synced yet. Hub packages ({cat.packages.length}) and laser programs ({cat.laserPrograms.length}) are picked per trial, in the trial's packing details or in the report tool.</span>
+                                                </div>
+                                                {films.length === 0 ? <p className="p-6 text-sm text-slate-500">No films in the register yet (Database → Films).</p> : (
+                                                <div className="overflow-x-auto">
+                                                    <table className="w-full text-sm text-left border-collapse min-w-[900px]">
+                                                        <thead className="text-[10px] font-spartan uppercase text-slate-500 bg-slate-50">
+                                                            <tr><th className="p-3">Register film</th><th className="p-3 w-[280px]">Hub film</th><th className="p-3">Match</th><th className="p-3" title="mL/m²/24h/bar, unperforated film">OTR (here / Hub)</th><th className="p-3" title="mL/m²/24h/bar, unperforated film">CO₂TR (here / Hub)</th><th className="p-3">Hub packages</th></tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {films.map(f => {
+                                                                const m = B.hubFilmOf(f, hubReg), h = m.hub;
+                                                                const otr = num(f.otr), co2tr = num(f.co2tr);
+                                                                const packs = h ? cat.packages.filter(p => p.filmId === h.id) : [];
+                                                                return (
+                                                                    <tr key={f.id} className="border-t border-slate-100">
+                                                                        <td className="p-3"><span className="font-bold text-slate-900">{f.name}</span>{f.own && <span className="ml-1.5 text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-[#008837]/10 text-[#008837]">PerfoTec film</span>}<span className="block text-[10px] text-slate-400">{[f.polymer, f.thicknessUm ? `${f.thicknessUm} µm` : ''].filter(Boolean).join(' · ')}</span></td>
+                                                                        <td className="p-3">{linkSelect('films', f.id, m, cat.films.slice().sort((a, b) => a.name.localeCompare(b.name)).map(x => ({ id: x.id, name: x.name + (x.thicknessUm ? ` · ${x.thicknessUm} µm` : '') })))}</td>
+                                                                        <td className="p-3">{badge(m.how)}</td>
+                                                                        <td className={`p-3 whitespace-nowrap ${h && differs(otr, h.otr) ? 'text-amber-700 font-bold' : 'text-slate-700'}`}>{otr ?? '—'} / {h && h.otr != null ? h.otr : '—'}</td>
+                                                                        <td className={`p-3 whitespace-nowrap ${h && differs(co2tr, h.cotr) ? 'text-amber-700 font-bold' : 'text-slate-700'}`}>{co2tr ?? '—'} / {h && h.cotr != null ? h.cotr : '—'}</td>
+                                                                        <td className="p-3 text-slate-700" title={packs.map(p => p.name).join('\n')}>{h ? packs.length : '—'}</td>
+                                                                    </tr>
+                                                                );
+                                                            })}
+                                                        </tbody>
+                                                    </table>
+                                                </div>)}
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+                            );
+                        })()}
 
                         {dbActiveTab === 'films' && (() => {
                             // The material register: every product's trials point here.
@@ -8670,7 +9631,7 @@ ${docSections}
                                     {activeProduct ? (
                                         <button onClick={() => setShowProductPicker(prev => !prev)} className="group pf-dark-btn flex items-center gap-2.5 pl-3 pr-3 py-2 min-w-0">
                                             <div className="flex flex-col leading-none min-w-0">
-                                                <span className="font-spartan font-bold text-sm text-white truncate max-w-[110px] xl:max-w-[150px] 2xl:max-w-[180px] block">{activeProduct.name} — {activeProduct.state === 'whole' ? 'Whole' : 'Processed'}</span>
+                                                <span className="font-spartan font-bold text-sm text-white truncate max-w-[110px] md:max-w-[190px] lg:max-w-[240px] xl:max-w-[150px] 2xl:max-w-[180px] block">{activeProduct.name} — {activeProduct.state === 'whole' ? 'Whole' : 'Processed'}</span>
                                                 <span className="text-[10px] text-[#7FB2FF] font-medium mt-0.5">{activeProduct.isAverage ? 'All varieties' : (activeProduct.variety || 'Single variety')}</span>
                                             </div>
                                             <ChevronRight size={11} className={`text-white/60 shrink-0 transform transition-transform duration-200 ${showProductPicker ? '-rotate-90' : 'rotate-90'}`}/>
@@ -8758,8 +9719,11 @@ ${docSections}
                                 </button>}
                             </div>
                             <div className="pf-web-masthead-right flex items-center gap-2 xl:gap-3 flex-shrink-0">
+                                <button type="button" onClick={copyViewLink} className={`pf-dark-btn flex items-center gap-2 p-2 shrink-0 ${linkCopied ? 'is-active' : ''}`} title={linkCopied ? 'Link copied' : 'Copy a link to exactly this view'}>
+                                    {linkCopied ? <Check size={16}/> : <LinkIcon size={16}/>}
+                                </button>
                                 <button type="button" onClick={() => setShowAudience(true)} className="pf-dark-btn flex items-center gap-2 px-2.5 py-2 text-xs font-bold font-spartan whitespace-nowrap shrink-0" title="Switch between the commercial and the product management view">
-                                    <Users size={15} className="text-[#7FB2FF]"/> <span className="hidden md:inline">{isCommercial ? 'Commercial' : 'PM'}</span>
+                                    <Users size={15} className="text-[#7FB2FF]"/> <span className="hidden lg:inline">{isCommercial ? 'Commercial' : 'PM'}</span>
                                 </button>
                                 <button onClick={() => { setShowGlobalSearch(true); setGlobalSearch(''); }} className="pf-dark-btn flex items-center gap-2 p-2 shrink-0" title="Search all products & trial results">
                                     <Search size={16} />
