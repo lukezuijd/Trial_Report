@@ -63,6 +63,9 @@ _backups/
 # one place it cannot be taken out of again, to preserve something that can
 # simply be generated a second time.
 dashboard-import/
+# The same files when a Claude session delivers them as zips and folders
+# ("Snijpunt 2025 - dashboard-import", "Cherry Tomato - dashboard-import.zip").
+Claude outputs/
 
 # --- OS / editor noise ----------------------------------------------------
 desktop.ini
