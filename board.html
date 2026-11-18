@@ -23,7 +23,7 @@
 
     <link rel="stylesheet" href="style.css?v=df20be12">
     <script src="config.js?v=7b34913e"></script>
-    <script src="board-db.js?v=00b92723"></script>
+    <script src="board-db.js?v=a318a158"></script>
 </head>
 <body class="bg-[var(--pf-mist)] text-[var(--pf-charcoal)]">
     <a href="#main-content" class="skip-to-content">Skip to content</a>
@@ -43,7 +43,7 @@
             ClipboardList, FileText, BarChart3, UserCog, Lock, CloudOff,
             Image as ImageIcon, Upload, Settings, ChevronLeft, ChevronRight, List,
             Archive, RotateCcw, Search, Users, Info,
-            PauseCircle, Ban, Copy, Target, Trophy
+            PauseCircle, Ban, Copy, Target, Trophy, Thermometer, Clock, Layers
         } from 'https://esm.sh/lucide-react@0.292.0?deps=react@18.2.0';
 
         const Board = window.PerfoTecBoard;
@@ -184,7 +184,7 @@
                 productSheetYes: 'Product sheet', productSheetNo: 'No sheet',
                 productProjects: '{n} projects', productProject: '1 project', productNoProjects: 'No projects',
                 productArchived: '{n} archived', productUpdated: 'Updated', productOpen: 'Open in the dashboard',
-                trialsButton: '{n} trials', trialsButtonOne: '1 trial', trialsTitle: 'Trials', trialsLoading: 'Loading trials...', trialsNone: 'No trials run through the report tool yet.', trialsHidden: '{n} linked project(s) not shown: stopped, or not in the report phase yet.', trialOpen: 'Open in the report tool', trialPacked: 'packed', trialCompleted: 'Completed', trialOngoing: 'Ongoing', trialArchived: 'Archived', trialTargetAchieved: 'Target achieved', trialTargetPartial: 'Partly achieved', trialTargetNot: 'Not achieved', trialTargetNone: 'Target not assessed', trialBest: 'Best score', trialBestHint: 'Highest end score of any variant (average quality on its last evaluated day)',
+                trialsButton: '{n} trials', trialsButtonOne: '1 trial', trialVariants: '{n} variants', trialVariantOne: '1 variant', trialDays: '{n} days', trialChain: 'chain {a} to {b} °C', trialTempHint: 'Storage temperature: the most frequent one in the supply chain of the report', trialsTitle: 'Trials', trialsLoading: 'Loading trials...', trialsNone: 'No trials run through the report tool yet.', trialsHidden: '{n} linked project(s) not shown: stopped, or not in the report phase yet.', trialOpen: 'Open in the report tool', trialPacked: 'packed', trialCompleted: 'Completed', trialOngoing: 'Ongoing', trialArchived: 'Archived', trialTargetAchieved: 'Target achieved', trialTargetPartial: 'Partly achieved', trialTargetNot: 'Not achieved', trialTargetNone: 'Target not assessed', trialBest: 'Best score', trialBestHint: 'Highest end score of any variant (average quality on its last evaluated day)',
                 // Archive — finished projects are parked, never deleted.
                 archiveProject: 'Archive this project',
                 // A project that stops before the finish is not the same thing as a
@@ -359,7 +359,7 @@
                 productSheetYes: 'Product sheet', productSheetNo: 'Geen sheet',
                 productProjects: '{n} projecten', productProject: '1 project', productNoProjects: 'Geen projecten',
                 productArchived: '{n} gearchiveerd', productUpdated: 'Bijgewerkt', productOpen: 'Openen in het dashboard',
-                trialsButton: '{n} testen', trialsButtonOne: '1 test', trialsTitle: 'Testen', trialsLoading: 'Testen laden...', trialsNone: 'Nog geen testen via de rapporttool.', trialsHidden: '{n} gekoppeld(e) project(en) niet getoond: gestopt, of nog niet in de rapportfase.', trialOpen: 'Openen in de rapporttool', trialPacked: 'verpakt', trialCompleted: 'Afgerond', trialOngoing: 'Loopt nog', trialArchived: 'Gearchiveerd', trialTargetAchieved: 'Doel behaald', trialTargetPartial: 'Deels behaald', trialTargetNot: 'Niet behaald', trialTargetNone: 'Doel niet beoordeeld', trialBest: 'Beste score', trialBestHint: 'Hoogste eindscore van een variant (gemiddelde kwaliteit op de laatste beoordeelde dag)',
+                trialsButton: '{n} testen', trialsButtonOne: '1 test', trialVariants: '{n} varianten', trialVariantOne: '1 variant', trialDays: '{n} dagen', trialChain: 'keten {a} tot {b} °C', trialTempHint: 'Bewaartemperatuur: de meest voorkomende in de keten van het rapport', trialsTitle: 'Testen', trialsLoading: 'Testen laden...', trialsNone: 'Nog geen testen via de rapporttool.', trialsHidden: '{n} gekoppeld(e) project(en) niet getoond: gestopt, of nog niet in de rapportfase.', trialOpen: 'Openen in de rapporttool', trialPacked: 'verpakt', trialCompleted: 'Afgerond', trialOngoing: 'Loopt nog', trialArchived: 'Gearchiveerd', trialTargetAchieved: 'Doel behaald', trialTargetPartial: 'Deels behaald', trialTargetNot: 'Niet behaald', trialTargetNone: 'Doel niet beoordeeld', trialBest: 'Beste score', trialBestHint: 'Hoogste eindscore van een variant (gemiddelde kwaliteit op de laatste beoordeelde dag)',
                 // Archief — afgeronde projecten worden geparkeerd, nooit verwijderd.
                 archiveProject: 'Dit project archiveren',
                 haltProject: 'Dit project on hold zetten of annuleren',
@@ -531,7 +531,7 @@
                 productSheetYes: 'Ficha de producto', productSheetNo: 'Sin ficha',
                 productProjects: '{n} proyectos', productProject: '1 proyecto', productNoProjects: 'Sin proyectos',
                 productArchived: '{n} archivados', productUpdated: 'Actualizado', productOpen: 'Abrir en el panel',
-                trialsButton: '{n} ensayos', trialsButtonOne: '1 ensayo', trialsTitle: 'Ensayos', trialsLoading: 'Cargando ensayos...', trialsNone: 'Aún no hay ensayos en la herramienta de informes.', trialsHidden: '{n} proyecto(s) vinculado(s) no mostrado(s): detenidos o aún no en la fase de informe.', trialOpen: 'Abrir en la herramienta de informes', trialPacked: 'envasado', trialCompleted: 'Finalizado', trialOngoing: 'En curso', trialArchived: 'Archivado', trialTargetAchieved: 'Objetivo logrado', trialTargetPartial: 'Parcialmente logrado', trialTargetNot: 'No logrado', trialTargetNone: 'Objetivo sin evaluar', trialBest: 'Mejor puntuación', trialBestHint: 'Puntuación final más alta de una variante (calidad media en su último día evaluado)',
+                trialsButton: '{n} ensayos', trialsButtonOne: '1 ensayo', trialVariants: '{n} variantes', trialVariantOne: '1 variante', trialDays: '{n} días', trialChain: 'cadena {a} a {b} °C', trialTempHint: 'Temperatura de conservación: la más frecuente en la cadena del informe', trialsTitle: 'Ensayos', trialsLoading: 'Cargando ensayos...', trialsNone: 'Aún no hay ensayos en la herramienta de informes.', trialsHidden: '{n} proyecto(s) vinculado(s) no mostrado(s): detenidos o aún no en la fase de informe.', trialOpen: 'Abrir en la herramienta de informes', trialPacked: 'envasado', trialCompleted: 'Finalizado', trialOngoing: 'En curso', trialArchived: 'Archivado', trialTargetAchieved: 'Objetivo logrado', trialTargetPartial: 'Parcialmente logrado', trialTargetNot: 'No logrado', trialTargetNone: 'Objetivo sin evaluar', trialBest: 'Mejor puntuación', trialBestHint: 'Puntuación final más alta de una variante (calidad media en su último día evaluado)',
                 // Archivo — los proyectos terminados se aparcan, nunca se eliminan.
                 archiveProject: 'Archivar este proyecto',
                 haltProject: 'Pausar o cancelar este proyecto',
@@ -1520,8 +1520,17 @@
                                                     <Target size={11} />{targetLabel(summary.target)}
                                                 </span>
                                             </div>
+                                            {/* The conditions it ran at, in one line: temperature first. */}
                                             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600">
-                                                <span className="flex items-center gap-1.5"><Package size={13} className="text-slate-400" />{summary.packagings.length ? summary.packagings.join(', ') : '—'}</span>
+                                                {summary.temp != null && (
+                                                    <span className="flex items-center gap-1.5 font-bold text-slate-900" title={t.trialTempHint}>
+                                                        <Thermometer size={13} className="text-slate-400" />{summary.temp} °C
+                                                        {summary.tempRange && <span className="font-normal text-slate-400">· {t.trialChain.replace('{a}', summary.tempRange[0]).replace('{b}', summary.tempRange[1])}</span>}
+                                                    </span>
+                                                )}
+                                                <span className="flex items-center gap-1.5"><Package size={13} className="text-slate-400" />{summary.packagings.length ? summary.packagings.join(', ') : '—'}{(summary.weights || []).length ? ' · ' + (summary.weights.length > 1 ? summary.weights[0] + '–' + summary.weights[summary.weights.length - 1] : summary.weights[0]) + ' g' : ''}</span>
+                                                {summary.days > 0 && <span className="flex items-center gap-1.5"><Clock size={13} className="text-slate-400" />{t.trialDays.replace('{n}', summary.days)}</span>}
+                                                {summary.variants > 0 && <span className="flex items-center gap-1.5"><Layers size={13} className="text-slate-400" />{summary.variants === 1 ? t.trialVariantOne : t.trialVariants.replace('{n}', summary.variants)}</span>}
                                                 <span className="flex items-center gap-1.5" title={t.trialBestHint}>
                                                     <Trophy size={13} className="text-slate-400" />{t.trialBest}{' '}
                                                     {b ? <><strong style={{ color: b.value >= 7 ? BRAND.green : b.value >= 5 ? '#B45309' : '#B91C1C' }}>{b.value.toFixed(1)}</strong><span className="text-slate-400">{b.variant ? ' · ' + b.variant : ''} · P+{b.day}</span></> : <span className="text-slate-400">—</span>}
@@ -3310,7 +3319,7 @@
                         added.push({ id, title: '', ...meta, ...(productId ? { productId } : {}), image, phase: phaseKey,
                             files: { [fileKey]: true }, ...(toDashboard ? { dashboardImportPending: true } : {}),
                             actions: [], updatedAt: new Date().toISOString() });
-                    } catch (err) { setError(t.importFailed + ' ' + f.name); }
+                    } catch (err) { console.error('Board import failed:', f.name, err); setError(t.importFailed + ' ' + f.name + (err && (err.code || err.name || err.message) ? ' (' + [err.code || err.name, err.message].filter(Boolean).join(': ') + ')' : '')); }
                 }
                 if (added.length) {
                     await persist([...currentProjects(), ...added]);
