@@ -516,6 +516,25 @@
             var at = onDay !== null ? { q: s.byDay[onDay], day: onDay } : s.last;
             if (!best || at.q.value > best.value) best = { value: at.q.value, variant: (s.g && s.g.name) || '', day: at.day, legacy: at.q.legacy };
         });
+        // The conditions it ran at. Temperature: the most frequent one among the
+        // supply-chain stages (the rule the dashboard import uses), with the
+        // lowest and highest when the chain had more than one. Pack weight in
+        // grams: the project's, else the variants'. Duration: the last day measured.
+        var tempCounts = {}, temps = [];
+        (d.supplyChain || []).forEach(function (s) {
+            var v = parseFloat(reportNums(s && s.tempStart)[0]);
+            if (!isFinite(v)) return;
+            if (!tempCounts[v]) temps.push(v);
+            tempCounts[v] = (tempCounts[v] || 0) + 1;
+        });
+        var mainTemp = temps.length ? temps.slice().sort(function (x, y) { return tempCounts[y] - tempCounts[x]; })[0] : null;
+        var weights = [];
+        var addWeight = function (v) { var n = parseFloat(reportNums(v)[0]); if (isFinite(n) && n > 0 && weights.indexOf(n) < 0) weights.push(n); };
+        addWeight(p.startWeight);
+        if (!weights.length) (d.groups || []).forEach(function (g) { addWeight(g && g.specs && g.specs.startWeight); });
+        weights.sort(function (x, y) { return x - y; });
+        var lastDay = 0;
+        (d.groups || []).forEach(function (g) { ((g && g.measurements) || []).forEach(function (m) { var day = parseFloat(m && m.day); if (isFinite(day) && day > lastDay) lastDay = day; }); });
         var a = d.analysis || {};
         var target = a.targetAchieved === 'achieved' || a.targetAchieved === 'partial' || a.targetAchieved === 'notAchieved' ? a.targetAchieved : null;
         return {
@@ -525,6 +544,10 @@
             target: target,
             packagings: packagings,
             best: best,
+            temp: mainTemp,
+            tempRange: temps.length > 1 ? [Math.min.apply(null, temps), Math.max.apply(null, temps)] : null,
+            weights: weights,
+            days: lastDay,
             variants: (d.groups || []).length
         };
     }
@@ -557,12 +580,14 @@
     }
     // { days, open, score } by the report's rule, or null when the curve says
     // nothing after P+0 (only day 0 scored, or already below the limit then).
+    // A result that fell below the limit during the trial also carries the first
+    // measurement below it: belowDay, belowScore.
     function curveShelfLife(points, limit) {
         var lim = limit == null ? QUALITY_LIMIT : limit;
         var ok = null;
         for (var i = 0; i < points.length; i++) {
             if (points[i].q >= lim) ok = points[i];
-            else return ok && ok.d > 0 ? { days: ok.d, open: false, score: ok.q } : null;
+            else return ok && ok.d > 0 ? { days: ok.d, open: false, score: ok.q, belowDay: points[i].d, belowScore: points[i].q } : null;
         }
         return ok && ok.d > 0 ? { days: ok.d, open: true, score: ok.q } : null;
     }
@@ -612,7 +637,14 @@
                 condition: (f('condition') || 'MAP').toUpperCase(),
                 temp: isFinite(temp) ? temp : null, tempBand: isFinite(temp) ? Math.round(temp / 2) * 2 : null,
                 weight: f('weight'), o2: f('o2'), co2: f('co2'), trans: f('trans'),
-                date: f('date'), pdf: f('pdf'), round: round, role: trialRowRole(m, i),
+                film: f('film'), filmSpec: f('filmSpec'),
+                // How it was packed (Luke 2026-11-11): the perforation ('perfotec' |
+                // 'other' | 'none'), the gas flush ('o2control' | 'other' | 'none')
+                // and the O2 / CO2 in the pack at packing; '' = not recorded.
+                perf: f('perf'), flush: f('flush'), startO2: f('startO2'), startCO2: f('startCO2'),
+                // Links into the Hub catalogue (ids): the package and the laser program.
+                hubPackage: f('hubPackage'), laserProgram: f('laserProgram'),
+                date: f('date'), pdf: f('pdf'), project: f('project'), round: round, role: trialRowRole(m, i),
                 rating: isFinite(rating) ? rating : null, days: isFinite(days) ? days : null,
                 curve: curve, shelfLife: sl, legacy: legacy, gain: null
             });
@@ -640,25 +672,70 @@
         if (a.date !== b.date) return a.date < b.date ? 1 : -1;
         return a.i - b.i;
     }
+    // Pack sizes: fixed weight classes that widen with the weight (Luke
+    // 2026-11-02), the same for every product so like packs compare across the
+    // range: < 75 g, 75–150, 150–250, 250–400, 400–750, 750–1400 g, 1.4–2 kg,
+    // 2–3, 3–5, 5–7.5, 7.5–12.5 kg, and on in the 2–3–5–7.5–12.5 rhythm (20–30 kg,
+    // …, pallets in the hundreds of kilos). A class includes its lower bound.
+    // { index, minKg, maxKg } (maxKg excluded), or null without a weight.
+    var PACK_SIZE_BOUNDS_G = [75, 150, 250, 400, 750, 1400, 2000, 3000, 5000, 7500, 12500];
+    function packSizeBand(kg) {
+        if (!isFinite(kg) || kg <= 0) return null;
+        var g = kg * 1000, lo = 0, i = 0, hi;
+        var bound = function (k) {
+            if (k < PACK_SIZE_BOUNDS_G.length) return PACK_SIZE_BOUNDS_G[k];
+            // Past 12.5 kg: 20, 30, 50, 75, 125 kg, then ×10 again.
+            var cycle = [2000, 3000, 5000, 7500, 12500], j = k - PACK_SIZE_BOUNDS_G.length;
+            return cycle[j % 5] * Math.pow(10, Math.floor(j / 5) + 1);
+        };
+        while (g >= (hi = bound(i))) { lo = hi; i++; }
+        return { index: i, minKg: lo / 1000, maxKg: hi / 1000 };
+    }
+    // Temperature groups of 5 °C (Luke 2026-11-02): 0 °C is everything below 2.5,
+    // 5 °C 2.5 up to 7.5, 10 °C 7.5 up to 12.5, and so on. The group is how a
+    // result is filed; the temperature shown is the one the trial ran at.
+    // How a pack was perforated and flushed, as the trial rows store it.
+    var PACK_PERF = { perfotec: 'PerfoTec laser perforation', other: 'Other perforation', none: 'No perforation' };
+    var PACK_FLUSH = { o2control: 'Gas flush with O2 Control', other: 'Gas flush, other system', none: 'No gas flush' };
+    var TEMP_GROUP_STEP = 5;
+    function tempGroupOf(t, step) {
+        var s = step > 0 ? step : TEMP_GROUP_STEP;
+        return t == null || !isFinite(t) ? null : Math.max(0, Math.round(t / s) * s);
+    }
     // { groups: [...], best } for one table. Each group is one packaging type +
-    // variety + condition + temperature band with its winner, the rounds that reached
-    // the winner's shelf life and whether that makes it proven. Groups are
-    // ordered: proven first, then by their winner. `best` is the first group
-    // with a winner, or null.
+    // variety + condition + temperature group + pack size with its winner, the
+    // rounds that reached the winner's shelf life and whether that makes it
+    // proven. A 500 g pack at 20 °C is not compared with a 200 g one: the TV that
+    // works scales with the mass in the pack (Luke 2026-11-02 — per weight).
+    // Groups are ordered: proven first, then by their winner. `best` is the
+    // first group with a winner, or null. group.tempBand: the temperature group
+    // (opts.tempGroup: another width in °C); group.size: { minKg, maxKg } or
+    // null (no weight logged).
     function trialBestPractice(master, opts) {
         var rows = trialRows(master, opts);
+        var step = opts && opts.tempGroup;
         var byKey = {};
+        var typeOf = function (r) { return /^liner$/i.test(r.type) ? 'Crate/Box' : r.type; };
         rows.forEach(function (r) {
             // A punnet round and a pallet round are not two rounds of one practice.
-            var type = /^liner$/i.test(r.type) ? 'Crate/Box' : r.type;
-            var key = [type.toLowerCase(), r.variety.toLowerCase(), r.condition, r.tempBand == null ? '?' : r.tempBand].join('|');
-            (byKey[key] = byKey[key] || { key: key, type: type, variety: r.variety, condition: r.condition, tempBand: r.tempBand, trials: [] }).trials.push(r);
+            var type = typeOf(r);
+            r.weightKg = rowWeightKg(r.type, r.weight);
+            var size = packSizeBand(r.weightKg);
+            var tg = tempGroupOf(r.temp, step);
+            // The variety is NOT part of the comparison (Luke 2026-11-16): a second
+            // round with another cultivar, or with none recorded, verifies the
+            // result just as well. It stays on each trial, and group.variety is the
+            // winner's. A view of one variety filters the rows first (opts.match).
+            var key = [type.toLowerCase(), r.condition, tg == null ? '?' : tg, size ? 's' + size.index : '?'].join('|');
+            (byKey[key] = byKey[key] || { key: key, type: type, variety: '', condition: r.condition, tempBand: tg, size: size, trials: [] }).trials.push(r);
         });
         var groups = Object.keys(byKey).map(function (k) {
             var g = byKey[k];
             g.trials.sort(compareTrials);
             var w = g.trials[0] && g.trials[0].shelfLife ? g.trials[0] : null;
             g.winner = w;
+            g.variety = w ? w.variety : (g.trials[0] ? g.trials[0].variety : '');
+            g.varieties = g.trials.map(function (t) { return t.variety; }).filter(function (v, i, a) { return v && a.indexOf(v) === i; });
             var rounds = {};
             if (w) g.trials.forEach(function (t) { if (t.shelfLife && t.shelfLife.days >= w.shelfLife.days) rounds[t.round] = true; });
             g.rounds = Object.keys(rounds).length;
@@ -674,6 +751,467 @@
             return b.trials.length - a.trials.length;
         });
         return { groups: groups, best: groups[0] && groups[0].winner ? groups[0] : null, rows: rows };
+    }
+
+    // ---- Configurations: one PerfoTec setting across all its rounds -----------
+    // The best practice above answers "what is the longest shelf life within
+    // specification anything reached", and it may reach it in a single round. A
+    // claim to a client needs another question answered: "how does this setting
+    // do every time it was tried, against the packaging the client uses now".
+    //
+    // A configuration is one PerfoTec variant (its material name) in one packaging
+    // type, condition and temperature band. Its record compares it round by round
+    // with the best reference of the same round and packaging type — the client's
+    // current packaging (decided 2026-10-28). Varieties are counted, not split: a
+    // claim is made for the product and states over how many cultivars it holds.
+    //
+    // Ranking, most consistent first: rounds better minus rounds worse than the
+    // current packaging, then the number of rounds compared, then the median
+    // shelf life. A setting that won one lucky round does not outrank one that won
+    // five of sixteen and lost one.
+    function normPackType(t) {
+        return /^liner$/i.test(String(t || '')) ? 'Crate/Box' : String(t || '');
+    }
+    function configKeyOf(material) {
+        return String(material == null ? '' : material).toLowerCase().replace(/\s+/g, ' ').trim();
+    }
+    function medianOf(values) {
+        var s = (values || []).filter(function (v) { return isFinite(v); }).sort(function (a, b) { return a - b; });
+        if (!s.length) return null;
+        var m = Math.floor(s.length / 2);
+        return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+    }
+    function rangeOf(values) {
+        var v = (values || []).filter(function (x) { return isFinite(x); });
+        return v.length ? { min: Math.min.apply(null, v), max: Math.max.apply(null, v) } : null;
+    }
+    // The achieved atmosphere of a configuration: the middle half of its trials
+    // (25th–75th percentile) and the median. This, not the target in a variant's
+    // name ("10% O2 target"), is what the result came from (Luke 2026-10-28) —
+    // and a full min–max range lets one odd pack speak for all of them.
+    function typicalOf(values) {
+        var s = (values || []).filter(function (x) { return isFinite(x); }).sort(function (a, b) { return a - b; });
+        if (!s.length) return null;
+        var q = function (p) { var k = p * (s.length - 1), lo = Math.floor(k), hi = Math.ceil(k); return s[lo] + (s[hi] - s[lo]) * (k - lo); };
+        var r1 = function (x) { return Math.round(x * 10) / 10; };
+        return { low: r1(q(0.25)), mid: r1(q(0.5)), high: r1(q(0.75)), n: s.length };
+    }
+    // A film transmits on its own before a single hole is lasered, so a TV below
+    // this is not a TV. The archive imports filled the TV with the number of
+    // perforations ("10 holes of 92 µm") where the real value was 1600; those
+    // values stay in the table but never feed a curve, a recipe or a card.
+    var MIN_PLAUSIBLE_TV = 100;
+    function plausibleTv(v) {
+        var n = firstNumber(v);
+        return isFinite(n) && n >= MIN_PLAUSIBLE_TV ? n : null;
+    }
+    // Pack weights are stored in grams, a pallet's in kilograms.
+    function rowWeightKg(type, weight) {
+        var w = firstNumber(weight);
+        if (!isFinite(w) || w <= 0) return null;
+        return /^pallet$/i.test(String(type || '')) ? w : w / 1000;
+    }
+    // One result per round: the best of the rows given (two packs of the same
+    // setting in one report are still one round).
+    function bestPerRound(rows) {
+        var byRound = {};
+        rows.forEach(function (r) {
+            var d = r.shelfLife ? r.shelfLife.days : 0;
+            var open = !!(r.shelfLife && r.shelfLife.open);
+            var p = byRound[r.round];
+            if (!p || d > p.days || (d === p.days && open && !p.open)) byRound[r.round] = { round: r.round, days: d, open: open, row: r };
+        });
+        return byRound;
+    }
+    function compareConfigs(a, b) {
+        var na = a.better - a.worse, nb = b.better - b.worse;
+        if (na !== nb) return nb - na;
+        if (a.compared !== b.compared) return b.compared - a.compared;
+        var ma = a.medianDays == null ? -1 : a.medianDays, mb = b.medianDays == null ? -1 : b.medianDays;
+        if (ma !== mb) return mb - ma;
+        if (a.worse !== b.worse) return a.worse - b.worse;
+        if (a.roundCount !== b.roundCount) return b.roundCount - a.roundCount;
+        return a.key < b.key ? -1 : a.key > b.key ? 1 : 0;
+    }
+    // { configs: [...], best, rows } — opts as for trialRows (type, match).
+    function trialConfigurations(master, opts) {
+        var rows = trialRows(master, opts);
+        var refByRoundType = {};
+        var refs = {};
+        rows.forEach(function (r) {
+            if (r.role !== 'reference') return;
+            var k = normPackType(r.type);
+            (refs[k] = refs[k] || []).push(r);
+        });
+        Object.keys(refs).forEach(function (type) {
+            var best = bestPerRound(refs[type]);
+            Object.keys(best).forEach(function (round) { refByRoundType[round + '|' + type] = best[round]; });
+        });
+        var byKey = {};
+        rows.forEach(function (r) {
+            if (r.role === 'reference') return;
+            var type = normPackType(r.type);
+            var key = [type.toLowerCase(), r.condition, r.tempBand == null ? '?' : r.tempBand, configKeyOf(r.material)].join('|');
+            (byKey[key] = byKey[key] || { key: key, type: type, condition: r.condition, tempBand: r.tempBand, material: r.material, trials: [] }).trials.push(r);
+        });
+        var configs = Object.keys(byKey).map(function (k) {
+            var c = byKey[k];
+            var perRound = bestPerRound(c.trials);
+            var rounds = Object.keys(perRound).map(function (round) { return perRound[round]; });
+            var better = 0, equal = 0, worse = 0, censoredTies = 0, compared = [];
+            rounds.forEach(function (p) {
+                var ref = refByRoundType[p.round + '|' + c.type];
+                if (!ref) return;
+                p.ref = ref;
+                compared.push(p);
+                if (p.days > ref.days) better++;
+                else if (p.days < ref.days) worse++;
+                else { equal++; if (p.open && ref.open) censoredTies++; }
+            });
+            var varieties = {};
+            c.trials.forEach(function (t) { varieties[String(t.variety || '').toLowerCase()] = String(t.variety || ''); });
+            var nums = function (field) { return c.trials.map(function (t) { return firstNumber(t[field]); }); };
+            c.rounds = rounds;
+            c.roundCount = rounds.length;
+            c.compared = compared.length;
+            c.better = better; c.equal = equal; c.worse = worse; c.censoredTies = censoredTies;
+            c.medianDays = medianOf(rounds.map(function (p) { return p.days; }));
+            c.referenceMedianDays = medianOf(compared.map(function (p) { return p.ref.days; }));
+            c.openRounds = rounds.filter(function (p) { return p.open; }).length;
+            c.varieties = Object.keys(varieties).filter(function (v) { return v !== ''; }).map(function (v) { return varieties[v]; }).sort();
+            c.unknownVariety = Object.prototype.hasOwnProperty.call(varieties, '');
+            // The register films its trials were packed in (ids, most used first).
+            var filmUse = {};
+            c.trials.forEach(function (t) { if (t.film) filmUse[t.film] = (filmUse[t.film] || 0) + 1; });
+            c.films = Object.keys(filmUse).sort(function (a, b) { return filmUse[b] - filmUse[a] || (a < b ? -1 : 1); });
+            c.temp = rangeOf(c.trials.map(function (t) { return t.temp == null ? NaN : t.temp; }));
+            c.o2 = rangeOf(nums('o2'));
+            c.co2 = rangeOf(nums('co2'));
+            c.o2Typical = typicalOf(nums('o2'));
+            c.co2Typical = typicalOf(nums('co2'));
+            c.implausibleTv = c.trials.filter(function (t) { return String(t.trans || '').trim() !== '' && plausibleTv(t.trans) == null; }).length;
+            c.horizons = rangeOf(c.trials.map(function (t) { return t.curve.length ? t.curve[t.curve.length - 1].d : NaN; }));
+            return c;
+        });
+        configs.sort(compareConfigs);
+        return { configs: configs, best: configs[0] || null, rows: rows };
+    }
+
+    // ---- Transmission ---------------------------------------------------------
+    // The advised TV follows the product's respiration (decided 2026-10-29). A pack
+    // has to let in as much oxygen as the product consumes, and consumption rises
+    // with temperature (the predictive respiration curve) and with the mass in
+    // the pack. So the model is
+    //
+    //     TV(T, W) = k · e^(b·T) · W
+    //
+    // b is the slope of the respiration curve (ln RR against °C, i.e. its Q10);
+    // k is calibrated on the trials of the most consistent configuration that
+    // carry a real TV — what was actually packed. With b > 0 and W > 0, a warmer
+    // chain or a heavier pack ALWAYS gets a higher TV.
+    //
+    // It replaces a regression of TV against temperature on the trials alone:
+    // trials cluster at one temperature, and from 18 and 19 °C that regression
+    // read a Q10 of 0.002 — TV falling as it gets warmer.
+    //
+    // Few data: the respiration curve still gives the temperature behaviour, so
+    // one real TV is enough for an advice at any temperature (marked as an
+    // estimate away from the tested ones). No respiration curve: the product
+    // sheet's Q10. Neither: a typical Q10 of 2 — said so, never silently.
+    var DEFAULT_Q10 = 2;
+    function boundedQ10(q) { return Math.max(1.3, Math.min(5, q)); }
+    // Every trial with a temperature, a pack weight and a real TV, as TV per kg.
+    function transmissionPoints(master, opts) {
+        var o = opts || {};
+        var m = master || {};
+        var n = trialRowCount(m);
+        var pts = [];
+        for (var i = 0; i < n; i++) {
+            if (o.match && !o.match(i)) continue;
+            var f = (function (idx) { return function (k) { var v = m['pack_opt_' + idx + '_' + k]; return v == null ? '' : String(v).trim(); }; })(i);
+            var type = f('type');
+            if (o.type && normPackType(type) !== normPackType(o.type)) continue;
+            var t = firstNumber(f('temp')), tv = plausibleTv(f('trans')), kg = rowWeightKg(type, f('weight'));
+            if (!isFinite(t) || !kg || tv == null) continue;
+            pts.push({ i: i, t: t, tvPerKg: tv / kg, tv: tv, kg: kg, type: type, condition: (f('condition') || 'MAP').toUpperCase(), role: trialRowRole(m, i) });
+        }
+        return pts;
+    }
+    // { b, q10, source, k, kMin, kMax, config, calibration, reason }
+    //   source: 'respiration' | 'sheet' | 'default'
+    //   reason (no k): 'no-trials' | 'no-real-tv'
+    // opts: respSlope (respiration curve slope per °C), q10 (product sheet),
+    //       match, type.
+    function calibrateTransmission(master, opts) {
+        var o = opts || {};
+        var rs = parseFloat(o.respSlope), sq = parseFloat(o.q10);
+        var q10, source;
+        if (isFinite(rs) && rs > 0) { q10 = boundedQ10(Math.exp(10 * rs)); source = 'respiration'; }
+        else if (isFinite(sq) && sq > 1) { q10 = boundedQ10(sq); source = 'sheet'; }
+        else { q10 = DEFAULT_Q10; source = 'default'; }
+        var b = Math.log(q10) / 10;
+        var out = { b: b, q10: q10, source: source, k: null, kMin: null, kMax: null, config: null, calibration: [], reason: '' };
+        var conf = trialConfigurations(master || {}, { match: o.match, type: o.type });
+        if (!conf.configs.length) { out.reason = 'no-trials'; return out; }
+        for (var c = 0; c < conf.configs.length; c++) {
+            var cfg = conf.configs[c];
+            var cal = cfg.trials.map(function (t) {
+                var tv = plausibleTv(t.trans), w = rowWeightKg(cfg.type, t.weight);
+                return (tv != null && w && t.temp != null) ? { i: t.i, t: t.temp, perKg: tv / w, k: (tv / w) / Math.exp(b * t.temp) } : null;
+            }).filter(Boolean);
+            if (!cal.length) continue;
+            var ks = cal.map(function (p) { return p.k; });
+            out.k = medianOf(ks);
+            out.kMin = Math.min.apply(null, ks);
+            out.kMax = Math.max.apply(null, ks);
+            out.config = cfg;
+            out.calibration = cal;
+            return out;
+        }
+        out.reason = 'no-real-tv';
+        return out;
+    }
+
+    // ---- The film: how deep a pack can take the oxygen ------------------------
+    // The level k above is what one configuration packed. Another film needs
+    // another TV (Luke 2026-10-29): a BOPE lets CO₂ out far better than a BOPP,
+    // so a BOPE pack can go much deeper in O₂ before the CO₂ does damage, while
+    // the BOPP control has to stay high.
+    //
+    // At steady state the product's uptake equals what the pack lets through:
+    //     RR·W = TV·ΔO₂          (ΔO₂ = 20.9 − O₂ in the pack)
+    //     RQ·RR·W = β·TV·CO₂     (β = the pack's CO₂ : O₂ transmission)
+    // so the atmosphere a pack reached gives its β = RQ·ΔO₂ / CO₂, and a pack
+    // that should keep the CO₂ the reference proved safe can take ΔO₂ = CO₂·β/RQ.
+    // The TV scales with 1/ΔO₂: TV_film = TV_reference · ΔO₂_ref / ΔO₂_film.
+    // Laser holes carry the gases at β ≈ 0.8; the film body of a PE carries CO₂
+    // several times faster than O₂, which is the whole difference.
+    //
+    // β of a film, best source first: the atmosphere of its own trials (a TV is
+    // not needed for that), then trials of films of the same polymer, then its
+    // TDS (CO₂TR / OTR of the unperforated film — an upper bound, the holes pull
+    // a pack's β down; reported as such). The O₂ never goes below the product's
+    // floor and the CO₂ never above its tolerance, unless the trials already
+    // proved a deeper or higher value safe.
+    var AIR_O2 = 20.9;
+    // β from a set of trial rows: the middle of their reached atmosphere.
+    function packRatioOfRows(rows, rq) {
+        var q = rq > 0 ? rq : 1;
+        var use = (rows || []).filter(function (r) {
+            var a = firstNumber(r.o2), c = firstNumber(r.co2);
+            return String(r.condition || 'MAP').toUpperCase() === 'MAP' && isFinite(a) && isFinite(c) && c >= 0.5 && a >= 0 && a <= AIR_O2 - 0.5;
+        });
+        if (!use.length) return null;
+        var o2 = typicalOf(use.map(function (r) { return firstNumber(r.o2); }));
+        var co2 = typicalOf(use.map(function (r) { return firstNumber(r.co2); }));
+        return { beta: q * (AIR_O2 - o2.mid) / co2.mid, n: use.length, o2: o2, co2: co2 };
+    }
+    // The film body's own CO₂ : O₂ ratio from its TDS, or null.
+    function filmTdsRatio(film) {
+        var otr = firstNumber(film && film.otr), co2tr = firstNumber(film && film.co2tr);
+        return isFinite(otr) && isFinite(co2tr) && otr > 0 && co2tr > 0 ? co2tr / otr : null;
+    }
+    // { beta, source: 'film' | 'polymer' | 'tds', n, from } or null.
+    function filmPackRatio(master, film, opts) {
+        var o = opts || {};
+        var rows = trialRows(master, { match: o.match, type: o.type });
+        var own = packRatioOfRows(rows.filter(function (r) { return r.film === film.id; }), o.rq);
+        if (own) return { beta: own.beta, source: 'film', n: own.n, from: [film.name] };
+        var poly = String(film.polymer || '').trim().toLowerCase();
+        if (poly && poly !== 'other') {
+            var kin = (o.films || []).filter(function (f) { return f && f.id !== film.id && String(f.polymer || '').trim().toLowerCase() === poly; });
+            var ids = kin.map(function (f) { return f.id; });
+            var same = packRatioOfRows(rows.filter(function (r) { return ids.indexOf(r.film) >= 0; }), o.rq);
+            if (same) {
+                var used = kin.filter(function (f) { return rows.some(function (r) { return r.film === f.id; }); }).map(function (f) { return f.name; });
+                return { beta: same.beta, source: 'polymer', n: same.n, from: used };
+            }
+        }
+        var tds = filmTdsRatio(film);
+        return tds != null ? { beta: tds, source: 'tds', n: 0, from: [film.name] } : null;
+    }
+    function filmScale(dRef, co2Ref, beta, o, rq, dMax, ceiling) {
+        var target = parseFloat(o.targetO2);
+        var d = isFinite(target) ? AIR_O2 - target : co2Ref * beta / rq;
+        var capped = '';
+        if (d > dMax) { d = dMax; capped = 'o2-floor'; }
+        if (rq * d / beta > ceiling + 1e-9) { d = ceiling * beta / rq; capped = 'co2-ceiling'; }
+        if (d < 0.3) d = 0.3;
+        return { factor: dRef / d, o2: Math.round((AIR_O2 - d) * 10) / 10, co2: Math.round((rq * d / beta) * 10) / 10, capped: capped };
+    }
+    // How the calibrated level changes for opts.film (and/or opts.targetO2).
+    function filmAdjustment(master, cur, o, film, calibratedOnFilm) {
+        var rq = parseFloat(o.rq) > 0 ? parseFloat(o.rq) : 1;
+        var cfg = cur.config;
+        var o2R = cfg.o2Typical && cfg.o2Typical.mid, co2R = cfg.co2Typical && cfg.co2Typical.mid;
+        if (!isFinite(o2R) || !isFinite(co2R) || co2R < 0.5 || o2R > AIR_O2 - 0.5) return { factor: null, reason: 'no-atmosphere' };
+        var dR = AIR_O2 - o2R;
+        var betaR = rq * dR / co2R;
+        var ratio = (!film || calibratedOnFilm)
+            ? { beta: betaR, source: film ? 'film' : 'reference', n: cfg.trials.length, from: film ? [film.name] : [] }
+            : filmPackRatio(master, film, o);
+        if (!ratio) return { factor: null, reason: 'no-ratio', betaR: betaR };
+        var floor = parseFloat(o.o2Floor);
+        var dMax = Math.max(AIR_O2 - (isFinite(floor) ? floor : 2), dR);
+        var crit = parseFloat(o.co2Max);
+        var ceiling = Math.max(isFinite(crit) ? crit : 0, co2R);
+        var s = filmScale(dR, co2R, ratio.beta, o, rq, dMax, ceiling);
+        var out = {
+            factor: s.factor, beta: ratio.beta, betaSource: ratio.source, betaN: ratio.n, betaFrom: ratio.from, betaR: betaR, rq: rq,
+            o2: s.o2, co2: s.co2, capped: s.capped, reference: { o2: o2R, co2: co2R },
+            floor: AIR_O2 - dMax, ceiling: ceiling, altFactor: null
+        };
+        // A TDS ratio is the film body alone: the pack lies between it and a
+        // pack that behaves like the reference's.
+        if (ratio.source === 'tds') out.altFactor = filmScale(dR, co2R, betaR, o, rq, dMax, ceiling).factor;
+        return out;
+    }
+    // The curve the advisor reads: calibrated as above, and — for a film from the
+    // register (opts.film, opts.films) or an O₂ the user aims at (opts.targetO2) —
+    // moved to that film's atmosphere. A film with real TVs of its own is
+    // calibrated on those. opts also: rq, o2Floor, co2Max.
+    //   calibratedOn: 'film' | 'all';  adjust: filmAdjustment's result;
+    //   base: the level before the move.
+    function transmissionCurve(master, opts) {
+        var o = opts || {};
+        var film = o.film && o.film.id ? o.film : null;
+        var own = null;
+        if (film) {
+            var outer = o.match;
+            var m = master || {};
+            // The film's own rows, and the current packaging it was compared with:
+            // without those the configuration has no record to rank on.
+            var mine = function (i) { return (!outer || outer(i)) && (String(m['pack_opt_' + i + '_film'] || '').trim() === film.id || trialRowRole(m, i) === 'reference'); };
+            var oo = {};
+            Object.keys(o).forEach(function (k) { oo[k] = o[k]; });
+            oo.match = mine;
+            own = calibrateTransmission(master, oo);
+            if (own.k == null) own = null;
+        }
+        var cur = own || calibrateTransmission(master, o);
+        cur.calibratedOn = own ? 'film' : 'all';
+        cur.adjust = null;
+        cur.base = null;
+        if (cur.k == null || (!film && !isFinite(parseFloat(o.targetO2)))) return cur;
+        var adj = filmAdjustment(master, cur, o, film, !!own);
+        cur.adjust = adj;
+        if (adj.factor != null) {
+            cur.base = { k: cur.k, kMin: cur.kMin, kMax: cur.kMax };
+            cur.k = cur.base.k * adj.factor;
+            cur.kMin = cur.base.kMin * (adj.altFactor != null ? Math.min(adj.factor, adj.altFactor) : adj.factor);
+            cur.kMax = cur.base.kMax * (adj.altFactor != null ? Math.max(adj.factor, adj.altFactor) : adj.factor);
+        }
+        return cur;
+    }
+    // TV per kg the curve gives at temp (null without a calibration).
+    function transmissionPerKgAt(curve, temp) {
+        return curve && curve.k != null ? curve.k * Math.exp(curve.b * temp) : null;
+    }
+    // The TV to use for a pack of opts.weightKg at opts.temp.
+    function transmissionAdvice(master, opts) {
+        var o = opts || {};
+        var temp = parseFloat(o.temp), kg = parseFloat(o.weightKg);
+        var curve = transmissionCurve(master, o);
+        var out = { recipe: null, curve: curve, reason: '' };
+        if (!isFinite(temp) || !isFinite(kg) || kg <= 0) { out.reason = 'no-input'; return out; }
+        if (curve.k == null) { out.reason = curve.reason; return out; }
+        var f = Math.exp(curve.b * temp) * kg;
+        var temps = curve.calibration.map(function (p) { return p.t; });
+        var nearest = Math.min.apply(null, temps.map(function (t) { return Math.abs(t - temp); }));
+        var cfg = curve.config;
+        out.recipe = {
+            tv: Math.round(curve.k * f), min: Math.round(curve.kMin * f), max: Math.round(curve.kMax * f),
+            n: curve.calibration.length, material: cfg.material, type: cfg.type, condition: cfg.condition,
+            o2: cfg.o2Typical, co2: cfg.co2Typical, temps: rangeOf(temps),
+            extrapolated: nearest > 2, q10: curve.q10, source: curve.source,
+            record: { better: cfg.better, equal: cfg.equal, worse: cfg.worse, compared: cfg.compared },
+            // The film the advice is for, and how it got there (see filmAdjustment).
+            film: o.film && o.film.id ? { id: o.film.id, name: o.film.name } : null,
+            calibratedOn: curve.calibratedOn, configFilms: cfg.films || [],
+            adjust: curve.adjust,
+            referenceTv: curve.base ? Math.round(curve.base.k * f) : null
+        };
+        return out;
+    }
+
+    // ---- Data checks: proposals a person confirms -----------------------------
+    // Two gaps that quietly bent every comparison above: the variety column was
+    // empty for whole archives (the cultivar lived only in the report title, so
+    // sixteen cherry tomato cultivars were compared as one), and a variant packed
+    // in a bag inside a punnet trial was filed as a punnet. Nothing here writes;
+    // it proposes, and the dashboard lets someone accept row by row.
+    var TITLE_QUALIFIERS = /\b(on the vine|on vine|whole|processed|fresh[- ]cut|loose|trial|test)\b/gi;
+    // A tail like this names a round or a shipment, never a cultivar.
+    var NOT_A_CULTIVAR = /\b(round|ronde|ronda|r\d+|week|wk|shipment|arrival|batch|container|part|deel|sample|monster|control|reference)\b/i;
+    function escapeRegExp(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+    // "Grower Punnet Trial 23-07-2020 - Variety 27 Cherry Tomato" -> "Variety 27":
+    // the part after the last dash, minus the product's own names.
+    function cultivarFromTitle(title, productNames) {
+        var parts = String(title == null ? '' : title).split(/\s[-–—]\s/);
+        if (parts.length < 2) return '';
+        var tail = parts[parts.length - 1];
+        (productNames || []).forEach(function (name) {
+            var words = String(name || '').trim().split(/\s+/).filter(Boolean).map(escapeRegExp);
+            if (!words.length) return;
+            words[words.length - 1] += '(?:e?s)?';
+            tail = tail.replace(new RegExp('(^|[^\\w])' + words.join('\\s+') + '(?=$|[^\\w])', 'gi'), '$1 ');
+        });
+        tail = tail.replace(TITLE_QUALIFIERS, ' ').replace(/[(),;:]+/g, ' ').replace(/\s+/g, ' ').trim();
+        if (!tail || tail.split(' ').length > 4) return '';
+        if (/^[\d\s./-]+$/.test(tail) || NOT_A_CULTIVAR.test(tail)) return '';
+        return tail;
+    }
+    // A packaging the variant's own name spells out ("PerfoTec C+ bag") wins over
+    // the report's ("Punnets"): a bag tested in a punnet trial is a bag. Nothing
+    // spelled out -> '' and the report decides.
+    function variantPackType(name) {
+        var r = String(name || '').toLowerCase();
+        if (/\bpallet\b/.test(r)) return 'Pallet';
+        if (/\b(flow ?pack|flow ?wrap|bag|pouch|pillow)\b/.test(r)) return 'Flowpack';
+        if (/\b(punnet|tray|clamshell|top ?seal)\b/.test(r)) return 'Punnet';
+        if (/\b(crate|box|liner)\b/.test(r)) return 'Crate/Box';
+        return '';
+    }
+    // Where a row's report title can be read: the importer's note says
+    // "(trial: <title>)", and older rows carry the title as their report reference.
+    function trialTitlesOf(master, i) {
+        var m = master || {};
+        var out = [];
+        var hit = String(m['pack_opt_' + i + '_notes'] || '').match(/\(trial:\s*([^)]+)\)/i);
+        if (hit) out.push(hit[1].trim());
+        var pdf = String(m['pack_opt_' + i + '_pdf'] || '').trim();
+        if (pdf) out.push(pdf);
+        return out;
+    }
+    // [{ i, field: 'variety' | 'type' | 'trans' | 'film', current, proposed, source, material, date }]
+    // films: the register's films — a row without a film gets the one film its
+    // report's film spec or its variant name names (matchFilm).
+    function trialDataChecks(master, productNames, films) {
+        var m = master || {};
+        var n = trialRowCount(m);
+        var out = [];
+        for (var i = 0; i < n; i++) {
+            var f = (function (idx) { return function (k) { var v = m['pack_opt_' + idx + '_' + k]; return v == null ? '' : String(v).trim(); }; })(i);
+            if (!f('material') && !f('pdf') && !f('curve') && !f('rating')) continue;
+            if (!f('variety')) {
+                var titles = trialTitlesOf(m, i), cv = '', src = '';
+                for (var t = 0; t < titles.length && !cv; t++) { cv = cultivarFromTitle(titles[t], productNames); src = titles[t]; }
+                if (cv) out.push({ i: i, field: 'variety', current: '', proposed: cv, source: src, material: f('material'), date: f('date') });
+            }
+            var vt = variantPackType(f('material'));
+            if (vt && vt !== normPackType(f('type'))) out.push({ i: i, field: 'type', current: f('type'), proposed: vt, source: f('material'), material: f('material'), date: f('date') });
+            // No proposal for a TV — only a person with the report knows it. The
+            // empty value makes the dashboard ask for it.
+            if (f('trans') !== '' && plausibleTv(f('trans')) == null) out.push({ i: i, field: 'trans', current: f('trans'), proposed: '', source: 'Below what a film transmits on its own — probably the number of perforations', material: f('material'), date: f('date') });
+            if (films && films.length && !f('film')) {
+                var said = f('filmSpec') || f('material');
+                // A control is the client's current packaging: never one of ours.
+                var pool = trialRowRole(m, i) === 'reference' ? films.filter(function (x) { return x && !x.own; }) : films;
+                var hit = matchFilm([f('filmSpec'), f('material')].join(' · '), pool);
+                if (hit) out.push({ i: i, field: 'film', current: '', proposed: hit.id, source: said, material: f('material'), date: f('date') });
+            }
+        }
+        return out;
     }
 
     // [{ card, status, summary }] for one product (or several ids: the
@@ -879,6 +1417,27 @@
             // older row without that record takes empty fields, and the end result
             // when the report has scored more days since.
             var RESULT_FIELDS = ['o2', 'co2', 'days', 'rating', 'curve', 'weight'];
+            // How it was packed: perforation, gas flush and the gas at packing —
+            // the report's own start values, else its day-0 (P+0) measurement.
+            // Filled where the row has none, so a row imported before these
+            // fields existed takes them when its report is imported again.
+            var pack = {};
+            if (PACK_PERF[specs.perforation]) pack.perf = String(specs.perforation);
+            if (PACK_FLUSH[specs.gasFlush]) pack.flush = String(specs.gasFlush);
+            // The Hub package the proposal's simulation was run for, and a laser
+            // program named in the report: the row's links into the Hub catalogue.
+            var simulated = (g.prediction && g.prediction.inputs) || {};
+            // (the package picked in the report tool wins over the simulated one)
+            if (specs.hubPackage != null && String(specs.hubPackage).trim() !== '') pack.hubPackage = String(specs.hubPackage).trim();
+            else if (simulated.hubPackageId != null && String(simulated.hubPackageId).trim() !== '') pack.hubPackage = String(simulated.hubPackageId).trim();
+            if (specs.laserProgram != null && String(specs.laserProgram).trim() !== '') pack.laserProgram = String(specs.laserProgram).trim();
+            var startGas = specs.startGas || {};
+            var day0 = sorted.filter(function (m) { return Number(m.day) === 0; })[0];
+            ['o2', 'co2'].forEach(function (k) {
+                var v = reportNums(startGas[k]);
+                var val = v.length ? String(parseFloat(v[0])) : (day0 ? sampleValue(day0, k) : '');
+                if (val !== '') pack[k === 'o2' ? 'startO2' : 'startCO2'] = val;
+            });
             var updates = {};
             if (reuse >= 0) {
                 var old = 'pack_opt_' + reuse + '_';
@@ -896,7 +1455,8 @@
                     RESULT_FIELDS.forEach(function (k) { if (res[k] !== '' && res[k] !== cur(k) && (cur(k) === '' || (more && k !== 'weight'))) updates[k] = res[k]; });
                     if (own && cur('material') !== variantName) updates.material = variantName;
                 }
-                var news = Object.keys(updates).length > 0 || (role && cur('role') !== role) || (roundNo > 1 && cur('round') !== String(roundNo));
+                var news = Object.keys(updates).length > 0 || (role && cur('role') !== role) || (roundNo > 1 && cur('round') !== String(roundNo))
+                    || Object.keys(pack).some(function (k) { return cur(k).trim() === ''; });
                 if (!news) { result.skipped++; return; }
             }
             var at = 'pack_opt_' + (reuse >= 0 ? reuse : count++) + '_';
@@ -906,7 +1466,7 @@
             // A new row gets everything; a placeholder row gets its results, and the
             // descriptive fields only where they are still empty (hand edits stay).
             var fill = function (k, v) { if (reuse < 0 || String(master[at + k] == null ? '' : master[at + k]).trim() === '') master[at + k] = v; };
-            fill('type', reportPackType(specs.packaging));
+            fill('type', variantPackType(variantName) || reportPackType(specs.packaging));
             if (reuse < 0 || updates.material) master[at + 'material'] = variantName;
             fill('variety', String(proj.type || proj.variety || ''));
             fill('temp', chainTemp);
@@ -914,6 +1474,14 @@
             put('weight', res.weight);
             // Transmission value = number of laser perforations ("holes"), not holeSize.
             fill('trans', String(specs.holes != null && String(specs.holes).trim() !== '' ? specs.holes : ''));
+            // The film as the report names it ("BOPP · 30 µm"): the dashboard's
+            // data check proposes the register film from it. A report that picked
+            // a register film (specs.filmId) links it straight away.
+            var filmSpec = [String(specs.material == null ? '' : specs.material).trim(), String(specs.filmThickness == null ? '' : specs.filmThickness).trim()];
+            if (filmSpec[1] && !/µm|um|mu/i.test(filmSpec[1])) filmSpec[1] += ' µm';
+            if (filmSpec[0] || filmSpec[1]) fill('filmSpec', filmSpec.filter(Boolean).join(' · '));
+            if (specs.filmId) fill('film', String(specs.filmId));
+            Object.keys(pack).forEach(function (k) { fill(k, pack[k]); });
             put('o2', res.o2);
             put('co2', res.co2);
             fill('company', String(proj.company || ''));
@@ -2483,6 +3051,490 @@
         };
     }
 
+    // ---- films: the material register -----------------------------------------
+    // PerfoTec's own films (BOPE, Liner, Pallet Cover) and the films they are
+    // tested against, kept once for every product in films.json at the root.
+    // A trial row points at a film by id (pack_opt_<i>_film); the TV advisor
+    // reads a film's CO₂ : O₂ behaviour, the client overview its name, polymer,
+    // thickness and TDS. Films are archived, never deleted: old trials keep
+    // pointing at them.
+    var FILMS_FILE = 'films.json';
+    var FILM_POLYMERS = ['BOPE', 'BOPP', 'PE', 'PP', 'PET', 'PLA', 'Other'];
+    var FILM_FORMATS = ['Flowpack film', 'Lidding film', 'Bag', 'Liner', 'Pallet cover', 'Other'];
+    var FILM_PACK_TYPES = ['Punnet', 'Flowpack', 'Crate/Box', 'Pallet'];
+    function normFilm(f) {
+        var s = function (v) { return v == null ? '' : String(v).trim(); };
+        var x = f || {};
+        return {
+            id: s(x.id), name: s(x.name), own: !!x.own,
+            polymer: s(x.polymer), thicknessUm: s(x.thicknessUm), format: s(x.format),
+            packTypes: (Array.isArray(x.packTypes) ? x.packTypes : []).map(s).filter(function (t) { return FILM_PACK_TYPES.indexOf(t) >= 0; }),
+            otr: s(x.otr), co2tr: s(x.co2tr), wvtr: s(x.wvtr),
+            // The Hub film this is ('' = a film the Hub does not have): the Hub then
+            // leads its name, thickness, OTR and CO2TR.
+            hubId: s(x.hubId),
+            tdsUrl: s(x.tdsUrl), aliases: s(x.aliases), notes: s(x.notes),
+            archived: !!x.archived,
+            createdAt: s(x.createdAt), updatedAt: s(x.updatedAt), updatedBy: s(x.updatedBy)
+        };
+    }
+    function newFilmId() {
+        return 'f_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    }
+    function readFilms() {
+        return IO.readJSON([FILMS_FILE]).then(function (r) {
+            var films = (r && Array.isArray(r.films) ? r.films : []).map(normFilm).filter(function (f) { return f.id && f.name; });
+            return { schemaVersion: DB_SCHEMA, rev: Number((r && r.rev) || 0), films: films };
+        });
+    }
+    // Writes the register. Someone else saved meanwhile (rev moved on): the two
+    // are merged per film, the newer edit of each film winning, so neither side
+    // loses a film or an edit.
+    function writeFilms(reg, baseRev) {
+        var base = (baseRev != null) ? Number(baseRev) : Number((reg && reg.rev) || 0);
+        var mine = ((reg && reg.films) || []).map(normFilm).filter(function (f) { return f.id && f.name; });
+        return readFilms().then(function (onDisk) {
+            var films = Number(onDisk.rev || 0) === base ? mine : mergeFilms(onDisk.films, mine);
+            var out = { schemaVersion: DB_SCHEMA, rev: Number(onDisk.rev || 0) + 1, updatedAt: new Date().toISOString(), updatedBy: getUserLabel() || '', films: films };
+            return IO.writeJSON([FILMS_FILE], out).then(function () { return out; });
+        });
+    }
+    function mergeFilms(theirs, mine) {
+        var byId = {}, order = [];
+        (theirs || []).concat(mine || []).forEach(function (f) {
+            if (!f || !f.id) return;
+            var prev = byId[f.id];
+            if (!prev) order.push(f.id);
+            if (!prev || String(f.updatedAt || '') >= String(prev.updatedAt || '')) byId[f.id] = f;
+        });
+        return order.map(function (id) { return byId[id]; });
+    }
+    // ---- The team's work lists -----------------------------------------------
+    // What the dashboard's overview asks the team to do next (Luke 2026-11-16):
+    //   * trials that are running — on the board, not finished, so nobody
+    //     starts the same test twice and sales can see what is coming;
+    //   * results that rest on a single round — each can become a proposal for
+    //     a verification round with the winning settings filled in;
+    //   * trial data that is incomplete — what is missing per product and per
+    //     report, and patches that fill a field for many rows at once.
+    // All of it is read here; the dashboard decides what to write.
+
+    // A trial that is under way: on the board, not deleted, stopped or
+    // archived, and not yet in Dashboard (its results are in the product then).
+    var RUNNING_PHASES = { intake: true, proposal: true, accepted: true, report: true };
+    function isRunningTrial(card) {
+        return !!card && !card.deletedAt && !card.haltedAt && !card.archivedAt && RUNNING_PHASES[card.phase] === true;
+    }
+    // { byProduct: { productId: [card] }, unlinked: [card], all: [card] }, each
+    // list newest start first. A card whose product no longer exists is unlinked.
+    function runningTrials(cards, productIds) {
+        var known = null;
+        if (Array.isArray(productIds)) { known = {}; productIds.forEach(function (id) { known[id] = true; }); }
+        var when = function (c) { return String(c.startDate || c.updatedAt || ''); };
+        var all = (cards || []).filter(isRunningTrial).sort(function (a, b) { return when(b).localeCompare(when(a)); });
+        var out = { byProduct: {}, unlinked: [], all: all };
+        all.forEach(function (c) {
+            if (c.productId && (!known || known[c.productId])) (out.byProduct[c.productId] = out.byProduct[c.productId] || []).push(c);
+            else out.unlinked.push(c);
+        });
+        return out;
+    }
+
+    // The proposal's packaging names for the dashboard's packaging types
+    // (reportPackType reads them back the same way).
+    var PROPOSAL_PACKAGING = { 'Punnet': 'Punnets', 'Flowpack': 'Pillow Bag', 'Crate/Box': 'Box/ Crate', 'Pallet': 'Pallet' };
+    // A proposal for a verification round of one result: the same product,
+    // variety, packaging, pack weight and temperature, the winning variant with
+    // its film, transmission, perforation and gas at packing, next to the
+    // current packaging of that round. A new report at the same settings is a
+    // second round, which is what makes a result proven (trialBestPractice).
+    // The text names the days and the temperature, never the transmission or
+    // the respiration: a proposal goes to the client.
+    //   group: one group of trialBestPractice (its winner is repeated)
+    //   opts: { films, rows (all trialRows, to find the round's reference), user, language, now, id }
+    // { card, doc } — nothing is written here.
+    function verificationProposal(product, group, opts) {
+        var o = opts || {}, w = group && group.winner;
+        if (!product || !product.id || !w || !w.shelfLife) return null;
+        var filmOf = function (id) { return (o.films || []).filter(function (f) { return f.id === id; })[0] || null; };
+        var type = normPackType(w.type);
+        var packaging = PROPOSAL_PACKAGING[type] || 'Box/ Crate';
+        var variety = w.variety || product.variety || '';
+        var label = [product.name, variety].filter(Boolean).join(' ');
+        var days = w.shelfLife.days;
+        var now = o.now || new Date().toISOString();
+        var title = 'Verification round — ' + label + ' · ' + type + (w.temp != null ? ' · ' + w.temp + ' °C' : '');
+        var dayList = [0, Math.max(1, Math.round(days / 2)), days, days + Math.max(2, Math.round(days * 0.25))]
+            .filter(function (d, i, a) { return a.indexOf(d) === i; }).sort(function (a, b) { return a - b; });
+        var measurements = function () { return dayList.map(function (d) { return { day: d, measure: [], open: [], evaluate: [] }; }); };
+        var specsOf = function (r, role) {
+            var film = filmOf(r.film);
+            var tv = plausibleTv(r.trans);
+            var specs = { packaging: packaging, material: film ? film.name : (r.filmSpec || ''), filmThickness: film ? film.thicknessUm : '', length: '', width: '', height: '',
+                holes: tv != null ? String(tv) : '', startWeight: r.weight || '', sampleCount: 3, role: role,
+                atmosphereStrategy: r.condition === 'OPEN' ? 'Open' : r.condition === 'MHP' ? 'MHP' : 'MAP' };
+            if (r.film) specs.filmId = r.film;
+            if (r.perf) specs.perforation = r.perf;
+            if (r.flush) specs.gasFlush = r.flush;
+            if (r.startO2 || r.startCO2) specs.startGas = { o2: r.startO2 || '', co2: r.startCO2 || '' };
+            if (r.hubPackage) specs.hubPackage = r.hubPackage;
+            if (r.laserProgram) specs.laserProgram = r.laserProgram;
+            return specs;
+        };
+        var groups = [];
+        var reference = w.role === 'reference' ? null : (o.rows || []).filter(function (r) { return r.role === 'reference' && r.round === w.round && normPackType(r.type) === type; })[0] || null;
+        if (w.role !== 'reference') {
+            groups.push(reference
+                ? { id: 1, name: reference.material || 'Control', specs: specsOf(reference, 'reference'), measurements: measurements(), predictedImage: null }
+                : { id: 1, name: 'Control', specs: { packaging: packaging, material: '', length: '', width: '', height: '', holes: '', startWeight: w.weight || '', sampleCount: 3, role: 'reference' }, measurements: measurements(), predictedImage: null });
+        }
+        groups.push({ id: groups.length + 1, name: w.material || 'PerfoTec', specs: specsOf(w, w.role === 'reference' ? 'reference' : 'perfotec'), measurements: measurements(), predictedImage: null });
+        var winnerFilm = filmOf(w.film);
+        var doc = {
+            isPerfoTecProposal: true, schemaVersion: '2.1', exportDate: now, language: o.language || 'en',
+            project: {
+                reportTitle: title, productName: product.name || '', productId: product.id,
+                processingType: String(product.state || '').toLowerCase() === 'processed' ? 'Processed' : 'Whole', type: variety,
+                startWeight: w.weight || '',
+                trialTarget: 'Verify the earlier result' + (w.date ? ' of ' + w.date : '') + ': quality within specification for ' + (w.shelfLife.open ? 'at least ' : '') + days + ' day' + (days === 1 ? '' : 's')
+                    + (w.temp != null ? ' at ' + w.temp + ' °C' : '') + ', in the same packaging and pack weight, against the current packaging.',
+                packagings: [{ id: 1, packagingType: packaging, material: winnerFilm ? winnerFilm.name : (w.filmSpec || ''), length: '', width: '', height: '', startWeight: w.weight || '' }],
+                // What this round verifies: the dashboard result it repeats.
+                verificationOf: { productId: product.id, group: group.key || '', round: w.round || '', date: w.date || '', days: days, open: !!w.shelfLife.open }
+            },
+            groups: groups
+        };
+        if (w.temp != null) doc.supplyChain = [{ stage: 'Storage', tempStart: String(w.temp), tempEnd: '', daysStart: String(dayList[dayList.length - 1]), daysEnd: '', action: 'pack' }];
+        var card = { id: o.id || newId(), title: title, client: '', product: label, productId: product.id, commercial: '', productManager: o.user || '', startDate: '',
+            actions: [], phase: 'proposal', image: '', files: { proposal: true }, updatedAt: now };
+        return { card: card, doc: doc };
+    }
+
+    // What a product's trial table lacks. Per row: no film from the register,
+    // no transmission (or a number that is a perforation count), no variety,
+    // no temperature, no date, no quality curve (nothing to read a shelf life
+    // from), and no packing details (perforation, flush or gas at packing).
+    // { rows, checks, missing: { film, tv, tvNotATv, variety, temperature, date, curve, packing },
+    //   core (the sum without packing), reports: [{ key, date, pdf, idxs, perfotec, missing }] }
+    // A report is the rows of one report name and date (else one board
+    // project, else the rows without either), newest first.
+    function trialDataGaps(master, productNames, films) {
+        var m = master || {};
+        var rows = trialRows(m);
+        var keys = ['film', 'tv', 'tvNotATv', 'variety', 'temperature', 'date', 'curve', 'packing'];
+        var blank = function () { var o = {}; keys.forEach(function (k) { o[k] = 0; }); return o; };
+        var total = blank(), byReport = {}, order = [];
+        rows.forEach(function (r) {
+            var f = function (k) { var v = m['pack_opt_' + r.i + '_' + k]; return v == null ? '' : String(v).trim(); };
+            var key = (f('pdf') || f('date')) ? 'r|' + f('pdf').toLowerCase() + '|' + f('date') : f('project') ? 'p|' + f('project') : '';
+            if (!byReport[key]) { byReport[key] = { key: key, date: '', pdf: f('pdf'), idxs: [], perfotec: [], missing: blank() }; order.push(key); }
+            var g = byReport[key];
+            g.idxs.push(r.i);
+            if (r.role !== 'reference') g.perfotec.push(r.i);
+            if (f('date') > g.date) g.date = f('date');
+            var miss = {
+                film: !f('film'), tv: !f('trans'), tvNotATv: !!f('trans') && plausibleTv(f('trans')) == null, variety: !f('variety'),
+                temperature: !f('temp'), date: !f('date'), curve: r.curve.length < 2,
+                packing: !f('perf') && !f('flush') && !f('startO2') && !f('startCO2')
+            };
+            keys.forEach(function (k) { if (miss[k]) { total[k]++; g.missing[k]++; } });
+        });
+        var checks = [];
+        try { checks = trialDataChecks(m, productNames || [], films || null); } catch (e) { checks = []; }
+        var reports = order.map(function (k) { return byReport[k]; }).sort(function (a, b) { return a.date !== b.date ? (a.date < b.date ? 1 : -1) : a.idxs[0] - b.idxs[0]; });
+        // The packing details are new, and the variety is not needed to compare or
+        // verify a result: neither counts towards the gaps that matter.
+        var core = keys.filter(function (k) { return k !== 'packing' && k !== 'variety'; }).reduce(function (n, k) { return n + total[k]; }, 0);
+        return { rows: rows.length, checks: checks, missing: total, core: core, reports: reports };
+    }
+    // A patch that gives rows a value where they have none: { film, perf, flush }
+    // (any of them), for the given rows — all of them, or with opts.perfotecOnly
+    // the rows that are not the reference (a report's control is packed in
+    // another film). Never overwrites. { patch, filled }
+    function fillTrialFields(master, idxs, values, opts) {
+        var m = master || {}, v = values || {}, patch = {}, filled = 0;
+        (idxs || []).forEach(function (i) {
+            if (opts && opts.perfotecOnly && trialRowRole(m, i) === 'reference') return;
+            ['film', 'perf', 'flush'].forEach(function (k) {
+                var want = v[k] == null ? '' : String(v[k]).trim();
+                if (!want || String(m['pack_opt_' + i + '_' + k] == null ? '' : m['pack_opt_' + i + '_' + k]).trim() !== '') return;
+                patch['pack_opt_' + i + '_' + k] = want; filled++;
+            });
+        });
+        return { patch: patch, filled: filled };
+    }
+    // The data check's proposals that carry a value (a variety read from the
+    // report title, a packaging type from the variant's name, a film from the
+    // register), as one patch. A transmission that looks like a perforation
+    // count has no proposal — the real value has to be typed — and stays open.
+    // { patch, accepted, open }
+    function acceptDataChecks(master, productNames, films) {
+        var checks = [];
+        try { checks = trialDataChecks(master || {}, productNames || [], films || null); } catch (e) { checks = []; }
+        var patch = {}, accepted = 0, open = 0;
+        checks.forEach(function (c) {
+            var value = String(c.proposed == null ? '' : c.proposed).trim();
+            if (!value || c.field === 'trans') { open++; return; }
+            patch['pack_opt_' + c.i + '_' + c.field] = value; accepted++;
+        });
+        return { patch: patch, accepted: accepted, open: open };
+    }
+
+    // ---- PerfoTec Hub: catalogue snapshot and links ---------------------------
+    // The Hub (the machine platform) keeps its own catalogue: product groups
+    // with their varieties (respiration, target atmosphere), films (OTR, COTR),
+    // packages (film, sizes, mass, volume) and laser programs. A snapshot of it
+    // — exported from the Hub as one "perfotec-hub-catalogue/1" object, the
+    // shape an API would return — is kept in hub.json at the root, with the
+    // links between the two sides: dashboard product -> Hub product group, and
+    // register film -> Hub film. A link is a Hub id ('' = deliberately none);
+    // no link stored means "match on name". Trial rows point at a Hub package
+    // and a laser program themselves (pack_opt_i_hubPackage / _laserProgram).
+    // Nothing here writes to the Hub.
+    var HUB_FILE = 'hub.json';
+    var HUB_FORMAT = 'perfotec-hub-catalogue/1';
+    function normHubCatalogue(c) {
+        var x = c || {};
+        var s = function (v) { return v == null ? '' : String(v).replace(/\s+/g, ' ').trim(); };
+        var n = function (v) { var f = parseFloat(String(v == null ? '' : v).replace(',', '.')); return isFinite(f) ? f : null; };
+        var list = function (a, fn) { return (Array.isArray(a) ? a : []).map(fn).filter(function (r) { return r.id && r.name; }); };
+        return {
+            format: HUB_FORMAT, source: s(x.source), exportedAt: s(x.exportedAt),
+            products: list(x.products, function (p) { return { id: s(p.id), name: s(p.name) }; }),
+            varieties: list(x.varieties, function (v) {
+                return { id: s(v.id), productId: s(v.productId), name: s(v.name), state: hubStateWord(s(v.state) || s(v.productState) || s(v.processingType)), density: n(v.density), targetO2: n(v.targetO2), criticalCO2: n(v.criticalCO2),
+                    temperature: n(v.temperature), rrO2: n(v.rrO2), rrCO2: n(v.rrCO2), rrTemp: n(v.rrTemp), productFactor: n(v.productFactor), rrCount: n(v.rrCount) };
+            }),
+            films: list(x.films, function (f) {
+                return { id: s(f.id), name: s(f.name), thicknessUm: n(f.thicknessUm), otr: n(f.otr), otrTemp: n(f.otrTemp), otrRh: n(f.otrRh), cotr: n(f.cotr), cotrTemp: n(f.cotrTemp), cotrRh: n(f.cotrRh) };
+            }),
+            packages: list(x.packages, function (p) {
+                return { id: s(p.id), name: s(p.name), filmId: s(p.filmId), type: s(p.type), length: n(p.length), width: n(p.width), area: n(p.area), mass: n(p.mass), volume: n(p.volume) };
+            }),
+            laserPrograms: list(x.laserPrograms, function (p) {
+                return { id: s(p.id), name: s(p.name), product: s(p.product), variety: s(p.variety), holes: n(p.holes), size: n(p.size), status: s(p.status) };
+            }),
+            // The respiration measurements (FRM) behind the varieties: what was
+            // really measured, with where the product came from and when.
+            // status 'OK' or 'NOK' (the Hub's "doubtful"). Kept only with a rate
+            // and a temperature.
+            respirations: (Array.isArray(x.respirations) ? x.respirations : []).map(function (r) {
+                return { id: s(r.id), varietyId: s(r.varietyId), product: s(r.product), variety: s(r.variety), remark: s(r.remark), origin: s(r.origin),
+                    startTime: s(r.startTime), rrO2: n(r.rrO2), rrCO2: n(r.rrCO2), temperature: n(r.temperature), status: s(r.status).toUpperCase() === 'NOK' ? 'NOK' : 'OK', meter: s(r.meter) };
+            }).filter(function (r) { return r.id && r.temperature != null && (r.rrO2 != null || r.rrCO2 != null); })
+        };
+    }
+    // 'whole' | 'processed' | '' from what the Hub says about a variety.
+    function hubStateWord(v) {
+        var t = String(v == null ? '' : v).toLowerCase();
+        return /process|cut|slic|dice|shred|peel/.test(t) ? 'processed' : /whole|intact|uncut/.test(t) ? 'whole' : '';
+    }
+    var HUB_LINK_KINDS = ['products', 'films', 'varieties'];
+    function normHubLinks(l) {
+        var out = { products: {}, films: {}, varieties: {} };
+        HUB_LINK_KINDS.forEach(function (k) {
+            var src = (l && l[k]) || {};
+            Object.keys(src).forEach(function (id) { if (id) out[k][id] = src[id] == null ? '' : String(src[id]); });
+        });
+        return out;
+    }
+    function readHub() {
+        return IO.readJSON([HUB_FILE]).then(function (r) {
+            return { schemaVersion: DB_SCHEMA, rev: Number((r && r.rev) || 0), catalogue: r && r.catalogue ? normHubCatalogue(r.catalogue) : null,
+                links: normHubLinks(r && r.links), importedAt: String((r && r.importedAt) || ''), importedBy: String((r && r.importedBy) || '') };
+        });
+    }
+    // patch: { catalogue } (a new snapshot replaces the old one) and/or
+    // { links: { products: {id: hubId}, films: {id: hubId} } } (merged into
+    // what is on disk, so two people linking at once both keep their links).
+    function writeHub(patch) {
+        var p = patch || {};
+        return readHub().then(function (onDisk) {
+            var links = normHubLinks(onDisk.links), add = p.links || {};
+            // A link set to null is taken away again: back to matching on name.
+            HUB_LINK_KINDS.forEach(function (k) {
+                Object.keys(add[k] || {}).forEach(function (id) { if (!id) return; if (add[k][id] == null) delete links[k][id]; else links[k][id] = String(add[k][id]); });
+            });
+            var fresh = !!p.catalogue;
+            var out = { schemaVersion: DB_SCHEMA, rev: onDisk.rev + 1, catalogue: fresh ? normHubCatalogue(p.catalogue) : onDisk.catalogue, links: links,
+                importedAt: fresh ? new Date().toISOString() : onDisk.importedAt, importedBy: fresh ? (getUserLabel() || '') : onDisk.importedBy };
+            return IO.writeJSON([HUB_FILE], out).then(function () { return out; });
+        });
+    }
+    // A name as it is compared: lower case, plurals folded ("Cherries" =
+    // "Cherry", "Potatoes" = "Potato"), punctuation gone.
+    function hubNameKey(name) {
+        return String(name == null ? '' : name).toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim()
+            .split(' ').map(function (w) { return w.length > 3 ? w.replace(/ies$/, 'y').replace(/oes$/, 'o').replace(/s$/, '') : w; }).join(' ');
+    }
+    // The Hub product group of a dashboard product: the stored link, else its
+    // own name or one of its other names, exactly (after hubNameKey); else the
+    // one group whose name is a whole part of it ("Iceberg Lettuce" -> "Iceberg").
+    // { hub, how: 'linked' | 'name' | 'part' | 'none' | 'unlinked' }
+    function hubProductOf(product, hub) {
+        var cat = hub && hub.catalogue;
+        if (!cat || !product) return { hub: null, how: 'none' };
+        var link = hub.links && hub.links.products ? hub.links.products[product.id] : undefined;
+        if (link === '') return { hub: null, how: 'unlinked' };
+        if (link) { var linked = cat.products.filter(function (p) { return p.id === link; })[0]; if (linked) return { hub: linked, how: 'linked' }; }
+        var names = [product.name].concat(Array.isArray(product.aliases) ? product.aliases : []).map(hubNameKey).filter(Boolean);
+        var exact = cat.products.filter(function (p) { return names.indexOf(hubNameKey(p.name)) >= 0; });
+        if (exact.length === 1) return { hub: exact[0], how: 'name' };
+        var part = cat.products.filter(function (p) {
+            var k = ' ' + hubNameKey(p.name) + ' ';
+            return k.trim() && names.some(function (nm) { return (' ' + nm + ' ').indexOf(k) >= 0; });
+        });
+        return part.length === 1 ? { hub: part[0], how: 'part' } : { hub: null, how: 'none' };
+    }
+    // Whole or processed, for a Hub variety: what the Hub records, else what
+    // its name (or its product group's) says — "Fresh cut", "Sliced", "Arils",
+    // "Florets" — else whole, which is what a variety is until it is cut.
+    // { state: 'whole' | 'processed', from: 'hub' | 'name' | 'assumed' }
+    var HUB_PROCESSED_WORDS = /(^| )(cut|fresh cut|freshcut|sliced|slices|diced|shredded|processed|peeled|floret|florets|aril|arils|wedges|chunks|sticks|cubes|rings|grated|chopped)( |$)/;
+    function hubVarietyState(variety, hubProduct) {
+        if (variety && variety.state) return { state: variety.state, from: 'hub' };
+        var text = String((variety && variety.name) || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ') + ' ' + String((hubProduct && hubProduct.name) || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ');
+        return HUB_PROCESSED_WORDS.test(text.replace(/\s+/g, ' ').trim()) ? { state: 'processed', from: 'name' } : { state: 'whole', from: 'assumed' };
+    }
+    // The Hub varieties that ARE a dashboard product (Luke 2026-11-13): the
+    // product is found by name (hubProductOf), then
+    //   * whole against whole, processed against processed — never mixed;
+    //   * a product record of one variety takes the Hub varieties of that
+    //     name only (none when the Hub has no such variety: another
+    //     variety's respiration is not this one's);
+    //   * a record without a variety takes every variety of its state.
+    // A stored choice wins: links.varieties[product.id] = a Hub variety id,
+    // or '*' for all varieties of the Hub product whatever their name.
+    // { hub, how, varieties, rule: 'chosen' | 'all' | 'variety' | 'state' | 'none', missing }
+    function hubVarietiesOf(product, hub) {
+        var cat = hub && hub.catalogue;
+        var m = hubProductOf(product, hub);
+        if (!cat || !m.hub) return { hub: null, how: m.how, varieties: [], rule: 'none', missing: '' };
+        var all = cat.varieties.filter(function (v) { return v.productId === m.hub.id; });
+        var choice = hub.links && hub.links.varieties ? hub.links.varieties[product.id] : undefined;
+        if (choice === '*') return { hub: m.hub, how: m.how, varieties: all, rule: 'all', missing: '' };
+        if (choice) { var one = all.filter(function (v) { return v.id === choice; }); if (one.length) return { hub: m.hub, how: m.how, varieties: one, rule: 'chosen', missing: '' }; }
+        var want = String(product.state || 'whole').toLowerCase() === 'processed' ? 'processed' : 'whole';
+        var ofState = all.filter(function (v) { return hubVarietyState(v, m.hub).state === want; });
+        var variety = hubNameKey(product.variety);
+        if (!variety) return { hub: m.hub, how: m.how, varieties: ofState, rule: ofState.length ? 'state' : 'none', missing: ofState.length ? '' : 'no ' + want + ' variety in the Hub' };
+        var named = ofState.filter(function (v) { var k = hubNameKey(v.name); return k === variety || (' ' + k + ' ').indexOf(' ' + variety + ' ') >= 0 || (' ' + variety + ' ').indexOf(' ' + k + ' ') >= 0; });
+        return { hub: m.hub, how: m.how, varieties: named, rule: named.length ? 'variety' : 'none', missing: named.length ? '' : 'no ' + want + ' variety named ' + product.variety + ' in the Hub' };
+    }
+    // The Hub's respiration measurements of a dashboard product: those of its
+    // Hub varieties (hubVarietiesOf). [] without a link or a snapshot.
+    function hubRespirationsOf(product, hub) {
+        var cat = hub && hub.catalogue;
+        var v = hubVarietiesOf(product, hub);
+        if (!cat || !v.varieties.length) return [];
+        var ids = {};
+        v.varieties.forEach(function (x) { ids[x.id] = true; });
+        return (cat.respirations || []).filter(function (r) { return !!ids[r.varietyId]; });
+    }
+    // The measurements as a product record keeps them (formData['hub-respiration']):
+    // the numbers the curve needs and where each one came from.
+    function hubRespirationRecord(product, hub) {
+        var v = hubVarietiesOf(product, hub);
+        var rows = hubRespirationsOf(product, hub);
+        if (!v.hub || !rows.length) return null;
+        return { hubProductId: v.hub.id, hubProduct: v.hub.name, varietyIds: v.varieties.map(function (x) { return x.id; }),
+            catalogueOf: String((hub.catalogue && hub.catalogue.exportedAt) || ''),
+            measurements: rows.map(function (r) { return { id: r.id, varietyId: r.varietyId, variety: r.variety, origin: r.origin, remark: r.remark, startTime: r.startTime, temperature: r.temperature, rrO2: r.rrO2, rrCO2: r.rrCO2, status: r.status }; })
+                .sort(function (a, b) { return String(a.id).localeCompare(String(b.id)); }) };
+    }
+    // Per temperature the median of the measurements that count (status OK),
+    // and whether they may drive the respiration curve: at least
+    // HUB_RR_MIN_TEMPS different temperatures (a curve through fewer points is
+    // a guess). { points: [{ t, rrO2, rrCO2, n }], drives }
+    var HUB_RR_MIN_TEMPS = 3;
+    function hubRespirationCurve(record) {
+        var ok = ((record && record.measurements) || []).filter(function (r) { return r && r.status !== 'NOK' && isFinite(r.temperature); });
+        var byT = {};
+        ok.forEach(function (r) { (byT[r.temperature] = byT[r.temperature] || []).push(r); });
+        var points = Object.keys(byT).map(Number).sort(function (a, b) { return a - b; }).map(function (t) {
+            var g = byT[t];
+            return { t: t, n: g.length, rrO2: medianOf(g.map(function (r) { return r.rrO2; }).filter(function (x) { return x > 0; })), rrCO2: medianOf(g.map(function (r) { return r.rrCO2; }).filter(function (x) { return x > 0; })) };
+        });
+        return { points: points, drives: points.filter(function (p) { return p.rrO2 != null || p.rrCO2 != null; }).length >= HUB_RR_MIN_TEMPS };
+    }
+    // The Hub manages the films (Luke 2026-11-13). The register follows it:
+    // every Hub film is in the register, with the Hub's name, thickness, OTR
+    // and CO2TR; what only the dashboard knows — WVTR, PerfoTec's own film or
+    // not, polymer, packaging, data sheet, notes, archived — stays as it is.
+    // A register film the Hub does not have is left alone. An older name is
+    // kept as an alias, so trial rows that say it still find the film.
+    // { films, added, updated } — nothing is written here.
+    function hubSyncFilms(films, hub, now) {
+        var cat = hub && hub.catalogue;
+        var list = (films || []).map(normFilm);
+        if (!cat) return { films: list, added: 0, updated: 0 };
+        var stamp = now || new Date().toISOString(), added = 0, updated = 0;
+        var txt = function (v) { return v == null ? '' : String(v); };
+        cat.films.forEach(function (h) {
+            var mine = list.filter(function (f) { return f.hubId === h.id; })[0]
+                || list.filter(function (f) { return !f.hubId && (hubFilmOf(f, hub).hub || {}).id === h.id; })[0];
+            var lead = { hubId: h.id, name: h.name, thicknessUm: txt(h.thicknessUm), otr: txt(h.otr), co2tr: txt(h.cotr) };
+            if (!mine) { list.push(normFilm({ id: 'hub_' + h.id, hubId: h.id, name: h.name, thicknessUm: lead.thicknessUm, otr: lead.otr, co2tr: lead.co2tr, createdAt: stamp, updatedAt: stamp, updatedBy: 'PerfoTec Hub' })); added++; return; }
+            var changed = false;
+            if (mine.name !== h.name) {
+                var aliases = mine.aliases.split(/[,;\n]/).map(function (a) { return a.trim(); }).filter(Boolean);
+                if (mine.name && aliases.map(function (a) { return a.toLowerCase(); }).indexOf(mine.name.toLowerCase()) < 0) aliases.push(mine.name);
+                mine.aliases = aliases.join('; ');
+            }
+            Object.keys(lead).forEach(function (k) { if (k !== 'hubId' && k !== 'name' && lead[k] === '') return; if (mine[k] !== lead[k]) { mine[k] = lead[k]; changed = true; } });
+            if (changed) { mine.updatedAt = stamp; mine.updatedBy = 'PerfoTec Hub'; updated++; }
+        });
+        return { films: list, added: added, updated: updated };
+    }
+    // The Hub film of a register film: the stored link, else the one Hub film
+    // with the same name or alias. Films are not matched on a part of the name:
+    // "BOPP 30" and "BOPP 30 antifog" are different films.
+    function hubFilmOf(film, hub) {
+        var cat = hub && hub.catalogue;
+        if (!cat || !film) return { hub: null, how: 'none' };
+        var link = hub.links && hub.links.films ? hub.links.films[film.id] : undefined;
+        if (link === undefined && film.hubId) link = film.hubId;
+        if (link === '') return { hub: null, how: 'unlinked' };
+        if (link) { var linked = cat.films.filter(function (f) { return f.id === link; })[0]; if (linked) return { hub: linked, how: 'linked' }; }
+        var names = [film.name].concat(String(film.aliases || '').split(/[,;\n]/)).map(hubNameKey).filter(Boolean);
+        var exact = cat.films.filter(function (f) { return names.indexOf(hubNameKey(f.name)) >= 0; });
+        return exact.length === 1 ? { hub: exact[0], how: 'name' } : { hub: null, how: 'none' };
+    }
+
+    // "PerfoTec BOPE · 30 µm" — how a film is named in lists.
+    function filmLabel(film) {
+        if (!film) return '';
+        var bits = [film.name];
+        if (film.polymer && film.name.toLowerCase().indexOf(film.polymer.toLowerCase()) < 0) bits.push(film.polymer);
+        if (film.thicknessUm) bits.push(film.thicknessUm + ' µm');
+        return bits.join(' · ');
+    }
+    // The ONE active film whose name or one of whose aliases occurs in `text`
+    // as a whole word ("PerfoTec C+ bag" -> the film with alias "C+"). Several:
+    // the thickness in the text decides; still several, or none -> null.
+    function matchFilm(text, films) {
+        var t = ' ' + String(text == null ? '' : text).toLowerCase().replace(/\s+/g, ' ') + ' ';
+        if (!t.trim()) return null;
+        var hits = (films || []).filter(function (f) {
+            if (!f || f.archived || !f.id) return false;
+            var terms = [f.name].concat(String(f.aliases || '').split(/[,;]/)).map(function (x) { return String(x || '').trim().toLowerCase(); }).filter(function (x) { return x.length >= 2; });
+            // "standard pack (no C+ bag)" names the film only to say it is absent.
+            return terms.some(function (term) {
+                var re = new RegExp('(^|[^a-z0-9+])' + escapeRegExp(term) + '(?=$|[^a-z0-9+])', 'g'), hit;
+                while ((hit = re.exec(t))) {
+                    var before = t.slice(Math.max(0, hit.index - 12), hit.index + hit[1].length);
+                    if (!/(^|[^a-z])(no|not|without|zonder|geen|sin)\s+$/.test(before)) return true;
+                }
+                return false;
+            });
+        });
+        if (hits.length > 1) {
+            var um = (t.match(/(\d+(?:[.,]\d+)?)\s*(?:µm|um|micron)/) || [])[1];
+            if (um) hits = hits.filter(function (f) { return parseFloat(String(f.thicknessUm).replace(',', '.')) === parseFloat(um.replace(',', '.')); });
+        }
+        return hits.length === 1 ? hits[0] : null;
+    }
+
     // ---- advisory lock ------------------------------------------------------
     // Informational only: the board shows "Anna is working on this". A hard lock
     // would strand work the moment someone closes their laptop with a card open.
@@ -2704,6 +3756,29 @@
         return Promise.all([seen, locks]).then(function () { return out; });
     }
 
+    // The names in a people.json list. Entries are { name, email, phone }
+    // objects; the oldest files held plain strings. Both read as a name, once
+    // each — the dashboard compared the objects themselves as text, so it
+    // recognised no product manager at all.
+    function personNames(list) {
+        var out = [];
+        (list || []).forEach(function (p) {
+            var n = String((p && typeof p === 'object') ? (p.name || '') : (p == null ? '' : p)).replace(/\s+/g, ' ').trim();
+            if (n && out.indexOf(n) < 0) out.push(n);
+        });
+        return out;
+    }
+
+    // Whether `label` (the board name label, or the server's user) is one of
+    // the registry's product managers — the people who may approve a claim.
+    // Resolved like every other label, so "Luke" counts for Luke Zuijderwijk
+    // when he is the only Luke.
+    function isProductManager(label, people) {
+        var pms = personNames(people && people.productManagers);
+        var me = resolvePersonName(label, pms).toLowerCase();
+        return !!me && pms.some(function (n) { return n.toLowerCase() === me; });
+    }
+
     // Who a typed name label is in the people registry. The board used to ask
     // for a name with "e.g. Luke" as the example, so labels are often a first
     // name or a nickname ("Chris" for Christiaan Mulder) that never matched
@@ -2717,11 +3792,7 @@
     function resolvePersonName(label, names) {
         var l = String(label == null ? '' : label).replace(/\s+/g, ' ').trim();
         if (!l) return '';
-        var list = [];
-        (names || []).forEach(function (n) {
-            n = String(n == null ? '' : n).replace(/\s+/g, ' ').trim();
-            if (n && list.indexOf(n) < 0) list.push(n);
-        });
+        var list = personNames(names);
         var low = l.toLowerCase();
         for (var i = 0; i < list.length; i++) if (list[i].toLowerCase() === low) return list[i];
         if (low.length < 3) return l;
@@ -3337,6 +4408,18 @@
         purgeCard: purgeCard,
         readPeople: readPeople,
         writePeople: writePeople,
+        // Films: the material register
+        readFilms: readFilms,
+        writeFilms: writeFilms,
+        normFilm: normFilm,
+        newFilmId: newFilmId,
+        filmLabel: filmLabel,
+        matchFilm: matchFilm,
+        filmTdsRatio: filmTdsRatio,
+        filmPackRatio: filmPackRatio,
+        FILM_POLYMERS: FILM_POLYMERS,
+        FILM_FORMATS: FILM_FORMATS,
+        FILM_PACK_TYPES: FILM_PACK_TYPES,
         lastSyncArtefacts: lastSyncArtefacts,
         scanRootArtefacts: scanRootArtefacts,
         getUserLabel: getUserLabel,
@@ -3358,6 +4441,8 @@
         PRESENCE_STALE_MS: PRESENCE_STALE_MS,
         readActivity: readActivity,
         resolvePersonName: resolvePersonName,
+        personNames: personNames,
+        isProductManager: isProductManager,
         readLegacyManifest: readLegacyManifest,
         // Backups
         BACKUP_DIR: BACKUP_DIR,
@@ -3386,7 +4471,42 @@
         curveShelfLife: curveShelfLife,
         trialRowRole: trialRowRole,
         trialRows: trialRows,
+        isRunningTrial: isRunningTrial,
+        runningTrials: runningTrials,
+        verificationProposal: verificationProposal,
+        trialDataGaps: trialDataGaps,
+        fillTrialFields: fillTrialFields,
+        acceptDataChecks: acceptDataChecks,
+        HUB_FORMAT: HUB_FORMAT,
+        normHubCatalogue: normHubCatalogue,
+        readHub: readHub,
+        writeHub: writeHub,
+        hubNameKey: hubNameKey,
+        hubProductOf: hubProductOf,
+        hubFilmOf: hubFilmOf,
+        hubVarietyState: hubVarietyState,
+        hubVarietiesOf: hubVarietiesOf,
+        hubRespirationRecord: hubRespirationRecord,
+        hubRespirationCurve: hubRespirationCurve,
+        HUB_RR_MIN_TEMPS: HUB_RR_MIN_TEMPS,
+        hubSyncFilms: hubSyncFilms,
+        hubRespirationsOf: hubRespirationsOf,
+        PACK_PERF: PACK_PERF,
+        PACK_FLUSH: PACK_FLUSH,
         trialBestPractice: trialBestPractice,
+        packSizeBand: packSizeBand,
+        tempGroupOf: tempGroupOf,
+        trialConfigurations: trialConfigurations,
+        transmissionPoints: transmissionPoints,
+        transmissionCurve: transmissionCurve,
+        transmissionPerKgAt: transmissionPerKgAt,
+        transmissionAdvice: transmissionAdvice,
+        cultivarFromTitle: cultivarFromTitle,
+        variantPackType: variantPackType,
+        trialDataChecks: trialDataChecks,
+        medianOf: medianOf,
+        plausibleTv: plausibleTv,
+        MIN_PLAUSIBLE_TV: MIN_PLAUSIBLE_TV,
         readProductTrials: readProductTrials,
         applyReportToProduct: applyReportToProduct,
         trialRowCount: trialRowCount,
